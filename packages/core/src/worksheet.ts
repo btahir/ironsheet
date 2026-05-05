@@ -403,15 +403,10 @@ function insertCell(xml: string, address: string, rowNumber: number, cellXml: st
 }
 
 function insertRow(xml: string, rowNumber: number, cellXml: string): string {
-  const sheetData = findFirstStartTag(xml, "sheetData");
-  if (sheetData === undefined) {
-    throw new WorksheetError("Worksheet is missing sheetData");
-  }
-
-  const close = findElementCloseStart(xml, sheetData);
-
-  const rowXml = `<row r="${rowNumber}">${cellXml}</row>`;
-  return `${xml.slice(0, close)}${rowXml}${xml.slice(close)}`;
+  const insertionPoint = findRowInsertionPoint(xml, rowNumber);
+  const rowTag = qualifiedName(inferWorksheetPrefix(xml), "row");
+  const rowXml = `<${rowTag} r="${rowNumber}">${cellXml}</${rowTag}>`;
+  return `${xml.slice(0, insertionPoint)}${rowXml}${xml.slice(insertionPoint)}`;
 }
 
 function insertRowsBeforeSheetDataClose(xml: string, rowXml: string): string {
@@ -643,7 +638,13 @@ function createCellAttributes(
     attributes.push(`s="${escapeXmlAttribute(options.styleId)}"`);
   }
 
-  if (typeof value === "boolean") {
+  if (isFormulaValue(value)) {
+    if (typeof value.result === "boolean") {
+      attributes.push('t="b"');
+    } else if (typeof value.result === "string") {
+      attributes.push('t="str"');
+    }
+  } else if (typeof value === "boolean") {
     attributes.push('t="b"');
   } else if (typeof value === "string") {
     attributes.push('t="inlineStr"');
