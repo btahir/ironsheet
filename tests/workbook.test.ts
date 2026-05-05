@@ -44,6 +44,7 @@ test("inspect reports workbook feature signals", async () => {
       includeCalcChain: true,
       includeConditionalFormatting: true,
       includeDataValidation: true,
+      includeDefinedName: true,
       includeDrawing: true,
       includeHiddenSheet: true,
       includeHyperlink: true,
@@ -76,7 +77,7 @@ test("inspect reports workbook feature signals", async () => {
     comments: 0,
     conditionalFormats: 1,
     dataValidations: 1,
-    definedNames: 0,
+    definedNames: 2,
     drawings: 1,
     hiddenSheets: 1,
     hyperlinks: 1,
@@ -87,6 +88,24 @@ test("inspect reports workbook feature signals", async () => {
     sharedStrings: 1,
     tables: 1
   });
+});
+
+test("reads workbook defined names", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDefinedName: true }));
+
+  assert.deepEqual(await workbook.definedNames(), [
+    {
+      name: "RevenueRange",
+      text: "Sheet1!$A$1:$B$2",
+      comment: "Template output range"
+    },
+    {
+      name: "_xlnm.Print_Titles",
+      text: "Sheet1!$1:$1",
+      hidden: true,
+      localSheetId: "0"
+    }
+  ]);
 });
 
 test("reads existing cell values and style ids", async () => {

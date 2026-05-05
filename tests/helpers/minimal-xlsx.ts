@@ -6,6 +6,7 @@ export type MinimalWorkbookOptions = {
   includeCalcChain?: boolean;
   includeConditionalFormatting?: boolean;
   includeDataValidation?: boolean;
+  includeDefinedName?: boolean;
   includeDrawing?: boolean;
   includeHiddenSheet?: boolean;
   includeHyperlink?: boolean;
@@ -59,6 +60,7 @@ export async function createMinimalWorkbook(
     <sheet name="Sheet1" sheetId="1" r:id="rId1"/>
     ${options.includeHiddenSheet === true ? '<sheet name="HiddenData" sheetId="2" state="hidden" r:id="rIdHidden"/>' : ""}
   </sheets>
+  ${options.includeDefinedName === true ? '<definedNames><definedName name="RevenueRange" comment="Template output range">Sheet1!$A$1:$B$2</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0" hidden="1">Sheet1!$1:$1</definedName></definedNames>' : ""}
 </workbook>`
     ),
     textPart(

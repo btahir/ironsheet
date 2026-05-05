@@ -1,4 +1,5 @@
 import type { Diagnostic } from "./diagnostics.ts";
+import { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 import { PackageError, WorkbookError } from "./errors.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
@@ -39,6 +40,7 @@ export type WorkbookSheetState = "hidden" | "veryHidden";
 export type WorkbookInspectResult = {
   workbookPart: string;
   sheets: WorkbookSheet[];
+  definedNames: WorkbookDefinedName[];
   parts: string[];
   features: WorkbookFeatureSummary;
   diagnostics: Diagnostic[];
@@ -168,6 +170,7 @@ export class Workbook {
     return {
       workbookPart: this.workbookPart,
       sheets: this.sheets(),
+      definedNames: await this.definedNames(),
       parts,
       features: await summarizeFeatures(this.pkg, parts, this.workbookPart),
       diagnostics: this.diagnostics()
@@ -176,6 +179,10 @@ export class Workbook {
 
   validate(): Promise<ValidationReport> {
     return validateWorkbookPackage(this.pkg);
+  }
+
+  async definedNames(): Promise<WorkbookDefinedName[]> {
+    return parseDefinedNames(await this.pkg.readText(this.workbookPart));
   }
 
   diagnostics(): Diagnostic[] {
