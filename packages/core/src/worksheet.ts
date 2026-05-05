@@ -207,10 +207,7 @@ export function replaceRowsInRange(
     throw new WorksheetError("Worksheet is missing sheetData");
   }
 
-  const sheetDataClose = xml.indexOf("</sheetData>", sheetData.end);
-  if (sheetDataClose === -1) {
-    throw new WorksheetError("Worksheet sheetData is missing a closing tag");
-  }
+  findElementCloseStart(xml, sheetData);
 
   const preserveStyles = options.preserveStyles ?? true;
   const prefix = inferWorksheetPrefix(xml);

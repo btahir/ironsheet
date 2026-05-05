@@ -18,7 +18,7 @@ import {
   type ReadCellResult,
   type ReadRangeResult
 } from "./worksheet.ts";
-import { findFirstStartTag, findStartTags } from "./xml.ts";
+import { findElementCloseStart, findFirstStartTag, findStartTags } from "./xml.ts";
 
 const officeDocumentRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
@@ -228,14 +228,16 @@ export class Workbook {
     const calcPr = findFirstStartTag(xml, "calcPr");
 
     if (calcPr === undefined) {
-      const workbookClose = xml.lastIndexOf("</workbook>");
-      if (workbookClose === -1) {
+      const workbook = findFirstStartTag(xml, "workbook");
+      if (workbook === undefined) {
         throw new WorkbookError("workbook.xml is missing closing workbook tag");
       }
 
+      const workbookClose = findElementCloseStart(xml, workbook);
+      const calcPrTag = qualifiedName(xmlPrefix(workbook.name), "calcPr");
       this.pkg.setText(
         this.workbookPart,
-        `${xml.slice(0, workbookClose)}<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>${xml.slice(workbookClose)}`
+        `${xml.slice(0, workbookClose)}<${calcPrTag} calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>${xml.slice(workbookClose)}`
       );
       await this.removeCalcChain();
       return;
@@ -460,6 +462,15 @@ function upsertAttributes(rawTag: string, attributes: Record<string, string>): s
   }
 
   return `${tag}${closing}`;
+}
+
+function xmlPrefix(name: string): string | undefined {
+  const colon = name.indexOf(":");
+  return colon === -1 ? undefined : name.slice(0, colon);
+}
+
+function qualifiedName(prefix: string | undefined, localName: string): string {
+  return prefix === undefined ? localName : `${prefix}:${localName}`;
 }
 
 async function summarizeFeatures(

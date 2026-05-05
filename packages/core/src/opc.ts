@@ -1,5 +1,5 @@
 import { PackageError } from "./errors.ts";
-import { escapeXmlAttribute, findStartTags } from "./xml.ts";
+import { escapeXmlAttribute, findElementEnd, findStartTags } from "./xml.ts";
 import {
   type CompressionAdapter,
   parseZip,
@@ -120,9 +120,7 @@ export class OoxmlPackage {
 
     let nextXml = xml;
     for (const removal of removals.toReversed()) {
-      const end = removal.tag.selfClosing
-        ? removal.tag.end
-        : findRelationshipClose(nextXml, removal.tag.end);
+      const end = removal.tag.selfClosing ? removal.tag.end : findElementEnd(nextXml, removal.tag);
       nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(end)}`;
     }
 
@@ -145,7 +143,7 @@ export class OoxmlPackage {
       return false;
     }
 
-    const end = override.selfClosing ? override.end : findOverrideClose(xml, override.end);
+    const end = override.selfClosing ? override.end : findElementEnd(xml, override);
     this.setText("[Content_Types].xml", `${xml.slice(0, override.start)}${xml.slice(end)}`);
     return true;
   }
@@ -290,24 +288,6 @@ function relationshipFromAttributes(attributes: Record<string, string>): Relatio
   }
 
   return relationship;
-}
-
-function findRelationshipClose(xml: string, start: number): number {
-  const close = xml.indexOf("</Relationship>", start);
-  if (close === -1) {
-    throw new PackageError("Relationship element is missing closing tag");
-  }
-
-  return close + "</Relationship>".length;
-}
-
-function findOverrideClose(xml: string, start: number): number {
-  const close = xml.indexOf("</Override>", start);
-  if (close === -1) {
-    throw new PackageError("Content type override is missing closing tag");
-  }
-
-  return close + "</Override>".length;
 }
 
 export function contentTypeOverrideXml(partName: string, contentType: string): string {

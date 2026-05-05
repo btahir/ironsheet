@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseZip, readEntryData } from "../packages/core/src/index.ts";
-import { openWorkbook, nodeCompressionAdapter } from "../packages/node/src/index.ts";
+import { parseZip, readEntryData, Workbook } from "../packages/core/src/index.ts";
+import { openPackage, openWorkbook, nodeCompressionAdapter } from "../packages/node/src/index.ts";
 import { createMinimalWorkbook } from "./helpers/minimal-xlsx.ts";
 
 const textDecoder = new TextDecoder();
@@ -262,6 +262,30 @@ test("patches formulas and marks workbook for recalculation", async () => {
   );
 
   assert.match(workbookXml, /<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"\/>/);
+});
+
+test("formula recalc insertion preserves workbook namespace prefixes", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  pkg.setText(
+    "xl/workbook.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<x:workbook xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <x:sheets>
+    <x:sheet name="Sheet1" sheetId="1" r:id="rId1"/>
+  </x:sheets>
+</x:workbook>`
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  await workbook.patchCell("Sheet1", "C3", { formula: "=SUM(A1:B2)" });
+  const outputZip = parseZip(await workbook.write());
+  const workbookEntry = outputZip.entries.find((entry) => entry.name === "xl/workbook.xml");
+  assert.ok(workbookEntry);
+  const workbookXml = textDecoder.decode(
+    await readEntryData(workbookEntry, nodeCompressionAdapter)
+  );
+
+  assert.match(workbookXml, /<x:calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"\/>/);
 });
 
 test("formula patches remove stale calculation chain parts", async () => {
@@ -559,6 +583,35 @@ test("table row replacement preserves and moves totals rows", async () => {
   const tableXml = textDecoder.decode(await readEntryData(tableEntry, nodeCompressionAdapter));
   assert.match(tableXml, /ref="A1:B4"/);
   assert.match(tableXml, /<autoFilter ref="A1:B4"\/>/);
+});
+
+test("table row replacement handles namespace-prefixed worksheets", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <x:dimension ref="A1:B2"/>
+  <x:sheetData>
+    <x:row r="1"><x:c r="A1" t="inlineStr"><x:is><x:t>Name</x:t></x:is></x:c><x:c r="B1" t="inlineStr"><x:is><x:t>Amount</x:t></x:is></x:c></x:row>
+    <x:row r="2"><x:c r="A2" t="inlineStr"><x:is><x:t>Old</x:t></x:is></x:c><x:c r="B2"><x:v>1</x:v></x:c></x:row>
+  </x:sheetData>
+  <x:tableParts count="1"><x:tablePart r:id="rIdTable1"/></x:tableParts>
+</x:worksheet>`
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  await workbook.replaceTableRows("RevenueTable", [["Prefixed", 7]]);
+  const outputZip = parseZip(await workbook.write());
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+
+  assert.match(
+    sheetXml,
+    /<x:row r="2"><x:c r="A2" t="inlineStr"><x:is><x:t>Prefixed<\/x:t><\/x:is><\/x:c><x:c r="B2"><x:v>7<\/x:v><\/x:c><\/x:row>/
+  );
+  assert.match(sheetXml, /<x:dimension ref="A1:B2"\/>/);
 });
 
 test("table formula writes invalidate stale calculation chains", async () => {
