@@ -313,6 +313,19 @@ export function createRowsXml(
     .join("");
 }
 
+export async function* streamRowsXml(
+  rows: Iterable<CellInput[]> | AsyncIterable<CellInput[]>,
+  options: { startColumn?: number; startRow: number }
+): AsyncGenerator<string> {
+  const startColumn = options.startColumn ?? 1;
+  let rowNumber = options.startRow;
+
+  for await (const row of rows) {
+    yield createRowsXml([row], { startColumn, startRow: rowNumber });
+    rowNumber += 1;
+  }
+}
+
 function findCellElement(xml: string, address: string): ExistingCell | undefined {
   const tags = findStartTags(xml, "c");
   const target = address.toUpperCase();

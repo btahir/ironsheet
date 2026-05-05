@@ -31,7 +31,8 @@ export {
   readCell,
   readRange,
   type ReadCellResult,
-  type ReadRangeResult
+  type ReadRangeResult,
+  streamRowsXml
 } from "./worksheet.ts";
 export {
   type CompressionAdapter,
