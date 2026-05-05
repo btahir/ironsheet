@@ -2,6 +2,7 @@ export { parseCellAddress } from "./address.ts";
 export { diffZipPackages, type PackageDiff, type PackageEntryDiff } from "./diff.ts";
 export { IronsheetError, PackageError, WorkbookError, WorksheetError, ZipError } from "./errors.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
+export { parseSharedStrings } from "./shared-strings.ts";
 export { Workbook, type WorkbookInspectResult, type WorkbookSheet } from "./workbook.ts";
 export { type CellInput, patchCell, readCell, type ReadCellResult } from "./worksheet.ts";
 export {

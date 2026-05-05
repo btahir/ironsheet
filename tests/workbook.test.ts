@@ -31,6 +31,16 @@ test("reads existing cell values and style ids", async () => {
   assert.equal(await workbook.readCell("Sheet1", "Z99"), undefined);
 });
 
+test("reads shared string cell values", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ useSharedStrings: true }));
+
+  assert.deepEqual(await workbook.readCell("Sheet1", "A1"), {
+    address: "A1",
+    value: "Original",
+    styleId: "1"
+  });
+});
+
 test("patches one cell and preserves untouched entry payloads", async () => {
   const original = await createMinimalWorkbook();
   const originalZip = parseZip(original);

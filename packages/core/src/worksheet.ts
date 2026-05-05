@@ -36,7 +36,11 @@ type ExistingCell = {
   styleId?: string;
 };
 
-export function readCell(xml: string, address: string): ReadCellResult | undefined {
+export function readCell(
+  xml: string,
+  address: string,
+  options: { sharedStrings?: string[] } = {}
+): ReadCellResult | undefined {
   const parsedAddress = parseCellAddress(address);
   const existing = findCellElement(xml, parsedAddress.address);
 
@@ -46,7 +50,7 @@ export function readCell(xml: string, address: string): ReadCellResult | undefin
 
   const result: ReadCellResult = {
     address: parsedAddress.address,
-    value: readCellValue(existing.raw)
+    value: readCellValue(existing.raw, options.sharedStrings ?? [])
   };
 
   if (existing.styleId !== undefined) {
@@ -315,9 +319,14 @@ function createCellAttributes(
   return attributes.join(" ");
 }
 
-function readCellValue(cellXml: string): CellPrimitive {
+function readCellValue(cellXml: string, sharedStrings: string[]): CellPrimitive {
   if (/t=(["'])inlineStr\1/.test(cellXml)) {
     return readTagText(cellXml, "t") ?? "";
+  }
+
+  if (/t=(["'])s\1/.test(cellXml)) {
+    const index = Number.parseInt(readTagText(cellXml, "v") ?? "", 10);
+    return Number.isInteger(index) ? (sharedStrings[index] ?? null) : null;
   }
 
   if (/t=(["'])b\1/.test(cellXml)) {

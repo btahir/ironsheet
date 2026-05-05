@@ -4,6 +4,7 @@ const textEncoder = new TextEncoder();
 
 export type MinimalWorkbookOptions = {
   includeCalcChain?: boolean;
+  useSharedStrings?: boolean;
 };
 
 export async function createMinimalWorkbook(
@@ -19,6 +20,7 @@ export async function createMinimalWorkbook(
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${options.useSharedStrings === true ? '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>' : ""}
 </Types>`
     ),
@@ -44,6 +46,7 @@ export async function createMinimalWorkbook(
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  ${options.useSharedStrings === true ? '<Relationship Id="rIdSharedStrings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/>' : ""}
 </Relationships>`
     ),
@@ -64,7 +67,7 @@ export async function createMinimalWorkbook(
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <dimension ref="A1:A1"/>
   <sheetData>
-    <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c></row>
+    <row r="1">${options.useSharedStrings === true ? '<c r="A1" s="1" t="s"><v>0</v></c>' : '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>'}</row>
   </sheetData>
 </worksheet>`
     )
@@ -78,6 +81,18 @@ export async function createMinimalWorkbook(
 <calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <c r="A1" i="1"/>
 </calcChain>`
+      )
+    );
+  }
+
+  if (options.useSharedStrings === true) {
+    entries.push(
+      textPart(
+        "xl/sharedStrings.xml",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">
+  <si><t>Original</t></si>
+</sst>`
       )
     );
   }

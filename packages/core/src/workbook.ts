@@ -1,5 +1,6 @@
 import { PackageError, WorkbookError } from "./errors.ts";
 import { type OoxmlPackage, resolveRelationshipTarget } from "./opc.ts";
+import { parseSharedStrings } from "./shared-strings.ts";
 import { patchCell, readCell, type CellInput, type ReadCellResult } from "./worksheet.ts";
 import { findFirstStartTag, findStartTags } from "./xml.ts";
 
@@ -24,6 +25,8 @@ export type WorkbookInspectResult = {
 };
 
 export class Workbook {
+  private sharedStringsCache: string[] | undefined;
+
   private constructor(
     readonly pkg: OoxmlPackage,
     readonly workbookPart: string,
@@ -64,7 +67,7 @@ export class Workbook {
   async readCell(sheetName: string, address: string): Promise<ReadCellResult | undefined> {
     const sheet = this.sheet(sheetName);
     const xml = await this.pkg.readText(sheet.partName);
-    return readCell(xml, address);
+    return readCell(xml, address, { sharedStrings: await this.sharedStrings() });
   }
 
   async inspect(): Promise<WorkbookInspectResult> {
@@ -122,6 +125,20 @@ export class Workbook {
       const target = resolveRelationshipTarget(this.workbookPart, relationship.target);
       return relationship.type === calcChainRelationship || target === "xl/calcChain.xml";
     });
+  }
+
+  private async sharedStrings(): Promise<string[]> {
+    if (this.sharedStringsCache !== undefined) {
+      return this.sharedStringsCache;
+    }
+
+    if (!this.pkg.hasPart("xl/sharedStrings.xml")) {
+      this.sharedStringsCache = [];
+      return this.sharedStringsCache;
+    }
+
+    this.sharedStringsCache = parseSharedStrings(await this.pkg.readText("xl/sharedStrings.xml"));
+    return this.sharedStringsCache;
   }
 }
 
