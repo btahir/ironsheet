@@ -172,6 +172,16 @@ export function patchRange(
   return patchCells(xml, patches);
 }
 
+export function appendRows(
+  xml: string,
+  rows: CellInput[][],
+  options: { startColumn?: number } = {}
+): PatchCellResult {
+  const startColumn = options.startColumn ?? 1;
+  const startRow = findMaxUsedRow(xml) + 1;
+  return patchRange(xml, formatCellAddress(startColumn, startRow), rows);
+}
+
 export function replaceRowsInRange(
   xml: string,
   range: { startRow: number; endRow: number; startColumn: number; endColumn: number },
@@ -376,6 +386,16 @@ function findRowInsertionPoint(xml: string, rowNumber: number): number {
   }
 
   return sheetDataClose;
+}
+
+function findMaxUsedRow(xml: string): number {
+  const rowNumbers = findRowElements(xml).map((row) => row.rowNumber);
+  const cellRows = findStartTags(xml, "c")
+    .map((tag) => tag.attributes.r)
+    .filter((address): address is string => address !== undefined)
+    .map((address) => parseCellAddress(address).row);
+
+  return Math.max(0, ...rowNumbers, ...cellRows);
 }
 
 function collectRowTemplate(

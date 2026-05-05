@@ -133,6 +133,38 @@ test("patches and reads ranges", async () => {
   });
 });
 
+test("appends rows after the current used range", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeCalcChain: true }));
+
+  await workbook.appendRows("Sheet1", [
+    ["North", 10],
+    ["South", { formula: "=B2*2", result: 20 }]
+  ]);
+
+  assert.deepEqual(await workbook.readRange("Sheet1", "A2:B3"), {
+    range: "A2:B3",
+    cells: [
+      [
+        { address: "A2", value: "North" },
+        { address: "B2", value: 10 }
+      ],
+      [
+        { address: "A3", value: "South" },
+        { address: "B3", value: 20, formula: "B2*2" }
+      ]
+    ]
+  });
+
+  const outputZip = parseZip(await workbook.write());
+  const names = outputZip.entries.map((entry) => entry.name);
+  assert.equal(names.includes("xl/calcChain.xml"), false);
+
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+  assert.match(sheetXml, /<dimension ref="A1:B3"\/>/);
+});
+
 test("patches one cell and preserves untouched entry payloads", async () => {
   const original = await createMinimalWorkbook();
   const originalZip = parseZip(original);

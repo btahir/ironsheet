@@ -69,6 +69,17 @@ export async function patchWorkbookRange(
   await writeWorkbook(workbook, outputPath);
 }
 
+export async function appendWorkbookRows(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rows: CellInput[][]
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.appendRows(sheetName, rows);
+  await writeWorkbook(workbook, outputPath);
+}
+
 export async function readWorkbookCell(
   inputPath: string,
   sheetName: string,

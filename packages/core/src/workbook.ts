@@ -5,6 +5,7 @@ import { parseSharedStrings } from "./shared-strings.ts";
 import { replaceTableRows, type WorkbookTable } from "./table.ts";
 import { validateWorkbookPackage, type ValidationReport } from "./validation.ts";
 import {
+  appendRows,
   patchCell,
   patchCells,
   patchRange,
@@ -119,6 +120,21 @@ export class Workbook {
     const sheet = this.sheet(sheetName);
     const xml = await this.pkg.readText(sheet.partName);
     const result = patchRange(xml, startAddress, values);
+    this.pkg.setText(sheet.partName, result.xml);
+
+    if (result.formulaChanged) {
+      await this.forceRecalculateOnOpen();
+    }
+  }
+
+  async appendRows(
+    sheetName: string,
+    rows: CellInput[][],
+    options: { startColumn?: number } = {}
+  ): Promise<void> {
+    const sheet = this.sheet(sheetName);
+    const xml = await this.pkg.readText(sheet.partName);
+    const result = appendRows(xml, rows, options);
     this.pkg.setText(sheet.partName, result.xml);
 
     if (result.formulaChanged) {

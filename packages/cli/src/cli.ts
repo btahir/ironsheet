@@ -3,6 +3,7 @@ import process from "node:process";
 import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "../../core/src/index.ts";
 import {
+  appendWorkbookRows,
   patchWorkbookCell,
   patchWorkbookRange,
   readWorkbook,
@@ -15,6 +16,7 @@ import type { CellInput } from "../../core/src/index.ts";
 
 type Command =
   | "inspect"
+  | "append-rows"
   | "patch"
   | "patch-range"
   | "read-cell"
@@ -31,6 +33,7 @@ function usage(): never {
   npm run cli -- read-range <workbook.xlsx> <sheet> <range>
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
+  npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- replace-table <input.xlsx> <output.xlsx> <table> <jsonRows>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
@@ -86,6 +89,16 @@ async function patchRangeCommand(
 ): Promise<void> {
   await patchWorkbookRange(inputPath, outputPath, sheetName, startAddress, parseRows(rawRows));
   console.log(`patched ${sheetName}!${startAddress} range -> ${outputPath}`);
+}
+
+async function appendRowsCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rawRows: string
+): Promise<void> {
+  await appendWorkbookRows(inputPath, outputPath, sheetName, parseRows(rawRows));
+  console.log(`appended rows to ${sheetName} -> ${outputPath}`);
 }
 
 async function replaceTable(
@@ -206,6 +219,17 @@ try {
       usage();
     }
     await patchRangeCommand(inputPath, outputPath, sheetName, startAddress, rawRows);
+  } else if (command === "append-rows") {
+    const [inputPath, outputPath, sheetName, rawRows] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      rawRows === undefined
+    ) {
+      usage();
+    }
+    await appendRowsCommand(inputPath, outputPath, sheetName, rawRows);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (

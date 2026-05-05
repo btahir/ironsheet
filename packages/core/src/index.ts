@@ -22,6 +22,7 @@ export {
   type CellInput,
   type CellPatch,
   type FormulaValue,
+  appendRows,
   patchCell,
   patchCells,
   patchRange,
