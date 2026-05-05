@@ -16,11 +16,12 @@ This repository currently implements the first vertical slice:
 - Defined-name inspection.
 - Cell, batch-cell, and range read/write APIs.
 - Append-row API for template-backed exports.
-- Basic table row replacement with table ref, autoFilter, style, formula recalculation, and worksheet dimension updates.
-- Guardrails for unsupported table totals rows.
+- Chunked row XML streaming primitive for large worksheet writer work.
+- Basic table row replacement with table ref, autoFilter, style, totals-row preservation, formula recalculation, and worksheet dimension updates.
 - Formula writes with `calcPr` recalculation metadata.
 - Feature inspection for macros, shared strings, tables, drawings, charts, media, merges, hyperlinks, validation, conditional formatting, hidden sheets, comments, pivots, and defined names.
 - Preservation fixtures for macros, merge cells, hyperlinks, validations, conditional formatting, drawings, charts, media, hidden sheets, and styled table rows.
+- Semantic validation for package relationship targets, local worksheet/drawing relationship IDs, content types, worksheet dimensions, table refs, table part counts, and defined-name sheet references.
 - Node adapter using `node:zlib`.
 - CLI inspection, read, patch, range patch, table replacement, and package diff commands.
 - Compatibility harness with ZIP integrity and optional app-level checks.
