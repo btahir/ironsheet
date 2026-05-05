@@ -1,5 +1,5 @@
 import { WorkbookError } from "./errors.ts";
-import { decodeXml, findStartTags, type XmlTag } from "./xml.ts";
+import { decodeXml, findElementCloseStart, findStartTags, type XmlTag } from "./xml.ts";
 
 export type WorkbookDefinedName = {
   name: string;
@@ -31,10 +31,9 @@ export function parseDefinedNames(workbookXml: string): WorkbookDefinedName[] {
 }
 
 function findDefinedNameClose(xml: string, tag: XmlTag): number {
-  const close = /<\/(?:[A-Za-z0-9_]+:)?definedName>/.exec(xml.slice(tag.end));
-  if (close?.index === undefined) {
+  try {
+    return findElementCloseStart(xml, tag);
+  } catch (_error) {
     throw new WorkbookError(`Defined name ${tag.attributes.name ?? ""} is missing a closing tag`);
   }
-
-  return tag.end + close.index;
 }

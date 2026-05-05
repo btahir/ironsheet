@@ -9,6 +9,8 @@ import {
   decodeXml,
   escapeXmlAttribute,
   escapeXmlText,
+  findElementCloseStart,
+  findElementEnd,
   findFirstStartTag,
   findStartTags
 } from "./xml.ts";
@@ -119,10 +121,11 @@ export function readRange(
 export function patchCell(xml: string, address: string, value: CellInput): PatchCellResult {
   const parsedAddress = parseCellAddress(address);
   const existing = findCellElement(xml, parsedAddress.address);
+  const prefix = inferWorksheetPrefix(xml);
   const cellXml = createCellXml(
     parsedAddress.address,
     value,
-    existing?.styleId === undefined ? {} : { styleId: existing.styleId }
+    existing?.styleId === undefined ? { prefix } : { prefix, styleId: existing.styleId }
   );
   const formulaChanged = isFormulaValue(value);
   const withCell =
@@ -179,7 +182,7 @@ export function appendRows(
 ): PatchCellResult {
   const startColumn = options.startColumn ?? 1;
   const startRow = findMaxUsedRow(xml) + 1;
-  const rowXml = createRowsXml(rows, { startColumn, startRow });
+  const rowXml = createRowsXml(rows, { prefix: inferWorksheetPrefix(xml), startColumn, startRow });
   const inserted = insertRowsBeforeSheetDataClose(xml, rowXml);
   const lastRow = Math.max(startRow, startRow + rows.length - 1);
   const lastColumn = Math.max(
@@ -210,6 +213,7 @@ export function replaceRowsInRange(
   }
 
   const preserveStyles = options.preserveStyles ?? true;
+  const prefix = inferWorksheetPrefix(xml);
   const template = preserveStyles ? collectRowTemplate(xml, range) : undefined;
   const trailingRows = options.trailingRows ?? 0;
   const trailingRowElements = findRowElements(xml).filter(
@@ -239,12 +243,12 @@ export function replaceRowsInRange(
           return createCellXml(
             formatCellAddress(column, rowNumber),
             cell,
-            styleId === undefined ? {} : { styleId }
+            styleId === undefined ? { prefix } : { prefix, styleId }
           );
         })
         .join("");
 
-      return `<row r="${rowNumber}"${rowAttributesXml(template?.attributes)}>${cells}</row>`;
+      return `<${qualifiedName(prefix, "row")} r="${rowNumber}"${rowAttributesXml(template?.attributes)}>${cells}</${qualifiedName(prefix, "row")}>`;
     })
     .join("");
   const shiftedTrailingRows = trailingRowElements
@@ -266,49 +270,60 @@ export function replaceRowsInRange(
 export function createCellXml(
   address: string,
   value: CellInput,
-  options: { styleId?: string } = {}
+  options: { prefix?: string | undefined; styleId?: string } = {}
 ): string {
   const attributes = createCellAttributes(address, value, options);
+  const c = qualifiedName(options.prefix, "c");
 
   if (isFormulaValue(value)) {
-    const result = value.result === undefined ? "" : createFormulaResultXml(value.result);
-    return `<c ${attributes}><f>${escapeXmlText(value.formula.replace(/^=/, ""))}</f>${result}</c>`;
+    const f = qualifiedName(options.prefix, "f");
+    const result =
+      value.result === undefined ? "" : createFormulaResultXml(value.result, options.prefix);
+    return `<${c} ${attributes}><${f}>${escapeXmlText(value.formula.replace(/^=/, ""))}</${f}>${result}</${c}>`;
   }
 
   if (value === null) {
-    return `<c ${attributes}/>`;
+    return `<${c} ${attributes}/>`;
   }
 
   if (typeof value === "number") {
-    return `<c ${attributes}><v>${String(value)}</v></c>`;
+    const v = qualifiedName(options.prefix, "v");
+    return `<${c} ${attributes}><${v}>${String(value)}</${v}></${c}>`;
   }
 
   if (typeof value === "boolean") {
-    return `<c ${attributes}><v>${value ? "1" : "0"}</v></c>`;
+    const v = qualifiedName(options.prefix, "v");
+    return `<${c} ${attributes}><${v}>${value ? "1" : "0"}</${v}></${c}>`;
   }
 
   if (value instanceof Date) {
-    return `<c ${attributes}><v>${dateToExcelSerial(value)}</v></c>`;
+    const v = qualifiedName(options.prefix, "v");
+    return `<${c} ${attributes}><${v}>${dateToExcelSerial(value)}</${v}></${c}>`;
   }
 
-  return `<c ${attributes}><is><t>${escapeXmlText(value)}</t></is></c>`;
+  const is = qualifiedName(options.prefix, "is");
+  const t = qualifiedName(options.prefix, "t");
+  return `<${c} ${attributes}><${is}><${t}>${escapeXmlText(value)}</${t}></${is}></${c}>`;
 }
 
 export function createRowsXml(
   rows: CellInput[][],
-  options: { startColumn?: number; startRow: number }
+  options: { prefix?: string | undefined; startColumn?: number; startRow: number }
 ): string {
   const startColumn = options.startColumn ?? 1;
+  const rowTag = qualifiedName(options.prefix, "row");
   return rows
     .map((row, rowIndex) => {
       const rowNumber = options.startRow + rowIndex;
       const cells = row
         .map((cell, columnIndex) =>
-          createCellXml(formatCellAddress(startColumn + columnIndex, rowNumber), cell)
+          createCellXml(formatCellAddress(startColumn + columnIndex, rowNumber), cell, {
+            prefix: options.prefix
+          })
         )
         .join("");
 
-      return `<row r="${rowNumber}">${cells}</row>`;
+      return `<${rowTag} r="${rowNumber}">${cells}</${rowTag}>`;
     })
     .join("");
 }
@@ -339,12 +354,7 @@ function findCellElement(xml: string, address: string): ExistingCell | undefined
       return existingCell(xml, tag.start, tag.end, tag.attributes.s);
     }
 
-    const close = xml.indexOf("</c>", tag.end);
-    if (close === -1) {
-      throw new WorksheetError(`Cell ${address} is missing a closing </c> tag`);
-    }
-
-    return existingCell(xml, tag.start, close + "</c>".length, tag.attributes.s);
+    return existingCell(xml, tag.start, findElementEnd(xml, tag), tag.attributes.s);
   }
 
   return undefined;
@@ -387,10 +397,7 @@ function insertCell(xml: string, address: string, rowNumber: number, cellXml: st
     }
   }
 
-  const close = xml.lastIndexOf("</row>", row.end);
-  if (close === -1 || close < row.start) {
-    throw new WorksheetError(`Row ${rowNumber} is missing a closing </row> tag`);
-  }
+  const close = findElementCloseStart(xml, row.tag);
 
   return `${xml.slice(0, close)}${cellXml}${xml.slice(close)}`;
 }
@@ -401,10 +408,7 @@ function insertRow(xml: string, rowNumber: number, cellXml: string): string {
     throw new WorksheetError("Worksheet is missing sheetData");
   }
 
-  const close = xml.indexOf("</sheetData>", sheetData.end);
-  if (close === -1) {
-    throw new WorksheetError("Worksheet sheetData is missing a closing tag");
-  }
+  const close = findElementCloseStart(xml, sheetData);
 
   const rowXml = `<row r="${rowNumber}">${cellXml}</row>`;
   return `${xml.slice(0, close)}${rowXml}${xml.slice(close)}`;
@@ -416,10 +420,7 @@ function insertRowsBeforeSheetDataClose(xml: string, rowXml: string): string {
     throw new WorksheetError("Worksheet is missing sheetData");
   }
 
-  const close = xml.indexOf("</sheetData>", sheetData.end);
-  if (close === -1) {
-    throw new WorksheetError("Worksheet sheetData is missing a closing tag");
-  }
+  const close = findElementCloseStart(xml, sheetData);
 
   return `${xml.slice(0, close)}${rowXml}${xml.slice(close)}`;
 }
@@ -439,12 +440,7 @@ function findRowElements(xml: string): RowElement[] {
       return { rowNumber, start: row.start, end: row.end, tag: row };
     }
 
-    const close = xml.indexOf("</row>", row.end);
-    if (close === -1) {
-      throw new WorksheetError(`Row ${rowNumber} is missing a closing </row> tag`);
-    }
-
-    return { rowNumber, start: row.start, end: close + "</row>".length, tag: row };
+    return { rowNumber, start: row.start, end: findElementEnd(xml, row), tag: row };
   });
 }
 
@@ -454,12 +450,12 @@ function findRowInsertionPoint(xml: string, rowNumber: number): number {
     return nextRow.start;
   }
 
-  const sheetDataClose = xml.indexOf("</sheetData>");
-  if (sheetDataClose === -1) {
-    throw new WorksheetError("Worksheet sheetData is missing a closing tag");
+  const sheetData = findFirstStartTag(xml, "sheetData");
+  if (sheetData === undefined) {
+    throw new WorksheetError("Worksheet is missing sheetData");
   }
 
-  return sheetDataClose;
+  return findElementCloseStart(xml, sheetData);
 }
 
 function findMaxUsedRow(xml: string): number {
@@ -615,24 +611,25 @@ function upsertRefAttribute(rawTag: string, ref: string): string {
   return `${rawTag.slice(0, -closing.length)} ref="${escapeXmlAttribute(ref)}"${closing}`;
 }
 
-function createFormulaResultXml(value: CellPrimitive): string {
+function createFormulaResultXml(value: CellPrimitive, prefix: string | undefined): string {
   if (value === null) {
     return "";
   }
 
+  const v = qualifiedName(prefix, "v");
   if (typeof value === "boolean") {
-    return `<v>${value ? "1" : "0"}</v>`;
+    return `<${v}>${value ? "1" : "0"}</${v}>`;
   }
 
   if (typeof value === "number") {
-    return `<v>${String(value)}</v>`;
+    return `<${v}>${String(value)}</${v}>`;
   }
 
   if (value instanceof Date) {
-    return `<v>${dateToExcelSerial(value)}</v>`;
+    return `<${v}>${dateToExcelSerial(value)}</${v}>`;
   }
 
-  return `<v>${escapeXmlText(value)}</v>`;
+  return `<${v}>${escapeXmlText(value)}</${v}>`;
 }
 
 function createCellAttributes(
@@ -688,45 +685,40 @@ function readTextRuns(xml: string): string[] {
       return "";
     }
 
-    const close = findTextRunClose(xml, tag.end);
-    return close === -1 ? "" : decodeXml(xml.slice(tag.end, close));
+    return decodeXml(xml.slice(tag.end, findElementCloseStart(xml, tag)));
   });
 }
 
-function findTextRunClose(xml: string, start: number): number {
-  const close = xml.indexOf("</t>", start);
-  if (close !== -1) {
-    return close;
-  }
-
-  return findPrefixedClose(xml, "t", start);
-}
-
 function readTagText(xml: string, localName: string): string | undefined {
-  const open = new RegExp(`<(?:[A-Za-z0-9_]+:)?${localName}(?:\\s[^>]*)?>`).exec(xml);
-  if (open === null || open.index === undefined) {
+  const tag = findFirstStartTag(xml, localName);
+  if (tag === undefined) {
     return undefined;
   }
 
-  const start = open.index + open[0].length;
-  const close = xml.indexOf(`</${localName}>`, start);
-  const prefixedClose = close === -1 ? findPrefixedClose(xml, localName, start) : close;
-
-  if (prefixedClose === -1) {
-    return undefined;
-  }
-
-  return decodeXml(xml.slice(start, prefixedClose));
-}
-
-function findPrefixedClose(xml: string, localName: string, start: number): number {
-  const close = new RegExp(`</[A-Za-z0-9_]+:${localName}>`).exec(xml.slice(start));
-  return close?.index === undefined ? -1 : start + close.index;
+  return decodeXml(xml.slice(tag.end, findElementCloseStart(xml, tag)));
 }
 
 function dateToExcelSerial(date: Date): number {
   const epoch = Date.UTC(1899, 11, 30);
   return (date.getTime() - epoch) / 86_400_000;
+}
+
+function inferWorksheetPrefix(xml: string): string | undefined {
+  for (const localName of ["worksheet", "sheetData", "row", "c"]) {
+    const tag = findFirstStartTag(xml, localName);
+    if (tag === undefined) {
+      continue;
+    }
+
+    const colon = tag.name.indexOf(":");
+    return colon === -1 ? undefined : tag.name.slice(0, colon);
+  }
+
+  return undefined;
+}
+
+function qualifiedName(prefix: string | undefined, localName: string): string {
+  return prefix === undefined ? localName : `${prefix}:${localName}`;
 }
 
 function isFormulaValue(value: CellInput): value is FormulaValue {

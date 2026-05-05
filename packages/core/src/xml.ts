@@ -43,6 +43,59 @@ export function findFirstStartTag(xml: string, localName: string): XmlTag | unde
   return findStartTags(xml, localName)[0];
 }
 
+export function findElementEnd(xml: string, tag: XmlTag): number {
+  if (tag.selfClosing) {
+    return tag.end;
+  }
+
+  return findElementCloseTag(xml, tag).end;
+}
+
+export function findElementCloseStart(xml: string, tag: XmlTag): number {
+  if (tag.selfClosing) {
+    return tag.end;
+  }
+
+  return findElementCloseTag(xml, tag).start;
+}
+
+function findElementCloseTag(xml: string, tag: XmlTag): { start: number; end: number } {
+  let depth = 1;
+  let offset = tag.end;
+
+  while (offset < xml.length) {
+    const start = xml.indexOf("<", offset);
+    if (start === -1) {
+      break;
+    }
+
+    const specialTagEnd = findSpecialTagEnd(xml, start);
+    if (specialTagEnd !== undefined) {
+      offset = specialTagEnd + 1;
+      continue;
+    }
+
+    const end = findTagEnd(xml, start);
+    const raw = xml.slice(start, end + 1);
+    const closingLocalName = parseEndTagLocalName(raw);
+    if (closingLocalName === tag.localName) {
+      depth -= 1;
+      if (depth === 0) {
+        return { start, end: end + 1 };
+      }
+    } else {
+      const startTag = parseStartTag(raw, start, end + 1);
+      if (startTag?.localName === tag.localName && !startTag.selfClosing) {
+        depth += 1;
+      }
+    }
+
+    offset = end + 1;
+  }
+
+  throw new PackageError(`Element ${tag.name} is missing a closing tag`);
+}
+
 export function parseStartTag(raw: string, start = 0, end = raw.length): XmlTag | undefined {
   if (!raw.startsWith("<") || raw.startsWith("</")) {
     return undefined;
@@ -179,11 +232,16 @@ function findNameEnd(source: string): number {
   return offset;
 }
 
-function findSpecialTagEnd(xml: string, start: number): number | undefined {
-  if (xml.startsWith("</", start)) {
-    return findTagEnd(xml, start);
+function parseEndTagLocalName(raw: string): string | undefined {
+  if (!raw.startsWith("</")) {
+    return undefined;
   }
 
+  const name = raw.slice(2, raw.endsWith(">") ? -1 : undefined).trim();
+  return name.length === 0 ? undefined : toLocalName(name);
+}
+
+function findSpecialTagEnd(xml: string, start: number): number | undefined {
   if (xml.startsWith("<?", start)) {
     return findDelimitedEnd(xml, "?>", start, "processing instruction");
   }
