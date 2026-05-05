@@ -54,6 +54,65 @@ test("validation reports worksheet dimensions that exclude cells", async () => {
   assert.equal(report.issues[0]?.target, "B2");
 });
 
+test("validation reports worksheet drawing relationship id gaps", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDrawing: true }));
+  const xml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText("xl/worksheets/sheet1.xml", xml.replace('r:id="rIdDrawing1"', 'r:id="rIdMissing"'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "DRAWING_RELATIONSHIP_MISSING");
+  assert.equal(report.issues[0]?.target, "rIdMissing");
+});
+
+test("validation reports worksheet table part count and relationship id gaps", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const xml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    xml
+      .replace('<tableParts count="1">', '<tableParts count="2">')
+      .replace('r:id="rIdTable1"', 'r:id="rIdMissing"')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "TABLE_PART_RELATIONSHIP_MISSING"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "TABLE_PART_COUNT_MISMATCH"),
+    true
+  );
+});
+
+test("validation reports drawing chart and image relationship id gaps", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDrawing: true }));
+  const xml = await pkg.readText("xl/drawings/drawing1.xml");
+  pkg.setText(
+    "xl/drawings/drawing1.xml",
+    xml
+      .replace('r:id="rIdChart1"', 'r:id="rIdMissingChart"')
+      .replace('r:embed="rIdImage1"', 'r:embed="rIdMissingImage"')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 2);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "DRAWING_CHART_RELATIONSHIP_MISSING"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "DRAWING_IMAGE_RELATIONSHIP_MISSING"),
+    true
+  );
+});
+
 test("validation reports table and autoFilter range mismatches", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
   pkg.setText(

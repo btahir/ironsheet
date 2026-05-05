@@ -1,6 +1,15 @@
 import { parseCellAddress, parseCellRange } from "./address.ts";
-import { type OoxmlPackage, resolveRelationshipTarget } from "./opc.ts";
+import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { findFirstStartTag, findStartTags } from "./xml.ts";
+
+const chartRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
+const drawingRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
+const imageRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+const tableRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -28,6 +37,8 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
 
   await validateRelationshipTargets(pkg, issues, partSet);
   await validateContentTypes(pkg, issues, parts);
+  await validateWorksheetRelationshipIds(pkg, issues, parts);
+  await validateDrawingRelationshipIds(pkg, issues, parts);
   await validateWorksheetDimensions(pkg, issues, parts);
   await validateTableParts(pkg, issues, parts);
 
@@ -98,6 +109,121 @@ async function validateContentTypes(
         part
       });
     }
+  }
+}
+
+async function validateWorksheetRelationshipIds(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    const relationships = await pkg.relationshipsFor(part);
+
+    for (const drawing of findStartTags(xml, "drawing")) {
+      validateRelationshipId({
+        issues,
+        relationships,
+        sourcePart: part,
+        relationshipId: drawing.attributes["r:id"],
+        expectedType: drawingRelationship,
+        missingCode: "DRAWING_RELATIONSHIP_MISSING",
+        message: "Worksheet drawing element points to a missing drawing relationship"
+      });
+    }
+
+    const tableParts = findStartTags(xml, "tablePart");
+    const tablePartsContainer = findFirstStartTag(xml, "tableParts");
+    const declaredCount = Number.parseInt(tablePartsContainer?.attributes.count ?? "", 10);
+    if (Number.isInteger(declaredCount) && declaredCount !== tableParts.length) {
+      issues.push({
+        severity: "warning",
+        code: "TABLE_PART_COUNT_MISMATCH",
+        message: `Worksheet declares ${declaredCount} table part(s) but contains ${tableParts.length}`,
+        part
+      });
+    }
+
+    for (const tablePart of tableParts) {
+      validateRelationshipId({
+        issues,
+        relationships,
+        sourcePart: part,
+        relationshipId: tablePart.attributes["r:id"],
+        expectedType: tableRelationship,
+        missingCode: "TABLE_PART_RELATIONSHIP_MISSING",
+        message: "Worksheet tablePart element points to a missing table relationship"
+      });
+    }
+  }
+}
+
+async function validateDrawingRelationshipIds(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  for (const part of parts.filter((name) => /^xl\/drawings\/drawing\d+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    const relationships = await pkg.relationshipsFor(part);
+
+    for (const chart of findStartTags(xml, "chart")) {
+      validateRelationshipId({
+        issues,
+        relationships,
+        sourcePart: part,
+        relationshipId: chart.attributes["r:id"],
+        expectedType: chartRelationship,
+        missingCode: "DRAWING_CHART_RELATIONSHIP_MISSING",
+        message: "Drawing chart element points to a missing chart relationship"
+      });
+    }
+
+    for (const blip of findStartTags(xml, "blip")) {
+      validateRelationshipId({
+        issues,
+        relationships,
+        sourcePart: part,
+        relationshipId: blip.attributes["r:embed"] ?? blip.attributes["r:link"],
+        expectedType: imageRelationship,
+        missingCode: "DRAWING_IMAGE_RELATIONSHIP_MISSING",
+        message: "Drawing image element points to a missing image relationship"
+      });
+    }
+  }
+}
+
+function validateRelationshipId(options: {
+  issues: ValidationIssue[];
+  relationships: Relationship[];
+  sourcePart: string;
+  relationshipId: string | undefined;
+  expectedType: string;
+  missingCode: string;
+  message: string;
+}): void {
+  if (options.relationshipId === undefined) {
+    options.issues.push({
+      severity: "error",
+      code: options.missingCode,
+      message: options.message,
+      part: options.sourcePart
+    });
+    return;
+  }
+
+  const relationship = options.relationships.find(
+    (candidate) => candidate.id === options.relationshipId
+  );
+  if (relationship?.type !== options.expectedType) {
+    options.issues.push({
+      severity: "error",
+      code: options.missingCode,
+      message: `${options.message}: ${options.relationshipId}`,
+      part: options.sourcePart,
+      target: options.relationshipId
+    });
   }
 }
 
