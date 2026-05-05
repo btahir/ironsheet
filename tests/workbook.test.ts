@@ -418,6 +418,59 @@ test("diagnostics report macro preservation and calc chain invalidation", async 
   );
 });
 
+test("data edits report defined name, chart, and table impact diagnostics", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({
+      includeDefinedName: true,
+      includeDrawing: true,
+      includeTable: true
+    })
+  );
+
+  await workbook.patchCell("Sheet1", "C3", "changed");
+  await workbook.patchCell("Sheet1", "D4", "changed again");
+
+  assert.deepEqual(
+    workbook
+      .diagnostics()
+      .filter((diagnostic) =>
+        [
+          "DEFINED_NAMES_MAY_NEED_REVIEW",
+          "CHARTS_MAY_NEED_REFRESH",
+          "WORKSHEET_TABLES_NOT_RESIZED"
+        ].includes(diagnostic.code)
+      )
+      .map((diagnostic) => diagnostic.code),
+    ["DEFINED_NAMES_MAY_NEED_REVIEW", "CHARTS_MAY_NEED_REFRESH", "WORKSHEET_TABLES_NOT_RESIZED"]
+  );
+});
+
+test("table replacement reports dependent workbook structures without table resize warning", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({
+      includeDefinedName: true,
+      includeDrawing: true,
+      includeTable: true
+    })
+  );
+
+  await workbook.replaceTableRows("RevenueTable", [["Updated", 42]]);
+  const diagnostics = workbook.diagnostics();
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "DEFINED_NAMES_MAY_NEED_REVIEW"),
+    true
+  );
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "CHARTS_MAY_NEED_REFRESH"),
+    true
+  );
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "WORKSHEET_TABLES_NOT_RESIZED"),
+    false
+  );
+});
+
 test("replaces basic table body rows and updates the table ref", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook({ includeTable: true }));
 

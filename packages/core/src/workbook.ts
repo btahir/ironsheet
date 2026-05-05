@@ -27,6 +27,11 @@ const worksheetRelationship =
 const calcChainRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
 
+type MutationImpactOptions = {
+  operation: "cell" | "range" | "appendRows" | "table";
+  sheetPartName?: string;
+};
+
 export type WorkbookSheet = {
   name: string;
   id: string;
@@ -105,6 +110,11 @@ export class Workbook {
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
     }
+
+    await this.recordMutationImpactDiagnostics({
+      operation: "cell",
+      sheetPartName: sheet.partName
+    });
   }
 
   async patchCells(sheetName: string, patches: CellPatch[]): Promise<void> {
@@ -116,6 +126,11 @@ export class Workbook {
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
     }
+
+    await this.recordMutationImpactDiagnostics({
+      operation: "range",
+      sheetPartName: sheet.partName
+    });
   }
 
   async patchRange(sheetName: string, startAddress: string, values: CellInput[][]): Promise<void> {
@@ -127,6 +142,11 @@ export class Workbook {
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
     }
+
+    await this.recordMutationImpactDiagnostics({
+      operation: "range",
+      sheetPartName: sheet.partName
+    });
   }
 
   async appendRows(
@@ -142,6 +162,11 @@ export class Workbook {
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
     }
+
+    await this.recordMutationImpactDiagnostics({
+      operation: "appendRows",
+      sheetPartName: sheet.partName
+    });
   }
 
   async readCell(sheetName: string, address: string): Promise<ReadCellResult | undefined> {
@@ -161,6 +186,11 @@ export class Workbook {
     if (rows.some((row) => row.some(isFormulaValue))) {
       await this.forceRecalculateOnOpen();
     }
+
+    await this.recordMutationImpactDiagnostics({
+      operation: "table",
+      sheetPartName: table.worksheetPartName
+    });
 
     return table;
   }
@@ -286,7 +316,59 @@ export class Workbook {
     }
   }
 
+  private async recordMutationImpactDiagnostics(options: MutationImpactOptions): Promise<void> {
+    const parts = this.pkg.listParts();
+    const definedNames = await this.definedNames();
+
+    if (definedNames.length > 0) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "DEFINED_NAMES_MAY_NEED_REVIEW",
+        message: `Workbook has ${definedNames.length} defined name(s); verify edited ranges still match template intent`
+      });
+    }
+
+    if (countParts(parts, /^xl\/charts\//) > 0) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "CHARTS_MAY_NEED_REFRESH",
+        message: "Workbook contains charts; verify chart ranges after worksheet data edits"
+      });
+    }
+
+    if (countParts(parts, /^xl\/pivotTables\//) > 0) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "PIVOT_TABLES_MAY_NEED_REFRESH",
+        message:
+          "Workbook contains pivot tables; Excel may need to refresh pivot caches after data edits"
+      });
+    }
+
+    if (
+      options.operation !== "table" &&
+      options.sheetPartName !== undefined &&
+      (await worksheetHasTableParts(this.pkg, options.sheetPartName))
+    ) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "WORKSHEET_TABLES_NOT_RESIZED",
+        message:
+          "Worksheet contains tables; direct cell/range edits do not resize table refs. Use replaceTableRows for table body changes.",
+        part: options.sheetPartName
+      });
+    }
+  }
+
   private addDiagnostic(diagnostic: Diagnostic): void {
+    if (
+      this.diagnosticJournal.some(
+        (existing) => existing.code === diagnostic.code && existing.part === diagnostic.part
+      )
+    ) {
+      return;
+    }
+
     this.diagnosticJournal.push(diagnostic);
   }
 }
@@ -353,6 +435,14 @@ function sheetState(value: string | undefined): WorkbookSheetState | undefined {
   }
 
   return undefined;
+}
+
+async function worksheetHasTableParts(pkg: OoxmlPackage, sheetPartName: string): Promise<boolean> {
+  if (!pkg.hasPart(sheetPartName)) {
+    return false;
+  }
+
+  return findStartTags(await pkg.readText(sheetPartName), "tablePart").length > 0;
 }
 
 function upsertAttributes(rawTag: string, attributes: Record<string, string>): string {
