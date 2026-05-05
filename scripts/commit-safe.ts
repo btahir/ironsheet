@@ -29,7 +29,11 @@ if (message.length === 0) {
   process.exit(2);
 }
 
-run("git", ["rev-parse", "--is-inside-work-tree"]);
+if (quiet("git", ["rev-parse", "--is-inside-work-tree"]) !== 0) {
+  console.error("commit:safe: not inside a git repository");
+  process.exit(1);
+}
+
 run("git", ["add", "-A"]);
 
 // The planning spec is useful locally, but should not be part of normal product commits.
