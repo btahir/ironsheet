@@ -39,6 +39,12 @@ Patch a single cell:
 npm run cli -- patch input.xlsx output.xlsx Sheet1 B2 "Hello from Ironsheet"
 ```
 
+Diff two workbook packages:
+
+```bash
+npm run cli -- diff input.xlsx output.xlsx
+```
+
 Run compatibility checks:
 
 ```bash
