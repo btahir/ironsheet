@@ -1,6 +1,12 @@
 import { compareCellAddresses, parseCellAddress } from "./address.ts";
 import { WorksheetError } from "./errors.ts";
-import { escapeXmlAttribute, escapeXmlText, findFirstStartTag, findStartTags } from "./xml.ts";
+import {
+  decodeXml,
+  escapeXmlAttribute,
+  escapeXmlText,
+  findFirstStartTag,
+  findStartTags
+} from "./xml.ts";
 
 export type CellPrimitive = string | number | boolean | Date | null;
 
@@ -11,6 +17,13 @@ export type FormulaValue = {
 
 export type CellInput = CellPrimitive | FormulaValue;
 
+export type ReadCellResult = {
+  address: string;
+  value: CellPrimitive;
+  formula?: string;
+  styleId?: string;
+};
+
 export type PatchCellResult = {
   xml: string;
   formulaChanged: boolean;
@@ -19,8 +32,34 @@ export type PatchCellResult = {
 type ExistingCell = {
   start: number;
   end: number;
+  raw: string;
   styleId?: string;
 };
+
+export function readCell(xml: string, address: string): ReadCellResult | undefined {
+  const parsedAddress = parseCellAddress(address);
+  const existing = findCellElement(xml, parsedAddress.address);
+
+  if (existing === undefined) {
+    return undefined;
+  }
+
+  const result: ReadCellResult = {
+    address: parsedAddress.address,
+    value: readCellValue(existing.raw)
+  };
+
+  if (existing.styleId !== undefined) {
+    result.styleId = existing.styleId;
+  }
+
+  const formula = readTagText(existing.raw, "f");
+  if (formula !== undefined) {
+    result.formula = formula;
+  }
+
+  return result;
+}
 
 export function patchCell(xml: string, address: string, value: CellInput): PatchCellResult {
   const parsedAddress = parseCellAddress(address);
@@ -83,7 +122,7 @@ function findCellElement(xml: string, address: string): ExistingCell | undefined
     }
 
     if (tag.selfClosing) {
-      return existingCell(tag.start, tag.end, tag.attributes.s);
+      return existingCell(xml, tag.start, tag.end, tag.attributes.s);
     }
 
     const close = xml.indexOf("</c>", tag.end);
@@ -91,18 +130,23 @@ function findCellElement(xml: string, address: string): ExistingCell | undefined
       throw new WorksheetError(`Cell ${address} is missing a closing </c> tag`);
     }
 
-    return existingCell(tag.start, close + "</c>".length, tag.attributes.s);
+    return existingCell(xml, tag.start, close + "</c>".length, tag.attributes.s);
   }
 
   return undefined;
 }
 
-function existingCell(start: number, end: number, styleId: string | undefined): ExistingCell {
+function existingCell(
+  xml: string,
+  start: number,
+  end: number,
+  styleId: string | undefined
+): ExistingCell {
   if (styleId === undefined) {
-    return { start, end };
+    return { start, end, raw: xml.slice(start, end) };
   }
 
-  return { start, end, styleId };
+  return { start, end, raw: xml.slice(start, end), styleId };
 }
 
 function insertCell(xml: string, address: string, rowNumber: number, cellXml: string): string {
@@ -269,6 +313,46 @@ function createCellAttributes(
   }
 
   return attributes.join(" ");
+}
+
+function readCellValue(cellXml: string): CellPrimitive {
+  if (/t=(["'])inlineStr\1/.test(cellXml)) {
+    return readTagText(cellXml, "t") ?? "";
+  }
+
+  if (/t=(["'])b\1/.test(cellXml)) {
+    return readTagText(cellXml, "v") === "1";
+  }
+
+  const value = readTagText(cellXml, "v");
+  if (value === undefined) {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : value;
+}
+
+function readTagText(xml: string, localName: string): string | undefined {
+  const open = new RegExp(`<(?:[A-Za-z0-9_]+:)?${localName}(?:\\s[^>]*)?>`).exec(xml);
+  if (open === null || open.index === undefined) {
+    return undefined;
+  }
+
+  const start = open.index + open[0].length;
+  const close = xml.indexOf(`</${localName}>`, start);
+  const prefixedClose = close === -1 ? findPrefixedClose(xml, localName, start) : close;
+
+  if (prefixedClose === -1) {
+    return undefined;
+  }
+
+  return decodeXml(xml.slice(start, prefixedClose));
+}
+
+function findPrefixedClose(xml: string, localName: string, start: number): number {
+  const close = new RegExp(`</[A-Za-z0-9_]+:${localName}>`).exec(xml.slice(start));
+  return close?.index === undefined ? -1 : start + close.index;
 }
 
 function dateToExcelSerial(date: Date): number {

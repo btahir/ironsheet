@@ -44,3 +44,12 @@ export async function patchWorkbookCell(
   await workbook.patchCell(sheetName, address, value);
   await writeWorkbook(workbook, outputPath);
 }
+
+export async function readWorkbookCell(
+  inputPath: string,
+  sheetName: string,
+  address: string
+): Promise<Awaited<ReturnType<Workbook["readCell"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.readCell(sheetName, address);
+}

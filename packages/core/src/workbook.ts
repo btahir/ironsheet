@@ -1,6 +1,6 @@
 import { PackageError, WorkbookError } from "./errors.ts";
 import { type OoxmlPackage, resolveRelationshipTarget } from "./opc.ts";
-import { patchCell, type CellInput } from "./worksheet.ts";
+import { patchCell, readCell, type CellInput, type ReadCellResult } from "./worksheet.ts";
 import { findFirstStartTag, findStartTags } from "./xml.ts";
 
 const officeDocumentRelationship =
@@ -59,6 +59,12 @@ export class Workbook {
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
     }
+  }
+
+  async readCell(sheetName: string, address: string): Promise<ReadCellResult | undefined> {
+    const sheet = this.sheet(sheetName);
+    const xml = await this.pkg.readText(sheet.partName);
+    return readCell(xml, address);
   }
 
   async inspect(): Promise<WorkbookInspectResult> {

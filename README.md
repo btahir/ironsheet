@@ -33,6 +33,12 @@ Inspect a workbook:
 npm run cli -- inspect path/to/workbook.xlsx
 ```
 
+Read a cell:
+
+```bash
+npm run cli -- read-cell path/to/workbook.xlsx Sheet1 A1
+```
+
 Patch a single cell:
 
 ```bash

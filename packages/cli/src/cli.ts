@@ -2,14 +2,15 @@
 import process from "node:process";
 import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "../../core/src/index.ts";
-import { patchWorkbookCell, readWorkbook } from "../../node/src/index.ts";
+import { patchWorkbookCell, readWorkbook, readWorkbookCell } from "../../node/src/index.ts";
 import type { CellInput } from "../../core/src/index.ts";
 
-type Command = "inspect" | "patch" | "diff";
+type Command = "inspect" | "patch" | "read-cell" | "diff";
 
 function usage(): never {
   console.error(`usage:
   npm run cli -- inspect <workbook.xlsx>
+  npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
@@ -25,6 +26,10 @@ async function inspect(path: string): Promise<void> {
   const workbook = await readWorkbook(path);
   const result = await workbook.inspect();
   console.log(JSON.stringify(result, null, 2));
+}
+
+async function readCellCommand(path: string, sheetName: string, address: string): Promise<void> {
+  console.log(JSON.stringify(await readWorkbookCell(path, sheetName, address), null, 2));
 }
 
 async function diff(beforePath: string, afterPath: string): Promise<void> {
@@ -73,6 +78,12 @@ try {
       usage();
     }
     await inspect(path);
+  } else if (command === "read-cell") {
+    const [path, sheetName, address] = args;
+    if (path === undefined || sheetName === undefined || address === undefined) {
+      usage();
+    }
+    await readCellCommand(path, sheetName, address);
   } else if (command === "diff") {
     const [beforePath, afterPath] = args;
     if (beforePath === undefined || afterPath === undefined) {
