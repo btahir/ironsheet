@@ -23,8 +23,10 @@ test("inspects workbook sheets from OPC relationships", async () => {
     calcChains: 0,
     charts: 0,
     drawings: 0,
+    hyperlinks: 0,
     macros: 0,
     media: 0,
+    merges: 0,
     pivotTables: 0,
     sharedStrings: 0,
     tables: 0
@@ -35,7 +37,9 @@ test("inspect reports workbook feature signals", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({
       includeCalcChain: true,
+      includeHyperlink: true,
       includeMacro: true,
+      includeMerge: true,
       includeTable: true,
       useSharedStrings: true
     })
@@ -45,8 +49,10 @@ test("inspect reports workbook feature signals", async () => {
     calcChains: 1,
     charts: 0,
     drawings: 0,
+    hyperlinks: 1,
     macros: 1,
     media: 0,
+    merges: 1,
     pivotTables: 0,
     sharedStrings: 1,
     tables: 1
@@ -172,6 +178,28 @@ test("cell patches preserve macro-enabled workbook parts", async () => {
   );
   assert.match(contentTypesXml, /macroEnabled\.main\+xml/);
   assert.match(contentTypesXml, /vbaProject/);
+});
+
+test("cell patches preserve merge cells and hyperlink relationships", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeHyperlink: true, includeMerge: true })
+  );
+
+  await workbook.patchCell("Sheet1", "C3", "safe");
+  const outputZip = parseZip(await workbook.write());
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+  assert.match(sheetXml, /<mergeCell ref="A1:B1"\/>/);
+  assert.match(sheetXml, /<hyperlink ref="A1" r:id="rIdHyperlink1"\/>/);
+
+  const rels = outputZip.entries.find(
+    (entry) => entry.name === "xl/worksheets/_rels/sheet1.xml.rels"
+  );
+  assert.ok(rels);
+  const relsXml = textDecoder.decode(await readEntryData(rels, nodeCompressionAdapter));
+  assert.match(relsXml, /Target="https:\/\/example.com"/);
+  assert.match(relsXml, /TargetMode="External"/);
 });
 
 test("replaces basic table body rows and updates the table ref", async () => {

@@ -30,8 +30,10 @@ export type WorkbookFeatureSummary = {
   calcChains: number;
   charts: number;
   drawings: number;
+  hyperlinks: number;
   macros: number;
   media: number;
+  merges: number;
   pivotTables: number;
   sharedStrings: number;
   tables: number;
@@ -93,7 +95,7 @@ export class Workbook {
       workbookPart: this.workbookPart,
       sheets: this.sheets(),
       parts,
-      features: summarizeFeatures(parts)
+      features: await summarizeFeatures(this.pkg, parts)
     };
   }
 
@@ -226,13 +228,22 @@ function upsertAttributes(rawTag: string, attributes: Record<string, string>): s
   return `${tag}${closing}`;
 }
 
-function summarizeFeatures(parts: string[]): WorkbookFeatureSummary {
+async function summarizeFeatures(
+  pkg: OoxmlPackage,
+  parts: string[]
+): Promise<WorkbookFeatureSummary> {
+  const worksheetXml = await Promise.all(
+    parts.filter((part) => /^xl\/worksheets\/.+\.xml$/.test(part)).map((part) => pkg.readText(part))
+  );
+
   return {
     calcChains: countParts(parts, /^xl\/calcChain\.xml$/),
     charts: countParts(parts, /^xl\/charts\//),
     drawings: countParts(parts, /^xl\/drawings\//),
+    hyperlinks: countXmlStartTags(worksheetXml, "hyperlink"),
     macros: countParts(parts, /^xl\/vbaProject\.bin$/),
     media: countParts(parts, /^xl\/media\//),
+    merges: countXmlStartTags(worksheetXml, "mergeCell"),
     pivotTables: countParts(parts, /^xl\/pivotTables\//),
     sharedStrings: countParts(parts, /^xl\/sharedStrings\.xml$/),
     tables: countParts(parts, /^xl\/tables\//)
@@ -241,4 +252,8 @@ function summarizeFeatures(parts: string[]): WorkbookFeatureSummary {
 
 function countParts(parts: string[], pattern: RegExp): number {
   return parts.filter((part) => pattern.test(part)).length;
+}
+
+function countXmlStartTags(xmlParts: string[], localName: string): number {
+  return xmlParts.reduce((count, xml) => count + findStartTags(xml, localName).length, 0);
 }

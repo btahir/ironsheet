@@ -4,7 +4,9 @@ const textEncoder = new TextEncoder();
 
 export type MinimalWorkbookOptions = {
   includeCalcChain?: boolean;
+  includeHyperlink?: boolean;
   includeMacro?: boolean;
+  includeMerge?: boolean;
   includeTable?: boolean;
   useSharedStrings?: boolean;
 };
@@ -62,10 +64,21 @@ export async function createMinimalWorkbook(
             `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rIdTable1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>
+  ${options.includeHyperlink === true ? '<Relationship Id="rIdHyperlink1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>' : ""}
 </Relationships>`
           )
         ]
-      : []),
+      : options.includeHyperlink === true
+        ? [
+            textPart(
+              "xl/worksheets/_rels/sheet1.xml.rels",
+              `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdHyperlink1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>
+</Relationships>`
+            )
+          ]
+        : []),
     textPart(
       "xl/styles.xml",
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -85,6 +98,8 @@ export async function createMinimalWorkbook(
   <sheetData>
     ${options.includeTable === true ? '<row r="1"><c r="A1" t="inlineStr"><is><t>Name</t></is></c><c r="B1" t="inlineStr"><is><t>Amount</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Old</t></is></c><c r="B2"><v>1</v></c></row>' : `<row r="1">${options.useSharedStrings === true ? '<c r="A1" s="1" t="s"><v>0</v></c>' : '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>'}</row>`}
   </sheetData>
+  ${options.includeMerge === true ? '<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>' : ""}
+  ${options.includeHyperlink === true ? '<hyperlinks><hyperlink ref="A1" r:id="rIdHyperlink1"/></hyperlinks>' : ""}
   ${options.includeTable === true ? '<tableParts count="1"><tablePart r:id="rIdTable1"/></tableParts>' : ""}
 </worksheet>`
     )
