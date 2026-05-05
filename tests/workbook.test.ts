@@ -451,6 +451,17 @@ test("table row replacement preserves body styles and shrinks dimensions", async
   assert.match(tableXml, /<autoFilter ref="A1:B2"\/>/);
 });
 
+test("table row replacement rejects totals rows until totals support is implemented", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeTable: true, includeTableTotals: true })
+  );
+
+  await assert.rejects(
+    () => workbook.replaceTableRows("RevenueTable", [["Fresh", 99]]),
+    /totals rows/
+  );
+});
+
 test("table formula writes invalidate stale calculation chains", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeCalcChain: true, includeTable: true })

@@ -14,6 +14,7 @@ export type WorkbookTable = {
   partName: string;
   worksheetPartName: string;
   ref: string;
+  totalsRowCount: number;
 };
 
 export async function findWorkbookTable(
@@ -44,7 +45,8 @@ export async function findWorkbookTable(
       displayName,
       partName,
       worksheetPartName: await findWorksheetForTable(pkg, partName),
-      ref
+      ref,
+      totalsRowCount: parseTotalsRowCount(table.attributes)
     };
   }
 
@@ -57,6 +59,12 @@ export async function replaceTableRows(
   rows: CellInput[][]
 ): Promise<WorkbookTable> {
   const table = await findWorkbookTable(pkg, tableName);
+  if (table.totalsRowCount > 0) {
+    throw new WorkbookError(
+      `Replacing rows in table ${tableName} with totals rows is not supported yet`
+    );
+  }
+
   const range = parseTableRange(table.ref);
   const bodyStartRow = range.start.row + 1;
   const newEndRow = bodyStartRow + rows.length - 1;
@@ -102,6 +110,15 @@ function parseTableRange(ref: string): {
     start: { row: parsedStart.row, column: parsedStart.column },
     end: { row: parsedEnd.row, column: parsedEnd.column }
   };
+}
+
+function parseTotalsRowCount(attributes: Record<string, string>): number {
+  const explicitCount = Number.parseInt(attributes.totalsRowCount ?? "", 10);
+  if (Number.isInteger(explicitCount) && explicitCount > 0) {
+    return explicitCount;
+  }
+
+  return attributes.totalsRowShown === "1" ? 1 : 0;
 }
 
 async function findWorksheetForTable(pkg: OoxmlPackage, tablePartName: string): Promise<string> {

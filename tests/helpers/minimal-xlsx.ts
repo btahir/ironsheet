@@ -13,6 +13,7 @@ export type MinimalWorkbookOptions = {
   includeMacro?: boolean;
   includeMerge?: boolean;
   includeTable?: boolean;
+  includeTableTotals?: boolean;
   styledTableBody?: boolean;
   tableRows?: Array<[string, number]>;
   useSharedStrings?: boolean;
@@ -22,7 +23,8 @@ export async function createMinimalWorkbook(
   options: MinimalWorkbookOptions = {}
 ): Promise<Uint8Array> {
   const tableRows: Array<[string, number]> = options.tableRows ?? [["Old", 1]];
-  const tableEndRow = 1 + tableRows.length;
+  const tableTotalsRowCount = options.includeTableTotals === true ? 1 : 0;
+  const tableEndRow = 1 + tableRows.length + tableTotalsRowCount;
   const tableRef = `A1:B${tableEndRow}`;
   const sheetRelationships = sheetRelationshipsXml(options);
   const entries: ZipWriteEntry[] = [
@@ -109,7 +111,7 @@ export async function createMinimalWorkbook(
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <dimension ref="${options.includeTable === true ? tableRef : "A1:A1"}"/>
   <sheetData>
-    ${options.includeTable === true ? tableSheetRows(tableRows, options.styledTableBody === true) : `<row r="1">${options.useSharedStrings === true ? '<c r="A1" s="1" t="s"><v>0</v></c>' : '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>'}</row>`}
+    ${options.includeTable === true ? tableSheetRows(tableRows, options.styledTableBody === true, options.includeTableTotals === true) : `<row r="1">${options.useSharedStrings === true ? '<c r="A1" s="1" t="s"><v>0</v></c>' : '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>'}</row>`}
   </sheetData>
   ${options.includeConditionalFormatting === true ? '<conditionalFormatting sqref="A1:A10"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting>' : ""}
   ${options.includeDataValidation === true ? '<dataValidations count="1"><dataValidation type="whole" operator="between" allowBlank="1" sqref="B2:B10"><formula1>0</formula1><formula2>100</formula2></dataValidation></dataValidations>' : ""}
@@ -173,7 +175,7 @@ export async function createMinimalWorkbook(
       textPart(
         "xl/tables/table1.xml",
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="1" name="RevenueTable" displayName="RevenueTable" ref="${tableRef}" totalsRowShown="0">
+<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="1" name="RevenueTable" displayName="RevenueTable" ref="${tableRef}" totalsRowShown="${options.includeTableTotals === true ? "1" : "0"}">
   <autoFilter ref="${tableRef}"/>
   <tableColumns count="2">
     <tableColumn id="1" name="Name"/>
@@ -241,7 +243,11 @@ function sheetRelationshipsXml(options: MinimalWorkbookOptions): string {
     .join("\n  ");
 }
 
-function tableSheetRows(rows: Array<[string, number]>, styledBody: boolean): string {
+function tableSheetRows(
+  rows: Array<[string, number]>,
+  styledBody: boolean,
+  includeTotals: boolean
+): string {
   const bodyRows = rows
     .map(([name, amount], index) => {
       const rowNumber = index + 2;
@@ -251,8 +257,12 @@ function tableSheetRows(rows: Array<[string, number]>, styledBody: boolean): str
       return `<row r="${rowNumber}"${rowAttributes}><c r="A${rowNumber}"${nameStyle} t="inlineStr"><is><t>${name}</t></is></c><c r="B${rowNumber}"${amountStyle}><v>${amount}</v></c></row>`;
     })
     .join("");
+  const totalsRowNumber = rows.length + 2;
+  const totalsRow = includeTotals
+    ? `<row r="${totalsRowNumber}"><c r="A${totalsRowNumber}" t="inlineStr"><is><t>Total</t></is></c><c r="B${totalsRowNumber}"><f>SUBTOTAL(109,B2:B${totalsRowNumber - 1})</f><v>1</v></c></row>`
+    : "";
 
-  return `<row r="1"><c r="A1" t="inlineStr"><is><t>Name</t></is></c><c r="B1" t="inlineStr"><is><t>Amount</t></is></c></row>${bodyRows}`;
+  return `<row r="1"><c r="A1" t="inlineStr"><is><t>Name</t></is></c><c r="B1" t="inlineStr"><is><t>Amount</t></is></c></row>${bodyRows}${totalsRow}`;
 }
 
 function textPart(name: string, text: string): ZipWriteEntry {
