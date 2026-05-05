@@ -179,7 +179,18 @@ export function appendRows(
 ): PatchCellResult {
   const startColumn = options.startColumn ?? 1;
   const startRow = findMaxUsedRow(xml) + 1;
-  return patchRange(xml, formatCellAddress(startColumn, startRow), rows);
+  const rowXml = createRowsXml(rows, { startColumn, startRow });
+  const inserted = insertRowsBeforeSheetDataClose(xml, rowXml);
+  const lastRow = Math.max(startRow, startRow + rows.length - 1);
+  const lastColumn = Math.max(
+    startColumn,
+    ...rows.map((row) => startColumn + Math.max(0, row.length - 1))
+  );
+
+  return {
+    xml: updateDimension(inserted, formatCellAddress(lastColumn, lastRow)),
+    formulaChanged: rows.some((row) => row.some(isFormulaValue))
+  };
 }
 
 export function replaceRowsInRange(
@@ -266,6 +277,25 @@ export function createCellXml(
   return `<c ${attributes}><is><t>${escapeXmlText(value)}</t></is></c>`;
 }
 
+export function createRowsXml(
+  rows: CellInput[][],
+  options: { startColumn?: number; startRow: number }
+): string {
+  const startColumn = options.startColumn ?? 1;
+  return rows
+    .map((row, rowIndex) => {
+      const rowNumber = options.startRow + rowIndex;
+      const cells = row
+        .map((cell, columnIndex) =>
+          createCellXml(formatCellAddress(startColumn + columnIndex, rowNumber), cell)
+        )
+        .join("");
+
+      return `<row r="${rowNumber}">${cells}</row>`;
+    })
+    .join("");
+}
+
 function findCellElement(xml: string, address: string): ExistingCell | undefined {
   const tags = findStartTags(xml, "c");
   const target = address.toUpperCase();
@@ -347,6 +377,20 @@ function insertRow(xml: string, rowNumber: number, cellXml: string): string {
   }
 
   const rowXml = `<row r="${rowNumber}">${cellXml}</row>`;
+  return `${xml.slice(0, close)}${rowXml}${xml.slice(close)}`;
+}
+
+function insertRowsBeforeSheetDataClose(xml: string, rowXml: string): string {
+  const sheetData = findFirstStartTag(xml, "sheetData");
+  if (sheetData === undefined) {
+    throw new WorksheetError("Worksheet is missing sheetData");
+  }
+
+  const close = xml.indexOf("</sheetData>", sheetData.end);
+  if (close === -1) {
+    throw new WorksheetError("Worksheet sheetData is missing a closing tag");
+  }
+
   return `${xml.slice(0, close)}${rowXml}${xml.slice(close)}`;
 }
 

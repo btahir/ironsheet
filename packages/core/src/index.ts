@@ -24,6 +24,7 @@ export {
   type CellPatch,
   type FormulaValue,
   appendRows,
+  createRowsXml,
   patchCell,
   patchCells,
   patchRange,

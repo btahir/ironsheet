@@ -194,6 +194,26 @@ test("appends rows after the current used range", async () => {
   assert.match(sheetXml, /<dimension ref="A1:B3"\/>/);
 });
 
+test("append rows inserts a contiguous row block without rewriting existing rows", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await workbook.appendRows("Sheet1", [
+    ["A", 1],
+    ["B", 2],
+    ["C", 3]
+  ]);
+
+  const outputZip = parseZip(await workbook.write());
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+  assert.match(
+    sheetXml,
+    /<row r="2"><c r="A2" t="inlineStr"><is><t>A<\/t><\/is><\/c><c r="B2"><v>1<\/v><\/c><\/row><row r="3"><c r="A3" t="inlineStr"><is><t>B<\/t><\/is><\/c><c r="B3"><v>2<\/v><\/c><\/row><row r="4"><c r="A4" t="inlineStr"><is><t>C<\/t><\/is><\/c><c r="B4"><v>3<\/v><\/c><\/row>/
+  );
+  assert.match(sheetXml, /<dimension ref="A1:B4"\/>/);
+});
+
 test("patches one cell and preserves untouched entry payloads", async () => {
   const original = await createMinimalWorkbook();
   const originalZip = parseZip(original);
