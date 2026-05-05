@@ -534,15 +534,31 @@ test("table row replacement preserves body styles and shrinks dimensions", async
   assert.match(tableXml, /<autoFilter ref="A1:B2"\/>/);
 });
 
-test("table row replacement rejects totals rows until totals support is implemented", async () => {
+test("table row replacement preserves and moves totals rows", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeTable: true, includeTableTotals: true })
   );
 
-  await assert.rejects(
-    () => workbook.replaceTableRows("RevenueTable", [["Fresh", 99]]),
-    /totals rows/
+  const table = await workbook.replaceTableRows("RevenueTable", [
+    ["Fresh", 99],
+    ["Future", 101]
+  ]);
+  assert.equal(table.ref, "A1:B4");
+
+  const outputZip = parseZip(await workbook.write());
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+  assert.match(
+    sheetXml,
+    /<row r="4"><c r="A4" t="inlineStr"><is><t>Total<\/t><\/is><\/c><c r="B4"><f>SUBTOTAL\(109,B2:B3\)<\/f><v>1<\/v><\/c><\/row>/
   );
+
+  const tableEntry = outputZip.entries.find((entry) => entry.name === "xl/tables/table1.xml");
+  assert.ok(tableEntry);
+  const tableXml = textDecoder.decode(await readEntryData(tableEntry, nodeCompressionAdapter));
+  assert.match(tableXml, /ref="A1:B4"/);
+  assert.match(tableXml, /<autoFilter ref="A1:B4"\/>/);
 });
 
 test("table formula writes invalidate stale calculation chains", async () => {

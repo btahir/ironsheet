@@ -59,15 +59,10 @@ export async function replaceTableRows(
   rows: CellInput[][]
 ): Promise<WorkbookTable> {
   const table = await findWorkbookTable(pkg, tableName);
-  if (table.totalsRowCount > 0) {
-    throw new WorkbookError(
-      `Replacing rows in table ${tableName} with totals rows is not supported yet`
-    );
-  }
-
   const range = parseTableRange(table.ref);
   const bodyStartRow = range.start.row + 1;
-  const newEndRow = bodyStartRow + rows.length - 1;
+  const bodyEndRow = range.end.row - table.totalsRowCount;
+  const newEndRow = bodyStartRow + rows.length - 1 + table.totalsRowCount;
   const newRef = `${numberToColumnLabel(range.start.column)}${range.start.row}:${numberToColumnLabel(range.end.column)}${Math.max(range.start.row, newEndRow)}`;
 
   const worksheetXml = await pkg.readText(table.worksheetPartName);
@@ -77,11 +72,12 @@ export async function replaceTableRows(
       worksheetXml,
       {
         startRow: bodyStartRow,
-        endRow: range.end.row,
+        endRow: bodyEndRow,
         startColumn: range.start.column,
         endColumn: range.end.column
       },
-      rows
+      rows,
+      { trailingRows: table.totalsRowCount }
     )
   );
 

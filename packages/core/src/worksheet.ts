@@ -197,7 +197,7 @@ export function replaceRowsInRange(
   xml: string,
   range: { startRow: number; endRow: number; startColumn: number; endColumn: number },
   rows: CellInput[][],
-  options: { preserveStyles?: boolean } = {}
+  options: { preserveStyles?: boolean; trailingRows?: number } = {}
 ): string {
   const sheetData = findFirstStartTag(xml, "sheetData");
   if (sheetData === undefined) {
@@ -211,8 +211,14 @@ export function replaceRowsInRange(
 
   const preserveStyles = options.preserveStyles ?? true;
   const template = preserveStyles ? collectRowTemplate(xml, range) : undefined;
+  const trailingRows = options.trailingRows ?? 0;
+  const trailingRowElements = findRowElements(xml).filter(
+    (row) => row.rowNumber > range.endRow && row.rowNumber <= range.endRow + trailingRows
+  );
   const rowElements = findRowElements(xml)
-    .filter((row) => row.rowNumber >= range.startRow && row.rowNumber <= range.endRow)
+    .filter(
+      (row) => row.rowNumber >= range.startRow && row.rowNumber <= range.endRow + trailingRows
+    )
     .slice()
     .reverse();
 
@@ -241,8 +247,19 @@ export function replaceRowsInRange(
       return `<row r="${rowNumber}"${rowAttributesXml(template?.attributes)}>${cells}</row>`;
     })
     .join("");
+  const shiftedTrailingRows = trailingRowElements
+    .map((row, index) =>
+      shiftRowXml(xml.slice(row.start, row.end), {
+        oldRow: row.rowNumber,
+        newRow: range.startRow + rows.length + index,
+        oldBodyStartRow: range.startRow,
+        oldBodyEndRow: range.endRow,
+        newBodyEndRow: range.startRow + rows.length - 1
+      })
+    )
+    .join("");
 
-  const updated = `${nextXml.slice(0, insertionPoint)}${rowXml}${nextXml.slice(insertionPoint)}`;
+  const updated = `${nextXml.slice(0, insertionPoint)}${rowXml}${shiftedTrailingRows}${nextXml.slice(insertionPoint)}`;
   return recalculateDimension(updated);
 }
 
@@ -486,6 +503,39 @@ function rowAttributesXml(attributes: Record<string, string> | undefined): strin
   return Object.entries(attributes)
     .map(([name, value]) => ` ${name}="${escapeXmlAttribute(value)}"`)
     .join("");
+}
+
+function shiftRowXml(
+  rowXml: string,
+  options: {
+    oldRow: number;
+    newRow: number;
+    oldBodyStartRow: number;
+    oldBodyEndRow: number;
+    newBodyEndRow: number;
+  }
+): string {
+  let nextXml = rowXml.replace(/\s(r)=["']([1-9][0-9]*)["']/, ` r="${options.newRow}"`);
+  nextXml = nextXml.replace(
+    /\s(r)=["']([A-Z]+)([1-9][0-9]*)["']/g,
+    (_match, attributeName: string, columnLabel: string, rowLabel: string) => {
+      const row = Number.parseInt(rowLabel, 10);
+      return ` ${attributeName}="${columnLabel}${row === options.oldRow ? options.newRow : row}"`;
+    }
+  );
+
+  if (options.oldBodyEndRow >= options.oldBodyStartRow) {
+    const rangePattern = new RegExp(
+      `(\\$?[A-Z]+\\$?)${options.oldBodyStartRow}:(\\$?[A-Z]+\\$?)${options.oldBodyEndRow}`,
+      "g"
+    );
+    nextXml = nextXml.replace(
+      rangePattern,
+      `$1${options.oldBodyStartRow}:$2${Math.max(options.oldBodyStartRow, options.newBodyEndRow)}`
+    );
+  }
+
+  return nextXml;
 }
 
 function updateDimension(xml: string, address: string): string {
