@@ -113,6 +113,18 @@ test("validation reports drawing chart and image relationship id gaps", async ()
   );
 });
 
+test("validation reports defined names that reference missing sheets", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
+  const xml = await pkg.readText("xl/workbook.xml");
+  pkg.setText("xl/workbook.xml", xml.replace("Sheet1!$A$1:$B$2", "'Missing Sheet'!$A$1:$B$2"));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "DEFINED_NAME_SHEET_MISSING");
+  assert.equal(report.issues[0]?.target, "RevenueRange");
+});
+
 test("validation reports table and autoFilter range mismatches", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
   pkg.setText(

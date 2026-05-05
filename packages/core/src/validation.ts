@@ -1,4 +1,5 @@
 import { parseCellAddress, parseCellRange } from "./address.ts";
+import { parseDefinedNames } from "./defined-names.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { findFirstStartTag, findStartTags } from "./xml.ts";
 
@@ -39,6 +40,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateContentTypes(pkg, issues, parts);
   await validateWorksheetRelationshipIds(pkg, issues, parts);
   await validateDrawingRelationshipIds(pkg, issues, parts);
+  await validateDefinedNames(pkg, issues);
   await validateWorksheetDimensions(pkg, issues, parts);
   await validateTableParts(pkg, issues, parts);
 
@@ -108,6 +110,33 @@ async function validateContentTypes(
         message: `Part ${part} has no content type override or default`,
         part
       });
+    }
+  }
+}
+
+async function validateDefinedNames(pkg: OoxmlPackage, issues: ValidationIssue[]): Promise<void> {
+  if (!pkg.hasPart("xl/workbook.xml")) {
+    return;
+  }
+
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  const sheetNames = new Set(
+    findStartTags(workbookXml, "sheet")
+      .map((tag) => tag.attributes.name)
+      .filter((name): name is string => name !== undefined)
+  );
+
+  for (const definedName of parseDefinedNames(workbookXml)) {
+    for (const sheetName of sheetReferencesInFormulaText(definedName.text)) {
+      if (!sheetNames.has(sheetName)) {
+        issues.push({
+          severity: "warning",
+          code: "DEFINED_NAME_SHEET_MISSING",
+          message: `Defined name ${definedName.name} references missing sheet ${sheetName}`,
+          part: "xl/workbook.xml",
+          target: definedName.name
+        });
+      }
     }
   }
 }
@@ -225,6 +254,30 @@ function validateRelationshipId(options: {
       target: options.relationshipId
     });
   }
+}
+
+function sheetReferencesInFormulaText(text: string): string[] {
+  const references = new Set<string>();
+  const pattern = /(?:^|[, (])((?:'(?:(?:'')|[^'])+'|[A-Za-z_][A-Za-z0-9_ .]*))!/g;
+
+  for (const match of text.matchAll(pattern)) {
+    const rawName = match[1];
+    if (rawName === undefined || rawName.includes("[")) {
+      continue;
+    }
+
+    references.add(unquoteSheetName(rawName));
+  }
+
+  return [...references];
+}
+
+function unquoteSheetName(name: string): string {
+  if (name.startsWith("'") && name.endsWith("'")) {
+    return name.slice(1, -1).replaceAll("''", "'");
+  }
+
+  return name.trim();
 }
 
 async function validateWorksheetDimensions(
