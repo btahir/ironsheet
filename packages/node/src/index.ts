@@ -87,6 +87,13 @@ export async function readWorkbookRange(
   return workbook.readRange(sheetName, rangeRef);
 }
 
+export async function validateWorkbookFile(
+  inputPath: string
+): Promise<Awaited<ReturnType<Workbook["validate"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.validate();
+}
+
 export async function replaceWorkbookTableRows(
   inputPath: string,
   outputPath: string,

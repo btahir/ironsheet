@@ -7,6 +7,12 @@ export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./op
 export { parseSharedStrings } from "./shared-strings.ts";
 export { findWorkbookTable, replaceTableRows, type WorkbookTable } from "./table.ts";
 export {
+  validateWorkbookPackage,
+  type ValidationIssue,
+  type ValidationReport,
+  type ValidationSeverity
+} from "./validation.ts";
+export {
   Workbook,
   type WorkbookInspectResult,
   type WorkbookSheet,

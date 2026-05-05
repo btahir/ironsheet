@@ -3,6 +3,7 @@ import { PackageError, WorkbookError } from "./errors.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import { replaceTableRows, type WorkbookTable } from "./table.ts";
+import { validateWorkbookPackage, type ValidationReport } from "./validation.ts";
 import {
   patchCell,
   patchCells,
@@ -155,6 +156,10 @@ export class Workbook {
       features: await summarizeFeatures(this.pkg, parts, this.workbookPart),
       diagnostics: this.diagnostics()
     };
+  }
+
+  validate(): Promise<ValidationReport> {
+    return validateWorkbookPackage(this.pkg);
   }
 
   diagnostics(): Diagnostic[] {

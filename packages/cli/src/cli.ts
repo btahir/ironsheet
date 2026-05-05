@@ -8,7 +8,8 @@ import {
   readWorkbook,
   readWorkbookCell,
   readWorkbookRange,
-  replaceWorkbookTableRows
+  replaceWorkbookTableRows,
+  validateWorkbookFile
 } from "../../node/src/index.ts";
 import type { CellInput } from "../../core/src/index.ts";
 
@@ -19,11 +20,13 @@ type Command =
   | "read-cell"
   | "read-range"
   | "replace-table"
+  | "validate"
   | "diff";
 
 function usage(): never {
   console.error(`usage:
   npm run cli -- inspect <workbook.xlsx>
+  npm run cli -- validate <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
   npm run cli -- read-range <workbook.xlsx> <sheet> <range>
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
@@ -43,6 +46,10 @@ async function inspect(path: string): Promise<void> {
   const workbook = await readWorkbook(path);
   const result = await workbook.inspect();
   console.log(JSON.stringify(result, null, 2));
+}
+
+async function validate(path: string): Promise<void> {
+  console.log(JSON.stringify(await validateWorkbookFile(path), null, 2));
 }
 
 async function readCellCommand(path: string, sheetName: string, address: string): Promise<void> {
@@ -151,6 +158,12 @@ try {
       usage();
     }
     await inspect(path);
+  } else if (command === "validate") {
+    const [path] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await validate(path);
   } else if (command === "read-cell") {
     const [path, sheetName, address] = args;
     if (path === undefined || sheetName === undefined || address === undefined) {
