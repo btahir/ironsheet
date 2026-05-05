@@ -4,19 +4,30 @@ import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "../../core/src/index.ts";
 import {
   patchWorkbookCell,
+  patchWorkbookRange,
   readWorkbook,
   readWorkbookCell,
+  readWorkbookRange,
   replaceWorkbookTableRows
 } from "../../node/src/index.ts";
 import type { CellInput } from "../../core/src/index.ts";
 
-type Command = "inspect" | "patch" | "read-cell" | "replace-table" | "diff";
+type Command =
+  | "inspect"
+  | "patch"
+  | "patch-range"
+  | "read-cell"
+  | "read-range"
+  | "replace-table"
+  | "diff";
 
 function usage(): never {
   console.error(`usage:
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
+  npm run cli -- read-range <workbook.xlsx> <sheet> <range>
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
+  npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- replace-table <input.xlsx> <output.xlsx> <table> <jsonRows>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
@@ -38,6 +49,10 @@ async function readCellCommand(path: string, sheetName: string, address: string)
   console.log(JSON.stringify(await readWorkbookCell(path, sheetName, address), null, 2));
 }
 
+async function readRangeCommand(path: string, sheetName: string, rangeRef: string): Promise<void> {
+  console.log(JSON.stringify(await readWorkbookRange(path, sheetName, rangeRef), null, 2));
+}
+
 async function diff(beforePath: string, afterPath: string): Promise<void> {
   const before = new Uint8Array(await readFile(beforePath));
   const after = new Uint8Array(await readFile(afterPath));
@@ -53,6 +68,17 @@ async function patch(
 ): Promise<void> {
   await patchWorkbookCell(inputPath, outputPath, sheetName, address, parseCliValue(rawValue));
   console.log(`patched ${sheetName}!${address} -> ${outputPath}`);
+}
+
+async function patchRangeCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  startAddress: string,
+  rawRows: string
+): Promise<void> {
+  await patchWorkbookRange(inputPath, outputPath, sheetName, startAddress, parseRows(rawRows));
+  console.log(`patched ${sheetName}!${startAddress} range -> ${outputPath}`);
 }
 
 async function replaceTable(
@@ -131,6 +157,12 @@ try {
       usage();
     }
     await readCellCommand(path, sheetName, address);
+  } else if (command === "read-range") {
+    const [path, sheetName, rangeRef] = args;
+    if (path === undefined || sheetName === undefined || rangeRef === undefined) {
+      usage();
+    }
+    await readRangeCommand(path, sheetName, rangeRef);
   } else if (command === "diff") {
     const [beforePath, afterPath] = args;
     if (beforePath === undefined || afterPath === undefined) {
@@ -149,6 +181,18 @@ try {
       usage();
     }
     await patch(inputPath, outputPath, sheetName, address, rawValue);
+  } else if (command === "patch-range") {
+    const [inputPath, outputPath, sheetName, startAddress, rawRows] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      startAddress === undefined ||
+      rawRows === undefined
+    ) {
+      usage();
+    }
+    await patchRangeCommand(inputPath, outputPath, sheetName, startAddress, rawRows);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (

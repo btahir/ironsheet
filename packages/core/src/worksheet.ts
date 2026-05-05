@@ -1,5 +1,9 @@
-import { compareCellAddresses, parseCellAddress } from "./address.ts";
-import { numberToColumnLabel } from "./address.ts";
+import {
+  compareCellAddresses,
+  formatCellAddress,
+  parseCellAddress,
+  parseCellRange
+} from "./address.ts";
 import { WorksheetError } from "./errors.ts";
 import {
   decodeXml,
@@ -25,6 +29,16 @@ export type ReadCellResult = {
   styleId?: string;
 };
 
+export type ReadRangeResult = {
+  range: string;
+  cells: Array<Array<ReadCellResult | undefined>>;
+};
+
+export type CellPatch = {
+  address: string;
+  value: CellInput;
+};
+
 export type PatchCellResult = {
   xml: string;
   formulaChanged: boolean;
@@ -35,6 +49,18 @@ type ExistingCell = {
   end: number;
   raw: string;
   styleId?: string;
+};
+
+type RowElement = {
+  rowNumber: number;
+  start: number;
+  end: number;
+  tag: ReturnType<typeof findStartTags>[number];
+};
+
+type RowTemplate = {
+  attributes: Record<string, string>;
+  stylesByColumn: Map<number, string>;
 };
 
 export function readCell(
@@ -66,6 +92,30 @@ export function readCell(
   return result;
 }
 
+export function readRange(
+  xml: string,
+  rangeRef: string,
+  options: { sharedStrings?: string[] } = {}
+): ReadRangeResult {
+  const range = parseCellRange(rangeRef);
+  const cells: Array<Array<ReadCellResult | undefined>> = [];
+
+  for (let row = range.start.row; row <= range.end.row; row += 1) {
+    const rowCells: Array<ReadCellResult | undefined> = [];
+
+    for (let column = range.start.column; column <= range.end.column; column += 1) {
+      rowCells.push(readCell(xml, formatCellAddress(column, row), options));
+    }
+
+    cells.push(rowCells);
+  }
+
+  return {
+    range: range.ref,
+    cells
+  };
+}
+
 export function patchCell(xml: string, address: string, value: CellInput): PatchCellResult {
   const parsedAddress = parseCellAddress(address);
   const existing = findCellElement(xml, parsedAddress.address);
@@ -86,10 +136,47 @@ export function patchCell(xml: string, address: string, value: CellInput): Patch
   };
 }
 
+export function patchCells(xml: string, patches: CellPatch[]): PatchCellResult {
+  let nextXml = xml;
+  let formulaChanged = false;
+
+  for (const patch of patches) {
+    const result = patchCell(nextXml, patch.address, patch.value);
+    nextXml = result.xml;
+    formulaChanged = formulaChanged || result.formulaChanged;
+  }
+
+  return {
+    xml: nextXml,
+    formulaChanged
+  };
+}
+
+export function patchRange(
+  xml: string,
+  startAddress: string,
+  values: CellInput[][]
+): PatchCellResult {
+  const start = parseCellAddress(startAddress);
+  const patches: CellPatch[] = [];
+
+  for (const [rowIndex, row] of values.entries()) {
+    for (const [columnIndex, value] of row.entries()) {
+      patches.push({
+        address: formatCellAddress(start.column + columnIndex, start.row + rowIndex),
+        value
+      });
+    }
+  }
+
+  return patchCells(xml, patches);
+}
+
 export function replaceRowsInRange(
   xml: string,
   range: { startRow: number; endRow: number; startColumn: number; endColumn: number },
-  rows: CellInput[][]
+  rows: CellInput[][],
+  options: { preserveStyles?: boolean } = {}
 ): string {
   const sheetData = findFirstStartTag(xml, "sheetData");
   if (sheetData === undefined) {
@@ -101,9 +188,12 @@ export function replaceRowsInRange(
     throw new WorksheetError("Worksheet sheetData is missing a closing tag");
   }
 
-  const rowElements = findRowRanges(xml)
+  const preserveStyles = options.preserveStyles ?? true;
+  const template = preserveStyles ? collectRowTemplate(xml, range) : undefined;
+  const rowElements = findRowElements(xml)
     .filter((row) => row.rowNumber >= range.startRow && row.rowNumber <= range.endRow)
-    .toReversed();
+    .slice()
+    .reverse();
 
   let nextXml = xml;
   for (const row of rowElements) {
@@ -116,18 +206,23 @@ export function replaceRowsInRange(
       const rowNumber = range.startRow + rowIndex;
       const cells = row
         .slice(0, range.endColumn - range.startColumn + 1)
-        .map((cell, columnIndex) =>
-          createCellXml(`${numberToColumnLabel(range.startColumn + columnIndex)}${rowNumber}`, cell)
-        )
+        .map((cell, columnIndex) => {
+          const column = range.startColumn + columnIndex;
+          const styleId = template?.stylesByColumn.get(column);
+          return createCellXml(
+            formatCellAddress(column, rowNumber),
+            cell,
+            styleId === undefined ? {} : { styleId }
+          );
+        })
         .join("");
 
-      return `<row r="${rowNumber}">${cells}</row>`;
+      return `<row r="${rowNumber}"${rowAttributesXml(template?.attributes)}>${cells}</row>`;
     })
     .join("");
 
   const updated = `${nextXml.slice(0, insertionPoint)}${rowXml}${nextXml.slice(insertionPoint)}`;
-  const lastRow = Math.max(range.startRow, range.startRow + rows.length - 1);
-  return updateDimension(updated, `${numberToColumnLabel(range.endColumn)}${lastRow}`);
+  return recalculateDimension(updated);
 }
 
 export function createCellXml(
@@ -245,42 +340,19 @@ function insertRow(xml: string, rowNumber: number, cellXml: string): string {
   return `${xml.slice(0, close)}${rowXml}${xml.slice(close)}`;
 }
 
-function findRowElement(
-  xml: string,
-  rowNumber: number
-): { start: number; end: number } | undefined {
-  const rows = findStartTags(xml, "row");
+function findRowElement(xml: string, rowNumber: number): RowElement | undefined {
   const target = String(rowNumber);
-
-  for (const row of rows) {
-    if (row.attributes.r !== target) {
-      continue;
-    }
-
-    if (row.selfClosing) {
-      return { start: row.start, end: row.end };
-    }
-
-    const close = xml.indexOf("</row>", row.end);
-    if (close === -1) {
-      throw new WorksheetError(`Row ${rowNumber} is missing a closing </row> tag`);
-    }
-
-    return { start: row.start, end: close + "</row>".length };
-  }
-
-  return undefined;
+  return findRowElements(xml).find((row) => row.tag.attributes.r === target);
 }
 
-function findRowRanges(xml: string): Array<{ rowNumber: number; start: number; end: number }> {
+function findRowElements(xml: string): RowElement[] {
   return findStartTags(xml, "row").map((row) => {
     const rowNumber = Number.parseInt(row.attributes.r ?? "", 10);
     if (!Number.isInteger(rowNumber)) {
       throw new WorksheetError("Row is missing a numeric r attribute");
     }
-
     if (row.selfClosing) {
-      return { rowNumber, start: row.start, end: row.end };
+      return { rowNumber, start: row.start, end: row.end, tag: row };
     }
 
     const close = xml.indexOf("</row>", row.end);
@@ -288,12 +360,12 @@ function findRowRanges(xml: string): Array<{ rowNumber: number; start: number; e
       throw new WorksheetError(`Row ${rowNumber} is missing a closing </row> tag`);
     }
 
-    return { rowNumber, start: row.start, end: close + "</row>".length };
+    return { rowNumber, start: row.start, end: close + "</row>".length, tag: row };
   });
 }
 
 function findRowInsertionPoint(xml: string, rowNumber: number): number {
-  const nextRow = findRowRanges(xml).find((row) => row.rowNumber > rowNumber);
+  const nextRow = findRowElements(xml).find((row) => row.rowNumber > rowNumber);
   if (nextRow !== undefined) {
     return nextRow.start;
   }
@@ -304,6 +376,52 @@ function findRowInsertionPoint(xml: string, rowNumber: number): number {
   }
 
   return sheetDataClose;
+}
+
+function collectRowTemplate(
+  xml: string,
+  range: { startRow: number; endRow: number; startColumn: number; endColumn: number }
+): RowTemplate | undefined {
+  const templateRow = findRowElements(xml).find(
+    (row) => row.rowNumber >= range.startRow && row.rowNumber <= range.endRow
+  );
+  if (templateRow === undefined) {
+    return undefined;
+  }
+
+  const attributes = Object.fromEntries(
+    Object.entries(templateRow.tag.attributes).filter(([name]) => name !== "r")
+  );
+
+  const stylesByColumn = new Map<number, string>();
+  const rowXml = xml.slice(templateRow.start, templateRow.end);
+  for (const cell of findStartTags(rowXml, "c")) {
+    const address = cell.attributes.r;
+    const styleId = cell.attributes.s;
+    if (address === undefined || styleId === undefined) {
+      continue;
+    }
+
+    const column = parseCellAddress(address).column;
+    if (column >= range.startColumn && column <= range.endColumn) {
+      stylesByColumn.set(column, styleId);
+    }
+  }
+
+  return {
+    attributes,
+    stylesByColumn
+  };
+}
+
+function rowAttributesXml(attributes: Record<string, string> | undefined): string {
+  if (attributes === undefined) {
+    return "";
+  }
+
+  return Object.entries(attributes)
+    .map(([name, value]) => ` ${name}="${escapeXmlAttribute(value)}"`)
+    .join("");
 }
 
 function updateDimension(xml: string, address: string): string {
@@ -318,10 +436,26 @@ function updateDimension(xml: string, address: string): string {
   }
 
   const expanded = expandRange(ref, address);
-  const replacement = dimension.raw.replace(
-    /\sref=(["'])(.*?)\1/,
-    ` ref="${escapeXmlAttribute(expanded)}"`
-  );
+  const replacement = upsertRefAttribute(dimension.raw, expanded);
+
+  return `${xml.slice(0, dimension.start)}${replacement}${xml.slice(dimension.end)}`;
+}
+
+function recalculateDimension(xml: string): string {
+  const dimension = findFirstStartTag(xml, "dimension");
+  if (dimension === undefined) {
+    return xml;
+  }
+
+  const cells = findStartTags(xml, "c")
+    .map((tag) => tag.attributes.r)
+    .filter((address): address is string => address !== undefined)
+    .map((address) => parseCellAddress(address));
+  const ref =
+    cells.length === 0
+      ? "A1"
+      : `${formatCellAddress(Math.min(...cells.map((cell) => cell.column)), Math.min(...cells.map((cell) => cell.row)))}:${formatCellAddress(Math.max(...cells.map((cell) => cell.column)), Math.max(...cells.map((cell) => cell.row)))}`;
+  const replacement = upsertRefAttribute(dimension.raw, ref);
 
   return `${xml.slice(0, dimension.start)}${replacement}${xml.slice(dimension.end)}`;
 }
@@ -342,20 +476,16 @@ function expandRange(ref: string, address: string): string {
   const maxColumn = Math.max(start.column, end.column, next.column);
   const maxRow = Math.max(start.row, end.row, next.row);
 
-  return `${columnLabel(minColumn)}${minRow}:${columnLabel(maxColumn)}${maxRow}`;
+  return `${formatCellAddress(minColumn, minRow)}:${formatCellAddress(maxColumn, maxRow)}`;
 }
 
-function columnLabel(column: number): string {
-  let remaining = column;
-  let label = "";
-
-  while (remaining > 0) {
-    remaining -= 1;
-    label = String.fromCharCode(65 + (remaining % 26)) + label;
-    remaining = Math.floor(remaining / 26);
+function upsertRefAttribute(rawTag: string, ref: string): string {
+  if (/\sref=(["']).*?\1/.test(rawTag)) {
+    return rawTag.replace(/\sref=(["']).*?\1/, ` ref="${escapeXmlAttribute(ref)}"`);
   }
 
-  return label;
+  const closing = rawTag.endsWith("/>") ? "/>" : ">";
+  return `${rawTag.slice(0, -closing.length)} ref="${escapeXmlAttribute(ref)}"${closing}`;
 }
 
 function createFormulaResultXml(value: CellPrimitive): string {

@@ -3,7 +3,18 @@ import { PackageError, WorkbookError } from "./errors.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import { replaceTableRows, type WorkbookTable } from "./table.ts";
-import { patchCell, readCell, type CellInput, type ReadCellResult } from "./worksheet.ts";
+import {
+  patchCell,
+  patchCells,
+  patchRange,
+  readCell,
+  readRange,
+  type CellInput,
+  type CellPatch,
+  type FormulaValue,
+  type ReadCellResult,
+  type ReadRangeResult
+} from "./worksheet.ts";
 import { findFirstStartTag, findStartTags } from "./xml.ts";
 
 const officeDocumentRelationship =
@@ -18,7 +29,10 @@ export type WorkbookSheet = {
   id: string;
   relationshipId: string;
   partName: string;
+  state?: WorkbookSheetState;
 };
+
+export type WorkbookSheetState = "hidden" | "veryHidden";
 
 export type WorkbookInspectResult = {
   workbookPart: string;
@@ -31,7 +45,12 @@ export type WorkbookInspectResult = {
 export type WorkbookFeatureSummary = {
   calcChains: number;
   charts: number;
+  comments: number;
+  conditionalFormats: number;
+  dataValidations: number;
+  definedNames: number;
   drawings: number;
+  hiddenSheets: number;
   hyperlinks: number;
   macros: number;
   media: number;
@@ -84,14 +103,47 @@ export class Workbook {
     }
   }
 
+  async patchCells(sheetName: string, patches: CellPatch[]): Promise<void> {
+    const sheet = this.sheet(sheetName);
+    const xml = await this.pkg.readText(sheet.partName);
+    const result = patchCells(xml, patches);
+    this.pkg.setText(sheet.partName, result.xml);
+
+    if (result.formulaChanged) {
+      await this.forceRecalculateOnOpen();
+    }
+  }
+
+  async patchRange(sheetName: string, startAddress: string, values: CellInput[][]): Promise<void> {
+    const sheet = this.sheet(sheetName);
+    const xml = await this.pkg.readText(sheet.partName);
+    const result = patchRange(xml, startAddress, values);
+    this.pkg.setText(sheet.partName, result.xml);
+
+    if (result.formulaChanged) {
+      await this.forceRecalculateOnOpen();
+    }
+  }
+
   async readCell(sheetName: string, address: string): Promise<ReadCellResult | undefined> {
     const sheet = this.sheet(sheetName);
     const xml = await this.pkg.readText(sheet.partName);
     return readCell(xml, address, { sharedStrings: await this.sharedStrings() });
   }
 
-  replaceTableRows(tableName: string, rows: CellInput[][]): Promise<WorkbookTable> {
-    return replaceTableRows(this.pkg, tableName, rows);
+  async readRange(sheetName: string, rangeRef: string): Promise<ReadRangeResult> {
+    const sheet = this.sheet(sheetName);
+    const xml = await this.pkg.readText(sheet.partName);
+    return readRange(xml, rangeRef, { sharedStrings: await this.sharedStrings() });
+  }
+
+  async replaceTableRows(tableName: string, rows: CellInput[][]): Promise<WorkbookTable> {
+    const table = await replaceTableRows(this.pkg, tableName, rows);
+    if (rows.some((row) => row.some(isFormulaValue))) {
+      await this.forceRecalculateOnOpen();
+    }
+
+    return table;
   }
 
   async inspect(): Promise<WorkbookInspectResult> {
@@ -100,7 +152,7 @@ export class Workbook {
       workbookPart: this.workbookPart,
       sheets: this.sheets(),
       parts,
-      features: await summarizeFeatures(this.pkg, parts),
+      features: await summarizeFeatures(this.pkg, parts, this.workbookPart),
       diagnostics: this.diagnostics()
     };
   }
@@ -211,6 +263,12 @@ export class Workbook {
   }
 }
 
+function isFormulaValue(value: CellInput): value is FormulaValue {
+  return (
+    typeof value === "object" && value !== null && !(value instanceof Date) && "formula" in value
+  );
+}
+
 async function resolveWorkbookPart(pkg: OoxmlPackage): Promise<string> {
   const rootRelationships = await pkg.rootRelationships();
   const workbookRelationship = rootRelationships.find(
@@ -250,13 +308,23 @@ async function parseSheets(pkg: OoxmlPackage, workbookPart: string): Promise<Wor
       throw new WorkbookError(`Sheet ${name} points to missing relationship ${relationshipId}`);
     }
 
+    const state = sheetState(tag.attributes.state);
     return {
       name,
       id,
       relationshipId,
-      partName
+      partName,
+      ...(state === undefined ? {} : { state })
     };
   });
+}
+
+function sheetState(value: string | undefined): WorkbookSheetState | undefined {
+  if (value === "hidden" || value === "veryHidden") {
+    return value;
+  }
+
+  return undefined;
 }
 
 function upsertAttributes(rawTag: string, attributes: Record<string, string>): string {
@@ -278,16 +346,26 @@ function upsertAttributes(rawTag: string, attributes: Record<string, string>): s
 
 async function summarizeFeatures(
   pkg: OoxmlPackage,
-  parts: string[]
+  parts: string[],
+  workbookPart: string
 ): Promise<WorkbookFeatureSummary> {
   const worksheetXml = await Promise.all(
     parts.filter((part) => /^xl\/worksheets\/.+\.xml$/.test(part)).map((part) => pkg.readText(part))
   );
+  const workbookXml = await pkg.readText(workbookPart);
 
   return {
     calcChains: countParts(parts, /^xl\/calcChain\.xml$/),
     charts: countParts(parts, /^xl\/charts\//),
-    drawings: countParts(parts, /^xl\/drawings\//),
+    comments:
+      countParts(parts, /^xl\/comments\d*\.xml$/) + countParts(parts, /^xl\/threadedComments\//),
+    conditionalFormats: countXmlStartTags(worksheetXml, "conditionalFormatting"),
+    dataValidations: countXmlStartTags(worksheetXml, "dataValidation"),
+    definedNames: countXmlStartTags([workbookXml], "definedName"),
+    drawings: countParts(parts, /^xl\/drawings\/drawing\d+\.xml$/),
+    hiddenSheets: findStartTags(workbookXml, "sheet").filter((tag) =>
+      ["hidden", "veryHidden"].includes(tag.attributes.state ?? "")
+    ).length,
     hyperlinks: countXmlStartTags(worksheetXml, "hyperlink"),
     macros: countParts(parts, /^xl\/vbaProject\.bin$/),
     media: countParts(parts, /^xl\/media\//),

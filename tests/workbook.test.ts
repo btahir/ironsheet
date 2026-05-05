@@ -22,7 +22,12 @@ test("inspects workbook sheets from OPC relationships", async () => {
   assert.deepEqual((await workbook.inspect()).features, {
     calcChains: 0,
     charts: 0,
+    comments: 0,
+    conditionalFormats: 0,
+    dataValidations: 0,
+    definedNames: 0,
     drawings: 0,
+    hiddenSheets: 0,
     hyperlinks: 0,
     macros: 0,
     media: 0,
@@ -37,6 +42,10 @@ test("inspect reports workbook feature signals", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({
       includeCalcChain: true,
+      includeConditionalFormatting: true,
+      includeDataValidation: true,
+      includeDrawing: true,
+      includeHiddenSheet: true,
       includeHyperlink: true,
       includeMacro: true,
       includeMerge: true,
@@ -45,13 +54,34 @@ test("inspect reports workbook feature signals", async () => {
     })
   );
 
+  assert.deepEqual(workbook.sheets(), [
+    {
+      name: "Sheet1",
+      id: "1",
+      relationshipId: "rId1",
+      partName: "xl/worksheets/sheet1.xml"
+    },
+    {
+      name: "HiddenData",
+      id: "2",
+      relationshipId: "rIdHidden",
+      partName: "xl/worksheets/sheet2.xml",
+      state: "hidden"
+    }
+  ]);
+
   assert.deepEqual((await workbook.inspect()).features, {
     calcChains: 1,
-    charts: 0,
-    drawings: 0,
+    charts: 1,
+    comments: 0,
+    conditionalFormats: 1,
+    dataValidations: 1,
+    definedNames: 0,
+    drawings: 1,
+    hiddenSheets: 1,
     hyperlinks: 1,
     macros: 1,
-    media: 0,
+    media: 1,
     merges: 1,
     pivotTables: 0,
     sharedStrings: 1,
@@ -77,6 +107,29 @@ test("reads shared string cell values", async () => {
     address: "A1",
     value: "Original",
     styleId: "1"
+  });
+});
+
+test("patches and reads ranges", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await workbook.patchRange("Sheet1", "B2", [
+    ["Move fast", 12],
+    [true, { formula: "=C2*2", result: 24 }]
+  ]);
+
+  assert.deepEqual(await workbook.readRange("Sheet1", "B2:C3"), {
+    range: "B2:C3",
+    cells: [
+      [
+        { address: "B2", value: "Move fast" },
+        { address: "C2", value: 12 }
+      ],
+      [
+        { address: "B3", value: true },
+        { address: "C3", value: 24, formula: "C2*2" }
+      ]
+    ]
   });
 });
 
@@ -211,6 +264,61 @@ test("cell patches preserve merge cells and hyperlink relationships", async () =
   assert.match(relsXml, /TargetMode="External"/);
 });
 
+test("cell patches preserve validation, formatting, drawing, chart, media, and hidden sheets", async () => {
+  const original = await createMinimalWorkbook({
+    includeConditionalFormatting: true,
+    includeDataValidation: true,
+    includeDrawing: true,
+    includeHiddenSheet: true
+  });
+  const originalZip = parseZip(original);
+  const originalImage = originalZip.entries.find((entry) => entry.name === "xl/media/image1.png");
+  const originalHiddenSheet = originalZip.entries.find(
+    (entry) => entry.name === "xl/worksheets/sheet2.xml"
+  );
+  assert.ok(originalImage);
+  assert.ok(originalHiddenSheet);
+
+  const workbook = await openWorkbook(original);
+  await workbook.patchCell("Sheet1", "C3", "preserve complex parts");
+  const outputZip = parseZip(await workbook.write());
+
+  const outputImage = outputZip.entries.find((entry) => entry.name === "xl/media/image1.png");
+  const outputHiddenSheet = outputZip.entries.find(
+    (entry) => entry.name === "xl/worksheets/sheet2.xml"
+  );
+  assert.ok(outputImage);
+  assert.ok(outputHiddenSheet);
+  assert.deepEqual(outputImage.compressedData, originalImage.compressedData);
+  assert.deepEqual(outputHiddenSheet.compressedData, originalHiddenSheet.compressedData);
+
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+  assert.match(sheetXml, /<conditionalFormatting sqref="A1:A10">/);
+  assert.match(sheetXml, /<dataValidation type="whole" operator="between"/);
+  assert.match(sheetXml, /<drawing r:id="rIdDrawing1"\/>/);
+
+  const drawing = outputZip.entries.find((entry) => entry.name === "xl/drawings/drawing1.xml");
+  const chart = outputZip.entries.find((entry) => entry.name === "xl/charts/chart1.xml");
+  const workbookEntry = outputZip.entries.find((entry) => entry.name === "xl/workbook.xml");
+  assert.ok(drawing);
+  assert.ok(chart);
+  assert.ok(workbookEntry);
+  assert.match(
+    textDecoder.decode(await readEntryData(drawing, nodeCompressionAdapter)),
+    /r:id="rIdChart1"/
+  );
+  assert.match(
+    textDecoder.decode(await readEntryData(chart, nodeCompressionAdapter)),
+    /<a:t>Revenue<\/a:t>/
+  );
+  assert.match(
+    textDecoder.decode(await readEntryData(workbookEntry, nodeCompressionAdapter)),
+    /state="hidden"/
+  );
+});
+
 test("diagnostics report macro preservation and calc chain invalidation", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeCalcChain: true, includeMacro: true })
@@ -256,4 +364,52 @@ test("replaces basic table body rows and updates the table ref", async () => {
   const tableXml = textDecoder.decode(await readEntryData(tableEntry, nodeCompressionAdapter));
   assert.match(tableXml, /ref="A1:B3"/);
   assert.match(tableXml, /<autoFilter ref="A1:B3"\/>/);
+});
+
+test("table row replacement preserves body styles and shrinks dimensions", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({
+      includeTable: true,
+      styledTableBody: true,
+      tableRows: [
+        ["Old", 1],
+        ["Older", 2],
+        ["Oldest", 3]
+      ]
+    })
+  );
+
+  const table = await workbook.replaceTableRows("RevenueTable", [["Fresh", 99]]);
+  assert.equal(table.ref, "A1:B2");
+
+  const outputZip = parseZip(await workbook.write());
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+  assert.match(sheetXml, /<dimension ref="A1:B2"\/>/);
+  assert.match(
+    sheetXml,
+    /<row r="2" s="2" customFormat="1"><c r="A2" s="3" t="inlineStr"><is><t>Fresh<\/t><\/is><\/c><c r="B2" s="4"><v>99<\/v><\/c><\/row>/
+  );
+  assert.doesNotMatch(sheetXml, /Oldest/);
+
+  const tableEntry = outputZip.entries.find((entry) => entry.name === "xl/tables/table1.xml");
+  assert.ok(tableEntry);
+  const tableXml = textDecoder.decode(await readEntryData(tableEntry, nodeCompressionAdapter));
+  assert.match(tableXml, /ref="A1:B2"/);
+  assert.match(tableXml, /<autoFilter ref="A1:B2"\/>/);
+});
+
+test("table formula writes invalidate stale calculation chains", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeCalcChain: true, includeTable: true })
+  );
+
+  await workbook.replaceTableRows("RevenueTable", [
+    ["Formula", { formula: "=SUM(1,2)", result: 3 }]
+  ]);
+  const outputZip = parseZip(await workbook.write());
+  const names = outputZip.entries.map((entry) => entry.name);
+
+  assert.equal(names.includes("xl/calcChain.xml"), false);
 });

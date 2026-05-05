@@ -4,7 +4,8 @@ import {
   OoxmlPackage,
   Workbook,
   type CompressionAdapter,
-  type CellInput
+  type CellInput,
+  type CellPatch
 } from "../../core/src/index.ts";
 
 export const nodeCompressionAdapter: CompressionAdapter = {
@@ -45,6 +46,29 @@ export async function patchWorkbookCell(
   await writeWorkbook(workbook, outputPath);
 }
 
+export async function patchWorkbookCells(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  patches: CellPatch[]
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.patchCells(sheetName, patches);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function patchWorkbookRange(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  startAddress: string,
+  values: CellInput[][]
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.patchRange(sheetName, startAddress, values);
+  await writeWorkbook(workbook, outputPath);
+}
+
 export async function readWorkbookCell(
   inputPath: string,
   sheetName: string,
@@ -52,6 +76,15 @@ export async function readWorkbookCell(
 ): Promise<Awaited<ReturnType<Workbook["readCell"]>>> {
   const workbook = await readWorkbook(inputPath);
   return workbook.readCell(sheetName, address);
+}
+
+export async function readWorkbookRange(
+  inputPath: string,
+  sheetName: string,
+  rangeRef: string
+): Promise<Awaited<ReturnType<Workbook["readRange"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.readRange(sheetName, rangeRef);
 }
 
 export async function replaceWorkbookTableRows(
