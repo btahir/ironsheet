@@ -13,8 +13,11 @@ This repository currently implements the first vertical slice:
 - Raw compressed payload preservation for untouched entries.
 - OPC relationship parsing and target resolution.
 - Workbook sheet discovery.
+- Defined-name inspection.
 - Cell, batch-cell, and range read/write APIs.
+- Append-row API for template-backed exports.
 - Basic table row replacement with table ref, autoFilter, style, formula recalculation, and worksheet dimension updates.
+- Guardrails for unsupported table totals rows.
 - Formula writes with `calcPr` recalculation metadata.
 - Feature inspection for macros, shared strings, tables, drawings, charts, media, merges, hyperlinks, validation, conditional formatting, hidden sheets, comments, pivots, and defined names.
 - Preservation fixtures for macros, merge cells, hyperlinks, validations, conditional formatting, drawings, charts, media, hidden sheets, and styled table rows.
@@ -34,6 +37,12 @@ Inspect a workbook:
 
 ```bash
 npm run cli -- inspect path/to/workbook.xlsx
+```
+
+Validate package integrity and common workbook invariants:
+
+```bash
+npm run cli -- validate path/to/workbook.xlsx
 ```
 
 Read a cell:
@@ -58,6 +67,12 @@ Patch a range:
 
 ```bash
 npm run cli -- patch-range input.xlsx output.xlsx Sheet1 B2 '[["Name","Amount"],["ACME",42]]'
+```
+
+Append rows:
+
+```bash
+npm run cli -- append-rows input.xlsx output.xlsx Sheet1 '[["North",10],["South",20]]'
 ```
 
 Replace basic table rows:
