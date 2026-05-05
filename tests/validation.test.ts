@@ -33,6 +33,24 @@ test("validation reports missing relationship targets", async () => {
   );
 });
 
+test("validation reports duplicate relationship ids", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const relsXml = await pkg.readText("xl/_rels/workbook.xml.rels");
+  pkg.setText(
+    "xl/_rels/workbook.xml.rels",
+    relsXml.replace(
+      "</Relationships>",
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "RELATIONSHIP_ID_DUPLICATE");
+  assert.equal(report.issues[0]?.target, "rId1");
+});
+
 test("validation reports orphan relationship parts", async () => {
   const pkg = await openPackage(
     await createMinimalWorkbook({ includeOrphanRelationshipPart: true })

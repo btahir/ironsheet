@@ -67,7 +67,19 @@ async function validateRelationshipTargets(
   const inspection = await pkg.inspect();
 
   for (const [sourcePart, relationships] of Object.entries(inspection.relationships)) {
+    const relationshipIds = new Set<string>();
     for (const relationship of relationships) {
+      if (relationshipIds.has(relationship.id)) {
+        issues.push({
+          severity: "error",
+          code: "RELATIONSHIP_ID_DUPLICATE",
+          message: `Relationship part ${sourcePart} contains duplicate relationship id ${relationship.id}`,
+          part: sourcePart,
+          target: relationship.id
+        });
+      }
+      relationshipIds.add(relationship.id);
+
       if (relationship.targetMode === "External") {
         continue;
       }
