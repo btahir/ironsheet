@@ -270,3 +270,32 @@ test("validation reports table and autoFilter range mismatches", async () => {
   assert.equal(report.summary.warnings, 1);
   assert.equal(report.issues[0]?.code, "TABLE_AUTOFILTER_REF_MISMATCH");
 });
+
+test("validation reports table column count mismatches", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const tableXml = await pkg.readText("xl/tables/table1.xml");
+  pkg.setText(
+    "xl/tables/table1.xml",
+    tableXml.replace('<tableColumns count="2">', '<tableColumns count="3">')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "TABLE_COLUMN_COUNT_MISMATCH");
+});
+
+test("validation reports table refs whose width does not match columns", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const tableXml = await pkg.readText("xl/tables/table1.xml");
+  pkg.setText(
+    "xl/tables/table1.xml",
+    tableXml.replace('ref="A1:B2"', 'ref="A1:C2"').replace('ref="A1:B2"', 'ref="A1:C2"')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "TABLE_COLUMN_REF_WIDTH_MISMATCH");
+  assert.equal(report.issues[0]?.target, "A1:C2");
+});

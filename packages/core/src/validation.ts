@@ -656,6 +656,20 @@ async function validateTableParts(
       continue;
     }
 
+    let range: ReturnType<typeof parseCellRange>;
+    try {
+      range = parseCellRange(table.attributes.ref);
+    } catch (_error) {
+      issues.push({
+        severity: "error",
+        code: "TABLE_REF_INVALID",
+        message: `Table part has invalid ref ${table.attributes.ref}`,
+        part,
+        target: table.attributes.ref
+      });
+      continue;
+    }
+
     const autoFilter = findFirstStartTag(xml, "autoFilter");
     if (
       autoFilter?.attributes.ref !== undefined &&
@@ -666,6 +680,29 @@ async function validateTableParts(
         code: "TABLE_AUTOFILTER_REF_MISMATCH",
         message: `Table ref ${table.attributes.ref} does not match autoFilter ref ${autoFilter.attributes.ref}`,
         part
+      });
+    }
+
+    const tableColumns = findStartTags(xml, "tableColumn");
+    const tableColumnsContainer = findFirstStartTag(xml, "tableColumns");
+    const declaredCount = Number.parseInt(tableColumnsContainer?.attributes.count ?? "", 10);
+    if (Number.isInteger(declaredCount) && declaredCount !== tableColumns.length) {
+      issues.push({
+        severity: "warning",
+        code: "TABLE_COLUMN_COUNT_MISMATCH",
+        message: `Table declares ${declaredCount} column(s) but contains ${tableColumns.length}`,
+        part
+      });
+    }
+
+    const refWidth = range.end.column - range.start.column + 1;
+    if (tableColumns.length > 0 && tableColumns.length !== refWidth) {
+      issues.push({
+        severity: "warning",
+        code: "TABLE_COLUMN_REF_WIDTH_MISMATCH",
+        message: `Table ref ${range.ref} spans ${refWidth} column(s) but defines ${tableColumns.length}`,
+        part,
+        target: range.ref
       });
     }
   }
