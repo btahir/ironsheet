@@ -185,6 +185,15 @@ test("cell patches preserve merge cells and hyperlink relationships", async () =
     await createMinimalWorkbook({ includeHyperlink: true, includeMerge: true })
   );
 
+  assert.deepEqual(workbook.diagnostics(), [
+    {
+      severity: "warning",
+      code: "EXTERNAL_RELATIONSHIP_PRESERVED",
+      message: "Preserved external relationship rIdHyperlink1",
+      part: "xl/worksheets/sheet1.xml"
+    }
+  ]);
+
   await workbook.patchCell("Sheet1", "C3", "safe");
   const outputZip = parseZip(await workbook.write());
   const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
@@ -200,6 +209,24 @@ test("cell patches preserve merge cells and hyperlink relationships", async () =
   const relsXml = textDecoder.decode(await readEntryData(rels, nodeCompressionAdapter));
   assert.match(relsXml, /Target="https:\/\/example.com"/);
   assert.match(relsXml, /TargetMode="External"/);
+});
+
+test("diagnostics report macro preservation and calc chain invalidation", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeCalcChain: true, includeMacro: true })
+  );
+
+  assert.equal(
+    workbook.diagnostics().some((diagnostic) => diagnostic.code === "MACRO_PROJECT_PRESERVED"),
+    true
+  );
+
+  await workbook.patchCell("Sheet1", "C3", { formula: "=SUM(A1:B2)" });
+
+  assert.equal(
+    workbook.diagnostics().some((diagnostic) => diagnostic.code === "FORMULA_CALC_CHAIN_REMOVED"),
+    true
+  );
 });
 
 test("replaces basic table body rows and updates the table ref", async () => {

@@ -1,4 +1,5 @@
 export { parseCellAddress } from "./address.ts";
+export type { Diagnostic, DiagnosticSeverity } from "./diagnostics.ts";
 export { diffZipPackages, type PackageDiff, type PackageEntryDiff } from "./diff.ts";
 export { IronsheetError, PackageError, WorkbookError, WorksheetError, ZipError } from "./errors.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";

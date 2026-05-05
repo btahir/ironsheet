@@ -1,5 +1,6 @@
+import type { Diagnostic } from "./diagnostics.ts";
 import { PackageError, WorkbookError } from "./errors.ts";
-import { type OoxmlPackage, resolveRelationshipTarget } from "./opc.ts";
+import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import { replaceTableRows, type WorkbookTable } from "./table.ts";
 import { patchCell, readCell, type CellInput, type ReadCellResult } from "./worksheet.ts";
@@ -24,6 +25,7 @@ export type WorkbookInspectResult = {
   sheets: WorkbookSheet[];
   parts: string[];
   features: WorkbookFeatureSummary;
+  diagnostics: Diagnostic[];
 };
 
 export type WorkbookFeatureSummary = {
@@ -41,6 +43,7 @@ export type WorkbookFeatureSummary = {
 
 export class Workbook {
   private sharedStringsCache: string[] | undefined;
+  private readonly diagnosticJournal: Diagnostic[] = [];
 
   private constructor(
     readonly pkg: OoxmlPackage,
@@ -52,7 +55,9 @@ export class Workbook {
     const workbookPart = await resolveWorkbookPart(pkg);
     const sheets = await parseSheets(pkg, workbookPart);
     const sheetsByName = new Map(sheets.map((sheet) => [sheet.name, sheet]));
-    return new Workbook(pkg, workbookPart, sheetsByName);
+    const workbook = new Workbook(pkg, workbookPart, sheetsByName);
+    await workbook.recordInitialDiagnostics();
+    return workbook;
   }
 
   sheets(): WorkbookSheet[] {
@@ -95,8 +100,13 @@ export class Workbook {
       workbookPart: this.workbookPart,
       sheets: this.sheets(),
       parts,
-      features: await summarizeFeatures(this.pkg, parts)
+      features: await summarizeFeatures(this.pkg, parts),
+      diagnostics: this.diagnostics()
     };
+  }
+
+  diagnostics(): Diagnostic[] {
+    return [...this.diagnosticJournal];
   }
 
   write(): Promise<Uint8Array> {
@@ -146,6 +156,12 @@ export class Workbook {
       const target = resolveRelationshipTarget(this.workbookPart, relationship.target);
       return relationship.type === calcChainRelationship || target === "xl/calcChain.xml";
     });
+    this.addDiagnostic({
+      severity: "info",
+      code: "FORMULA_CALC_CHAIN_REMOVED",
+      message: "Removed stale calcChain.xml after formula mutation",
+      part: "xl/calcChain.xml"
+    });
   }
 
   private async sharedStrings(): Promise<string[]> {
@@ -160,6 +176,38 @@ export class Workbook {
 
     this.sharedStringsCache = parseSharedStrings(await this.pkg.readText("xl/sharedStrings.xml"));
     return this.sharedStringsCache;
+  }
+
+  private async recordInitialDiagnostics(): Promise<void> {
+    if (this.pkg.hasPart("xl/vbaProject.bin")) {
+      this.addDiagnostic({
+        severity: "info",
+        code: "MACRO_PROJECT_PRESERVED",
+        message: "Workbook contains a VBA project; Ironsheet preserves but never executes macros",
+        part: "xl/vbaProject.bin"
+      });
+    }
+
+    for (const [part, relationships] of Object.entries((await this.pkg.inspect()).relationships)) {
+      for (const relationship of relationships) {
+        this.recordRelationshipDiagnostic(part, relationship);
+      }
+    }
+  }
+
+  private recordRelationshipDiagnostic(part: string, relationship: Relationship): void {
+    if (relationship.targetMode === "External") {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "EXTERNAL_RELATIONSHIP_PRESERVED",
+        message: `Preserved external relationship ${relationship.id}`,
+        part
+      });
+    }
+  }
+
+  private addDiagnostic(diagnostic: Diagnostic): void {
+    this.diagnosticJournal.push(diagnostic);
   }
 }
 
