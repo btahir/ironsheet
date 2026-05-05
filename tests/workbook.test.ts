@@ -112,3 +112,31 @@ test("formula patches remove stale calculation chain parts", async () => {
   );
   assert.doesNotMatch(contentTypesXml, /calcChain/);
 });
+
+test("cell patches preserve macro-enabled workbook parts", async () => {
+  const original = await createMinimalWorkbook({ includeMacro: true });
+  const originalZip = parseZip(original);
+  const originalVba = originalZip.entries.find((entry) => entry.name === "xl/vbaProject.bin");
+  assert.ok(originalVba);
+
+  const workbook = await openWorkbook(original);
+  await workbook.patchCell("Sheet1", "B2", "macro safe");
+  const outputZip = parseZip(await workbook.write());
+  const outputVba = outputZip.entries.find((entry) => entry.name === "xl/vbaProject.bin");
+  assert.ok(outputVba);
+
+  assert.deepEqual(outputVba.compressedData, originalVba.compressedData);
+
+  const relsEntry = outputZip.entries.find((entry) => entry.name === "xl/_rels/workbook.xml.rels");
+  assert.ok(relsEntry);
+  const relsXml = textDecoder.decode(await readEntryData(relsEntry, nodeCompressionAdapter));
+  assert.match(relsXml, /vbaProject/);
+
+  const contentTypesEntry = outputZip.entries.find((entry) => entry.name === "[Content_Types].xml");
+  assert.ok(contentTypesEntry);
+  const contentTypesXml = textDecoder.decode(
+    await readEntryData(contentTypesEntry, nodeCompressionAdapter)
+  );
+  assert.match(contentTypesXml, /macroEnabled\.main\+xml/);
+  assert.match(contentTypesXml, /vbaProject/);
+});

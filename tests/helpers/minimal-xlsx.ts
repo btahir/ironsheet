@@ -4,6 +4,7 @@ const textEncoder = new TextEncoder();
 
 export type MinimalWorkbookOptions = {
   includeCalcChain?: boolean;
+  includeMacro?: boolean;
   useSharedStrings?: boolean;
 };
 
@@ -17,9 +18,10 @@ export async function createMinimalWorkbook(
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="${options.includeMacro === true ? "application/vnd.ms-excel.sheet.macroEnabled.main+xml" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"}"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${options.includeMacro === true ? '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>' : ""}
   ${options.useSharedStrings === true ? '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>' : ""}
 </Types>`
@@ -46,6 +48,7 @@ export async function createMinimalWorkbook(
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  ${options.includeMacro === true ? '<Relationship Id="rIdVba" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/>' : ""}
   ${options.useSharedStrings === true ? '<Relationship Id="rIdSharedStrings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/>' : ""}
 </Relationships>`
@@ -95,6 +98,16 @@ export async function createMinimalWorkbook(
 </sst>`
       )
     );
+  }
+
+  if (options.includeMacro === true) {
+    entries.push({
+      name: "xl/vbaProject.bin",
+      data: new Uint8Array([0xca, 0xfe, 0xba, 0xbe, 0x00, 0x01]),
+      compressionMethod: 0,
+      crc32: crc32(new Uint8Array([0xca, 0xfe, 0xba, 0xbe, 0x00, 0x01])),
+      uncompressedSize: 6
+    });
   }
 
   return writeZip(entries);
