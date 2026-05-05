@@ -36,6 +36,7 @@ test("inspect reports workbook feature signals", async () => {
     await createMinimalWorkbook({
       includeCalcChain: true,
       includeMacro: true,
+      includeTable: true,
       useSharedStrings: true
     })
   );
@@ -48,7 +49,7 @@ test("inspect reports workbook feature signals", async () => {
     media: 0,
     pivotTables: 0,
     sharedStrings: 1,
-    tables: 0
+    tables: 1
   });
 });
 
@@ -171,4 +172,33 @@ test("cell patches preserve macro-enabled workbook parts", async () => {
   );
   assert.match(contentTypesXml, /macroEnabled\.main\+xml/);
   assert.match(contentTypesXml, /vbaProject/);
+});
+
+test("replaces basic table body rows and updates the table ref", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeTable: true }));
+
+  const table = await workbook.replaceTableRows("RevenueTable", [
+    ["New", 10],
+    ["Growth", 20]
+  ]);
+  assert.equal(table.ref, "A1:B3");
+
+  const outputZip = parseZip(await workbook.write());
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+  assert.match(
+    sheetXml,
+    /<row r="2"><c r="A2" t="inlineStr"><is><t>New<\/t><\/is><\/c><c r="B2"><v>10<\/v><\/c><\/row>/
+  );
+  assert.match(
+    sheetXml,
+    /<row r="3"><c r="A3" t="inlineStr"><is><t>Growth<\/t><\/is><\/c><c r="B3"><v>20<\/v><\/c><\/row>/
+  );
+
+  const tableEntry = outputZip.entries.find((entry) => entry.name === "xl/tables/table1.xml");
+  assert.ok(tableEntry);
+  const tableXml = textDecoder.decode(await readEntryData(tableEntry, nodeCompressionAdapter));
+  assert.match(tableXml, /ref="A1:B3"/);
+  assert.match(tableXml, /<autoFilter ref="A1:B3"\/>/);
 });

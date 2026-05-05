@@ -1,6 +1,7 @@
 import { PackageError, WorkbookError } from "./errors.ts";
 import { type OoxmlPackage, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
+import { replaceTableRows, type WorkbookTable } from "./table.ts";
 import { patchCell, readCell, type CellInput, type ReadCellResult } from "./worksheet.ts";
 import { findFirstStartTag, findStartTags } from "./xml.ts";
 
@@ -80,6 +81,10 @@ export class Workbook {
     const sheet = this.sheet(sheetName);
     const xml = await this.pkg.readText(sheet.partName);
     return readCell(xml, address, { sharedStrings: await this.sharedStrings() });
+  }
+
+  replaceTableRows(tableName: string, rows: CellInput[][]): Promise<WorkbookTable> {
+    return replaceTableRows(this.pkg, tableName, rows);
   }
 
   async inspect(): Promise<WorkbookInspectResult> {

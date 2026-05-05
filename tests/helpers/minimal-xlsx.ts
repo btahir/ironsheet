@@ -5,6 +5,7 @@ const textEncoder = new TextEncoder();
 export type MinimalWorkbookOptions = {
   includeCalcChain?: boolean;
   includeMacro?: boolean;
+  includeTable?: boolean;
   useSharedStrings?: boolean;
 };
 
@@ -21,6 +22,7 @@ export async function createMinimalWorkbook(
   <Override PartName="/xl/workbook.xml" ContentType="${options.includeMacro === true ? "application/vnd.ms-excel.sheet.macroEnabled.main+xml" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"}"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${options.includeTable === true ? '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>' : ""}
   ${options.includeMacro === true ? '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>' : ""}
   ${options.useSharedStrings === true ? '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>' : ""}
@@ -53,6 +55,17 @@ export async function createMinimalWorkbook(
   ${options.includeCalcChain === true ? '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/>' : ""}
 </Relationships>`
     ),
+    ...(options.includeTable === true
+      ? [
+          textPart(
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdTable1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>
+</Relationships>`
+          )
+        ]
+      : []),
     textPart(
       "xl/styles.xml",
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -68,10 +81,11 @@ export async function createMinimalWorkbook(
       "xl/worksheets/sheet1.xml",
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="A1:A1"/>
+  <dimension ref="${options.includeTable === true ? "A1:B2" : "A1:A1"}"/>
   <sheetData>
-    <row r="1">${options.useSharedStrings === true ? '<c r="A1" s="1" t="s"><v>0</v></c>' : '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>'}</row>
+    ${options.includeTable === true ? '<row r="1"><c r="A1" t="inlineStr"><is><t>Name</t></is></c><c r="B1" t="inlineStr"><is><t>Amount</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Old</t></is></c><c r="B2"><v>1</v></c></row>' : `<row r="1">${options.useSharedStrings === true ? '<c r="A1" s="1" t="s"><v>0</v></c>' : '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>'}</row>`}
   </sheetData>
+  ${options.includeTable === true ? '<tableParts count="1"><tablePart r:id="rIdTable1"/></tableParts>' : ""}
 </worksheet>`
     )
   ];
@@ -108,6 +122,23 @@ export async function createMinimalWorkbook(
       crc32: crc32(new Uint8Array([0xca, 0xfe, 0xba, 0xbe, 0x00, 0x01])),
       uncompressedSize: 6
     });
+  }
+
+  if (options.includeTable === true) {
+    entries.push(
+      textPart(
+        "xl/tables/table1.xml",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="1" name="RevenueTable" displayName="RevenueTable" ref="A1:B2" totalsRowShown="0">
+  <autoFilter ref="A1:B2"/>
+  <tableColumns count="2">
+    <tableColumn id="1" name="Name"/>
+    <tableColumn id="2" name="Amount"/>
+  </tableColumns>
+  <tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>
+</table>`
+      )
+    );
   }
 
   return writeZip(entries);

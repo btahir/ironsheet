@@ -1,4 +1,5 @@
 import { compareCellAddresses, parseCellAddress } from "./address.ts";
+import { numberToColumnLabel } from "./address.ts";
 import { WorksheetError } from "./errors.ts";
 import {
   decodeXml,
@@ -83,6 +84,50 @@ export function patchCell(xml: string, address: string, value: CellInput): Patch
     xml: updateDimension(withCell, parsedAddress.address),
     formulaChanged
   };
+}
+
+export function replaceRowsInRange(
+  xml: string,
+  range: { startRow: number; endRow: number; startColumn: number; endColumn: number },
+  rows: CellInput[][]
+): string {
+  const sheetData = findFirstStartTag(xml, "sheetData");
+  if (sheetData === undefined) {
+    throw new WorksheetError("Worksheet is missing sheetData");
+  }
+
+  const sheetDataClose = xml.indexOf("</sheetData>", sheetData.end);
+  if (sheetDataClose === -1) {
+    throw new WorksheetError("Worksheet sheetData is missing a closing tag");
+  }
+
+  const rowElements = findRowRanges(xml)
+    .filter((row) => row.rowNumber >= range.startRow && row.rowNumber <= range.endRow)
+    .toReversed();
+
+  let nextXml = xml;
+  for (const row of rowElements) {
+    nextXml = `${nextXml.slice(0, row.start)}${nextXml.slice(row.end)}`;
+  }
+
+  const insertionPoint = findRowInsertionPoint(nextXml, range.startRow);
+  const rowXml = rows
+    .map((row, rowIndex) => {
+      const rowNumber = range.startRow + rowIndex;
+      const cells = row
+        .slice(0, range.endColumn - range.startColumn + 1)
+        .map((cell, columnIndex) =>
+          createCellXml(`${numberToColumnLabel(range.startColumn + columnIndex)}${rowNumber}`, cell)
+        )
+        .join("");
+
+      return `<row r="${rowNumber}">${cells}</row>`;
+    })
+    .join("");
+
+  const updated = `${nextXml.slice(0, insertionPoint)}${rowXml}${nextXml.slice(insertionPoint)}`;
+  const lastRow = Math.max(range.startRow, range.startRow + rows.length - 1);
+  return updateDimension(updated, `${numberToColumnLabel(range.endColumn)}${lastRow}`);
 }
 
 export function createCellXml(
@@ -225,6 +270,40 @@ function findRowElement(
   }
 
   return undefined;
+}
+
+function findRowRanges(xml: string): Array<{ rowNumber: number; start: number; end: number }> {
+  return findStartTags(xml, "row").map((row) => {
+    const rowNumber = Number.parseInt(row.attributes.r ?? "", 10);
+    if (!Number.isInteger(rowNumber)) {
+      throw new WorksheetError("Row is missing a numeric r attribute");
+    }
+
+    if (row.selfClosing) {
+      return { rowNumber, start: row.start, end: row.end };
+    }
+
+    const close = xml.indexOf("</row>", row.end);
+    if (close === -1) {
+      throw new WorksheetError(`Row ${rowNumber} is missing a closing </row> tag`);
+    }
+
+    return { rowNumber, start: row.start, end: close + "</row>".length };
+  });
+}
+
+function findRowInsertionPoint(xml: string, rowNumber: number): number {
+  const nextRow = findRowRanges(xml).find((row) => row.rowNumber > rowNumber);
+  if (nextRow !== undefined) {
+    return nextRow.start;
+  }
+
+  const sheetDataClose = xml.indexOf("</sheetData>");
+  if (sheetDataClose === -1) {
+    throw new WorksheetError("Worksheet sheetData is missing a closing tag");
+  }
+
+  return sheetDataClose;
 }
 
 function updateDimension(xml: string, address: string): string {
