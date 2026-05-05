@@ -203,6 +203,54 @@ test("validation reports defined names with invalid local sheet ids", async () =
   assert.equal(report.issues[0]?.target, "_xlnm.Print_Titles");
 });
 
+test("validation accepts calc chains that point to formula cells", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeCalcChain: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>',
+      '<c r="A1"><f>1+1</f><v>2</v></c>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.deepEqual(report.summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
+test("validation reports calc chains that point to non-formula cells", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeCalcChain: true }));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "CALC_CHAIN_CELL_NOT_FORMULA");
+  assert.equal(report.issues[0]?.target, "xl/worksheets/sheet1.xml!A1");
+});
+
+test("validation reports calc chains with missing sheet ids and invalid addresses", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeCalcChain: true }));
+  const calcChainXml = await pkg.readText("xl/calcChain.xml");
+  pkg.setText(
+    "xl/calcChain.xml",
+    calcChainXml.replace('<c r="A1" i="1"/>', '<c r="A1" i="99"/><c r="1A"/>')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "CALC_CHAIN_SHEET_MISSING"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "CALC_CHAIN_CELL_REF_INVALID"),
+    true
+  );
+});
+
 test("validation reports table and autoFilter range mismatches", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
   pkg.setText(

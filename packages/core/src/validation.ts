@@ -1,7 +1,7 @@
 import { parseCellAddress, parseCellRange } from "./address.ts";
 import { parseDefinedNames } from "./defined-names.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
-import { findFirstStartTag, findStartTags } from "./xml.ts";
+import { findElementEnd, findFirstStartTag, findStartTags } from "./xml.ts";
 
 const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
@@ -47,6 +47,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateDefinedNames(pkg, issues);
   await validateWorksheetDimensions(pkg, issues, parts);
   await validateTableParts(pkg, issues, parts);
+  await validateCalcChain(pkg, issues, parts);
 
   return {
     issues,
@@ -151,6 +152,36 @@ function validateRelationshipParts(issues: ValidationIssue[], parts: string[]): 
   }
 }
 
+async function workbookSheetPartsBySheetId(pkg: OoxmlPackage): Promise<Map<string, string>> {
+  if (!pkg.hasPart("xl/workbook.xml")) {
+    return new Map();
+  }
+
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  const relationshipsById = new Map(
+    (await pkg.relationshipsFor("xl/workbook.xml")).map((relationship) => [
+      relationship.id,
+      relationship
+    ])
+  );
+  const result = new Map<string, string>();
+
+  for (const sheet of findStartTags(workbookXml, "sheet")) {
+    const sheetId = sheet.attributes.sheetId;
+    const relationshipId = sheet.attributes["r:id"];
+    if (sheetId === undefined || relationshipId === undefined) {
+      continue;
+    }
+
+    const relationship = relationshipsById.get(relationshipId);
+    if (relationship?.type === worksheetRelationship) {
+      result.set(sheetId, resolveRelationshipTarget("xl/workbook.xml", relationship.target));
+    }
+  }
+
+  return result;
+}
+
 async function validateWorkbookSheets(pkg: OoxmlPackage, issues: ValidationIssue[]): Promise<void> {
   if (!pkg.hasPart("xl/workbook.xml")) {
     return;
@@ -234,6 +265,117 @@ async function validateWorkbookSheets(pkg: OoxmlPackage, issues: ValidationIssue
         message: `Workbook sheet ${name} points outside the standard worksheet folder: ${target}`,
         part: "xl/workbook.xml",
         target
+      });
+    }
+  }
+}
+
+async function validateCalcChain(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  const calcChainParts = parts.filter((part) => /^xl\/calcChain.*\.xml$/.test(part));
+  if (calcChainParts.length === 0) {
+    return;
+  }
+
+  if (calcChainParts.length > 1) {
+    issues.push({
+      severity: "warning",
+      code: "CALC_CHAIN_MULTIPLE_PARTS",
+      message: `Workbook contains ${calcChainParts.length} calculation chain parts`,
+      part: "xl/calcChain.xml"
+    });
+  }
+
+  if (!pkg.hasPart("xl/calcChain.xml")) {
+    return;
+  }
+
+  const sheetPartsById = await workbookSheetPartsBySheetId(pkg);
+  const worksheetXmlByPart = new Map<string, string>();
+  const calcChainXml = await pkg.readText("xl/calcChain.xml");
+  if (findFirstStartTag(calcChainXml, "calcChain") === undefined) {
+    issues.push({
+      severity: "error",
+      code: "CALC_CHAIN_ROOT_MISSING",
+      message: "Calculation chain part is missing calcChain root",
+      part: "xl/calcChain.xml"
+    });
+    return;
+  }
+
+  let currentSheetId: string | undefined;
+  for (const cell of findStartTags(calcChainXml, "c")) {
+    const address = cell.attributes.r;
+    if (cell.attributes.i !== undefined) {
+      currentSheetId = cell.attributes.i;
+    }
+
+    if (address === undefined) {
+      issues.push({
+        severity: "error",
+        code: "CALC_CHAIN_CELL_REF_MISSING",
+        message: "Calculation chain cell is missing r attribute",
+        part: "xl/calcChain.xml"
+      });
+      continue;
+    }
+
+    try {
+      parseCellAddress(address);
+    } catch (_error) {
+      issues.push({
+        severity: "error",
+        code: "CALC_CHAIN_CELL_REF_INVALID",
+        message: `Calculation chain cell has invalid address ${address}`,
+        part: "xl/calcChain.xml",
+        target: address
+      });
+      continue;
+    }
+
+    if (currentSheetId === undefined) {
+      issues.push({
+        severity: "warning",
+        code: "CALC_CHAIN_SHEET_ID_MISSING",
+        message: `Calculation chain cell ${address} has no sheet id context`,
+        part: "xl/calcChain.xml",
+        target: address
+      });
+      continue;
+    }
+
+    const worksheetPart = sheetPartsById.get(currentSheetId);
+    if (worksheetPart === undefined) {
+      issues.push({
+        severity: "warning",
+        code: "CALC_CHAIN_SHEET_MISSING",
+        message: `Calculation chain cell ${address} references missing sheet id ${currentSheetId}`,
+        part: "xl/calcChain.xml",
+        target: currentSheetId
+      });
+      continue;
+    }
+
+    if (!pkg.hasPart(worksheetPart)) {
+      continue;
+    }
+
+    let worksheetXml = worksheetXmlByPart.get(worksheetPart);
+    if (worksheetXml === undefined) {
+      worksheetXml = await pkg.readText(worksheetPart);
+      worksheetXmlByPart.set(worksheetPart, worksheetXml);
+    }
+
+    if (!worksheetCellHasFormula(worksheetXml, address)) {
+      issues.push({
+        severity: "warning",
+        code: "CALC_CHAIN_CELL_NOT_FORMULA",
+        message: `Calculation chain references ${address}, but the worksheet cell has no formula`,
+        part: "xl/calcChain.xml",
+        target: `${worksheetPart}!${address}`
       });
     }
   }
@@ -391,6 +533,23 @@ function validateRelationshipId(options: {
       target: options.relationshipId
     });
   }
+}
+
+function worksheetCellHasFormula(xml: string, address: string): boolean {
+  const target = address.toUpperCase();
+  for (const cell of findStartTags(xml, "c")) {
+    if ((cell.attributes.r ?? "").toUpperCase() !== target) {
+      continue;
+    }
+
+    if (cell.selfClosing) {
+      return false;
+    }
+
+    return findFirstStartTag(xml.slice(cell.start, findElementEnd(xml, cell)), "f") !== undefined;
+  }
+
+  return false;
 }
 
 function sheetReferencesInFormulaText(text: string): string[] {
