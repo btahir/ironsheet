@@ -13,10 +13,13 @@ This repository currently implements the first vertical slice:
 - Raw compressed payload preservation for untouched entries.
 - OPC relationship parsing and target resolution.
 - Workbook sheet discovery.
-- One-cell worksheet patching.
+- Cell, batch-cell, and range read/write APIs.
+- Basic table row replacement with table ref, autoFilter, style, formula recalculation, and worksheet dimension updates.
 - Formula writes with `calcPr` recalculation metadata.
+- Feature inspection for macros, shared strings, tables, drawings, charts, media, merges, hyperlinks, validation, conditional formatting, hidden sheets, comments, pivots, and defined names.
+- Preservation fixtures for macros, merge cells, hyperlinks, validations, conditional formatting, drawings, charts, media, hidden sheets, and styled table rows.
 - Node adapter using `node:zlib`.
-- CLI inspection and patch commands.
+- CLI inspection, read, patch, range patch, table replacement, and package diff commands.
 - Compatibility harness with ZIP integrity and optional app-level checks.
 
 ## Commands
@@ -39,10 +42,22 @@ Read a cell:
 npm run cli -- read-cell path/to/workbook.xlsx Sheet1 A1
 ```
 
+Read a range:
+
+```bash
+npm run cli -- read-range path/to/workbook.xlsx Sheet1 A1:C5
+```
+
 Patch a single cell:
 
 ```bash
 npm run cli -- patch input.xlsx output.xlsx Sheet1 B2 "Hello from Ironsheet"
+```
+
+Patch a range:
+
+```bash
+npm run cli -- patch-range input.xlsx output.xlsx Sheet1 B2 '[["Name","Amount"],["ACME",42]]'
 ```
 
 Replace basic table rows:
