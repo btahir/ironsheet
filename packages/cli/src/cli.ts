@@ -2,16 +2,22 @@
 import process from "node:process";
 import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "../../core/src/index.ts";
-import { patchWorkbookCell, readWorkbook, readWorkbookCell } from "../../node/src/index.ts";
+import {
+  patchWorkbookCell,
+  readWorkbook,
+  readWorkbookCell,
+  replaceWorkbookTableRows
+} from "../../node/src/index.ts";
 import type { CellInput } from "../../core/src/index.ts";
 
-type Command = "inspect" | "patch" | "read-cell" | "diff";
+type Command = "inspect" | "patch" | "read-cell" | "replace-table" | "diff";
 
 function usage(): never {
   console.error(`usage:
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
+  npm run cli -- replace-table <input.xlsx> <output.xlsx> <table> <jsonRows>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
 value examples:
@@ -49,6 +55,16 @@ async function patch(
   console.log(`patched ${sheetName}!${address} -> ${outputPath}`);
 }
 
+async function replaceTable(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  rawRows: string
+): Promise<void> {
+  await replaceWorkbookTableRows(inputPath, outputPath, tableName, parseRows(rawRows));
+  console.log(`replaced ${tableName} rows -> ${outputPath}`);
+}
+
 function parseCliValue(value: string): CellInput {
   if (value.startsWith("=")) {
     return { formula: value };
@@ -67,6 +83,37 @@ function parseCliValue(value: string): CellInput {
   }
 
   return value;
+}
+
+function parseRows(rawRows: string): CellInput[][] {
+  const parsed: unknown = JSON.parse(rawRows);
+  if (!Array.isArray(parsed) || !parsed.every((row) => Array.isArray(row))) {
+    throw new Error("jsonRows must be an array of row arrays");
+  }
+
+  return parsed.map((row) => row.map((cell) => parseJsonCell(cell as unknown)));
+}
+
+function parseJsonCell(value: unknown): CellInput {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "formula" in value &&
+    typeof value.formula === "string"
+  ) {
+    return value as { formula: string };
+  }
+
+  throw new Error(`Unsupported table cell value ${JSON.stringify(value)}`);
 }
 
 const [command, ...args] = process.argv.slice(2) as [Command | undefined, ...string[]];
@@ -102,6 +149,17 @@ try {
       usage();
     }
     await patch(inputPath, outputPath, sheetName, address, rawValue);
+  } else if (command === "replace-table") {
+    const [inputPath, outputPath, tableName, rawRows] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      tableName === undefined ||
+      rawRows === undefined
+    ) {
+      usage();
+    }
+    await replaceTable(inputPath, outputPath, tableName, rawRows);
   } else {
     usage();
   }

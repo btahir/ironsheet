@@ -53,3 +53,14 @@ export async function readWorkbookCell(
   const workbook = await readWorkbook(inputPath);
   return workbook.readCell(sheetName, address);
 }
+
+export async function replaceWorkbookTableRows(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  rows: CellInput[][]
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.replaceTableRows(tableName, rows);
+  await writeWorkbook(workbook, outputPath);
+}

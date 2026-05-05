@@ -45,6 +45,12 @@ Patch a single cell:
 npm run cli -- patch input.xlsx output.xlsx Sheet1 B2 "Hello from Ironsheet"
 ```
 
+Replace basic table rows:
+
+```bash
+npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["New",10],["Growth",20]]'
+```
+
 Diff two workbook packages:
 
 ```bash
