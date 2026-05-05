@@ -12,6 +12,7 @@
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "cli": "tsx packages/cli/src/cli.ts",
     "compat:check": "tsx scripts/compat.ts",
     "hooks:install": "git config core.hooksPath .githooks"
   },
