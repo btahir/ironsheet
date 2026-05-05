@@ -5,12 +5,15 @@
   "type": "module",
   "description": "Move fast and break no spreadsheets.",
   "scripts": {
-    "verify": "node scripts/verify.mjs",
+    "verify": "tsx scripts/verify.ts",
     "commit:safe": "scripts/commit-safe.sh",
     "hooks:install": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18"
   }
 }
-
