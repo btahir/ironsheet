@@ -12,6 +12,7 @@ export type MinimalWorkbookOptions = {
   includeHyperlink?: boolean;
   includeMacro?: boolean;
   includeMerge?: boolean;
+  includeOrphanRelationshipPart?: boolean;
   includeTable?: boolean;
   includeTableTotals?: boolean;
   styledTableBody?: boolean;
@@ -133,6 +134,17 @@ export async function createMinimalWorkbook(
   <dimension ref="A1:A1"/>
   <sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Hidden</t></is></c></row></sheetData>
 </worksheet>`
+      )
+    );
+  }
+
+  if (options.includeOrphanRelationshipPart === true) {
+    entries.push(
+      textPart(
+        "xl/worksheets/_rels/missing.xml.rels",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+</Relationships>`
       )
     );
   }

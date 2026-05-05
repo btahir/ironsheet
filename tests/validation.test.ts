@@ -33,6 +33,36 @@ test("validation reports missing relationship targets", async () => {
   );
 });
 
+test("validation reports orphan relationship parts", async () => {
+  const pkg = await openPackage(
+    await createMinimalWorkbook({ includeOrphanRelationshipPart: true })
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "RELATIONSHIP_PART_ORPHAN");
+  assert.equal(report.issues[0]?.target, "xl/worksheets/missing.xml");
+});
+
+test("validation reports orphan content type overrides", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const xml = await pkg.readText("[Content_Types].xml");
+  pkg.setText(
+    "[Content_Types].xml",
+    xml.replace(
+      "</Types>",
+      '<Override PartName="/xl/missing.xml" ContentType="application/xml"/></Types>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "CONTENT_TYPE_OVERRIDE_ORPHAN");
+  assert.equal(report.issues[0]?.target, "xl/missing.xml");
+});
+
 test("validation reports worksheet dimensions that exclude cells", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   pkg.setText(

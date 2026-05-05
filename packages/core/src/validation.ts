@@ -37,6 +37,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   const partSet = new Set(parts);
 
   await validateRelationshipTargets(pkg, issues, partSet);
+  validateRelationshipParts(issues, parts);
   await validateContentTypes(pkg, issues, parts);
   await validateWorksheetRelationshipIds(pkg, issues, parts);
   await validateDrawingRelationshipIds(pkg, issues, parts);
@@ -97,6 +98,19 @@ async function validateContentTypes(
   }
 
   const contentTypes = parseContentTypes(await pkg.readText("[Content_Types].xml"));
+  const partSet = new Set(parts);
+  for (const override of contentTypes.overrides) {
+    if (!partSet.has(override)) {
+      issues.push({
+        severity: "warning",
+        code: "CONTENT_TYPE_OVERRIDE_ORPHAN",
+        message: `Content type override points to missing part ${override}`,
+        part: "[Content_Types].xml",
+        target: override
+      });
+    }
+  }
+
   for (const part of parts) {
     if (part === "[Content_Types].xml" || part.endsWith(".rels")) {
       continue;
@@ -109,6 +123,26 @@ async function validateContentTypes(
         code: "CONTENT_TYPE_MISSING",
         message: `Part ${part} has no content type override or default`,
         part
+      });
+    }
+  }
+}
+
+function validateRelationshipParts(issues: ValidationIssue[], parts: string[]): void {
+  const partSet = new Set(parts);
+  for (const part of parts.filter((name) => name.endsWith(".rels"))) {
+    const sourcePart = sourcePartFromRelationshipPart(part);
+    if (sourcePart === undefined || sourcePart === "/") {
+      continue;
+    }
+
+    if (!partSet.has(sourcePart)) {
+      issues.push({
+        severity: "warning",
+        code: "RELATIONSHIP_PART_ORPHAN",
+        message: `Relationship part ${part} has no source part ${sourcePart}`,
+        part,
+        target: sourcePart
       });
     }
   }
@@ -278,6 +312,24 @@ function unquoteSheetName(name: string): string {
   }
 
   return name.trim();
+}
+
+function sourcePartFromRelationshipPart(part: string): string | undefined {
+  if (part === "_rels/.rels") {
+    return "/";
+  }
+
+  const marker = "/_rels/";
+  const markerIndex = part.lastIndexOf(marker);
+  if (markerIndex !== -1 && part.endsWith(".rels")) {
+    return `${part.slice(0, markerIndex + 1)}${part.slice(markerIndex + marker.length, -".rels".length)}`;
+  }
+
+  if (part.startsWith("_rels/") && part.endsWith(".rels")) {
+    return part.slice("_rels/".length, -".rels".length);
+  }
+
+  return undefined;
 }
 
 async function validateWorksheetDimensions(
