@@ -11,6 +11,8 @@ const imageRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 const tableRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
+const worksheetRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -39,6 +41,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateRelationshipTargets(pkg, issues, partSet);
   validateRelationshipParts(issues, parts);
   await validateContentTypes(pkg, issues, parts);
+  await validateWorkbookSheets(pkg, issues);
   await validateWorksheetRelationshipIds(pkg, issues, parts);
   await validateDrawingRelationshipIds(pkg, issues, parts);
   await validateDefinedNames(pkg, issues);
@@ -148,19 +151,119 @@ function validateRelationshipParts(issues: ValidationIssue[], parts: string[]): 
   }
 }
 
+async function validateWorkbookSheets(pkg: OoxmlPackage, issues: ValidationIssue[]): Promise<void> {
+  if (!pkg.hasPart("xl/workbook.xml")) {
+    return;
+  }
+
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  const relationshipsById = new Map(
+    (await pkg.relationshipsFor("xl/workbook.xml")).map((relationship) => [
+      relationship.id,
+      relationship
+    ])
+  );
+  const sheetNames = new Set<string>();
+  const sheetIds = new Set<string>();
+
+  for (const sheet of findStartTags(workbookXml, "sheet")) {
+    const name = sheet.attributes.name;
+    const sheetId = sheet.attributes.sheetId;
+    const relationshipId = sheet.attributes["r:id"];
+
+    if (name === undefined || sheetId === undefined || relationshipId === undefined) {
+      issues.push({
+        severity: "error",
+        code: "WORKBOOK_SHEET_ENTRY_INVALID",
+        message: "Workbook sheet entry is missing name, sheetId, or r:id",
+        part: "xl/workbook.xml"
+      });
+      continue;
+    }
+
+    if (sheetNames.has(name)) {
+      issues.push({
+        severity: "error",
+        code: "WORKBOOK_SHEET_NAME_DUPLICATE",
+        message: `Workbook contains duplicate sheet name ${name}`,
+        part: "xl/workbook.xml",
+        target: name
+      });
+    }
+    sheetNames.add(name);
+
+    if (sheetIds.has(sheetId)) {
+      issues.push({
+        severity: "warning",
+        code: "WORKBOOK_SHEET_ID_DUPLICATE",
+        message: `Workbook contains duplicate sheetId ${sheetId}`,
+        part: "xl/workbook.xml",
+        target: sheetId
+      });
+    }
+    sheetIds.add(sheetId);
+
+    const relationship = relationshipsById.get(relationshipId);
+    if (relationship === undefined) {
+      issues.push({
+        severity: "error",
+        code: "WORKBOOK_SHEET_RELATIONSHIP_MISSING",
+        message: `Workbook sheet ${name} points to missing relationship ${relationshipId}`,
+        part: "xl/workbook.xml",
+        target: relationshipId
+      });
+      continue;
+    }
+
+    if (relationship.type !== worksheetRelationship) {
+      issues.push({
+        severity: "error",
+        code: "WORKBOOK_SHEET_RELATIONSHIP_INVALID",
+        message: `Workbook sheet ${name} points to a non-worksheet relationship ${relationshipId}`,
+        part: "xl/workbook.xml",
+        target: relationshipId
+      });
+      continue;
+    }
+
+    const target = resolveRelationshipTarget("xl/workbook.xml", relationship.target);
+    if (!/^xl\/worksheets\/.+\.xml$/.test(target)) {
+      issues.push({
+        severity: "warning",
+        code: "WORKBOOK_SHEET_TARGET_UNUSUAL",
+        message: `Workbook sheet ${name} points outside the standard worksheet folder: ${target}`,
+        part: "xl/workbook.xml",
+        target
+      });
+    }
+  }
+}
+
 async function validateDefinedNames(pkg: OoxmlPackage, issues: ValidationIssue[]): Promise<void> {
   if (!pkg.hasPart("xl/workbook.xml")) {
     return;
   }
 
   const workbookXml = await pkg.readText("xl/workbook.xml");
+  const sheets = findStartTags(workbookXml, "sheet");
   const sheetNames = new Set(
-    findStartTags(workbookXml, "sheet")
-      .map((tag) => tag.attributes.name)
-      .filter((name): name is string => name !== undefined)
+    sheets.map((tag) => tag.attributes.name).filter((name): name is string => name !== undefined)
   );
 
   for (const definedName of parseDefinedNames(workbookXml)) {
+    if (definedName.localSheetId !== undefined) {
+      const localSheetId = Number.parseInt(definedName.localSheetId, 10);
+      if (!Number.isInteger(localSheetId) || localSheetId < 0 || localSheetId >= sheets.length) {
+        issues.push({
+          severity: "warning",
+          code: "DEFINED_NAME_LOCAL_SHEET_MISSING",
+          message: `Defined name ${definedName.name} has invalid localSheetId ${definedName.localSheetId}`,
+          part: "xl/workbook.xml",
+          target: definedName.name
+        });
+      }
+    }
+
     for (const sheetName of sheetReferencesInFormulaText(definedName.text)) {
       if (!sheetNames.has(sheetName)) {
         issues.push({

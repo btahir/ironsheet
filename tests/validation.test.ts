@@ -63,6 +63,42 @@ test("validation reports orphan content type overrides", async () => {
   assert.equal(report.issues[0]?.target, "xl/missing.xml");
 });
 
+test("validation reports workbook sheet relationship gaps", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  pkg.setText("xl/workbook.xml", workbookXml.replace('r:id="rId1"', 'r:id="rIdMissing"'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "WORKBOOK_SHEET_RELATIONSHIP_MISSING");
+  assert.equal(report.issues[0]?.target, "rIdMissing");
+});
+
+test("validation reports workbook sheets pointing to non-worksheet relationships", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  pkg.setText("xl/workbook.xml", workbookXml.replace('r:id="rId1"', 'r:id="rId2"'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "WORKBOOK_SHEET_RELATIONSHIP_INVALID");
+  assert.equal(report.issues[0]?.target, "rId2");
+});
+
+test("validation reports duplicate workbook sheet names", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeHiddenSheet: true }));
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  pkg.setText("xl/workbook.xml", workbookXml.replace('name="HiddenData"', 'name="Sheet1"'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "WORKBOOK_SHEET_NAME_DUPLICATE");
+  assert.equal(report.issues[0]?.target, "Sheet1");
+});
+
 test("validation reports worksheet dimensions that exclude cells", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   pkg.setText(
@@ -153,6 +189,18 @@ test("validation reports defined names that reference missing sheets", async () 
   assert.equal(report.summary.warnings, 1);
   assert.equal(report.issues[0]?.code, "DEFINED_NAME_SHEET_MISSING");
   assert.equal(report.issues[0]?.target, "RevenueRange");
+});
+
+test("validation reports defined names with invalid local sheet ids", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  pkg.setText("xl/workbook.xml", workbookXml.replace('localSheetId="0"', 'localSheetId="9"'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "DEFINED_NAME_LOCAL_SHEET_MISSING");
+  assert.equal(report.issues[0]?.target, "_xlnm.Print_Titles");
 });
 
 test("validation reports table and autoFilter range mismatches", async () => {
