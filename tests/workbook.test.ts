@@ -18,6 +18,38 @@ test("inspects workbook sheets from OPC relationships", async () => {
       partName: "xl/worksheets/sheet1.xml"
     }
   ]);
+
+  assert.deepEqual((await workbook.inspect()).features, {
+    calcChains: 0,
+    charts: 0,
+    drawings: 0,
+    macros: 0,
+    media: 0,
+    pivotTables: 0,
+    sharedStrings: 0,
+    tables: 0
+  });
+});
+
+test("inspect reports workbook feature signals", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({
+      includeCalcChain: true,
+      includeMacro: true,
+      useSharedStrings: true
+    })
+  );
+
+  assert.deepEqual((await workbook.inspect()).features, {
+    calcChains: 1,
+    charts: 0,
+    drawings: 0,
+    macros: 1,
+    media: 0,
+    pivotTables: 0,
+    sharedStrings: 1,
+    tables: 0
+  });
 });
 
 test("reads existing cell values and style ids", async () => {

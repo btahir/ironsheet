@@ -22,6 +22,18 @@ export type WorkbookInspectResult = {
   workbookPart: string;
   sheets: WorkbookSheet[];
   parts: string[];
+  features: WorkbookFeatureSummary;
+};
+
+export type WorkbookFeatureSummary = {
+  calcChains: number;
+  charts: number;
+  drawings: number;
+  macros: number;
+  media: number;
+  pivotTables: number;
+  sharedStrings: number;
+  tables: number;
 };
 
 export class Workbook {
@@ -71,10 +83,12 @@ export class Workbook {
   }
 
   async inspect(): Promise<WorkbookInspectResult> {
+    const parts = this.pkg.listParts();
     return {
       workbookPart: this.workbookPart,
       sheets: this.sheets(),
-      parts: this.pkg.listParts()
+      parts,
+      features: summarizeFeatures(parts)
     };
   }
 
@@ -205,4 +219,21 @@ function upsertAttributes(rawTag: string, attributes: Record<string, string>): s
   }
 
   return `${tag}${closing}`;
+}
+
+function summarizeFeatures(parts: string[]): WorkbookFeatureSummary {
+  return {
+    calcChains: countParts(parts, /^xl\/calcChain\.xml$/),
+    charts: countParts(parts, /^xl\/charts\//),
+    drawings: countParts(parts, /^xl\/drawings\//),
+    macros: countParts(parts, /^xl\/vbaProject\.bin$/),
+    media: countParts(parts, /^xl\/media\//),
+    pivotTables: countParts(parts, /^xl\/pivotTables\//),
+    sharedStrings: countParts(parts, /^xl\/sharedStrings\.xml$/),
+    tables: countParts(parts, /^xl\/tables\//)
+  };
+}
+
+function countParts(parts: string[], pattern: RegExp): number {
+  return parts.filter((part) => pattern.test(part)).length;
 }
