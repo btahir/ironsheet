@@ -43,6 +43,18 @@ test("patches one cell and preserves untouched entry payloads", async () => {
   assert.match(sheetXml, /<dimension ref="A1:B2"\/>/);
 });
 
+test("patching an existing styled cell preserves the style id", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await workbook.patchCell("Sheet1", "A1", "Styled replacement");
+  const outputZip = parseZip(await workbook.write());
+  const sheet = outputZip.entries.find((entry) => entry.name === "xl/worksheets/sheet1.xml");
+  assert.ok(sheet);
+  const sheetXml = textDecoder.decode(await readEntryData(sheet, nodeCompressionAdapter));
+
+  assert.match(sheetXml, /<c r="A1" s="1" t="inlineStr"><is><t>Styled replacement<\/t><\/is><\/c>/);
+});
+
 test("patches formulas and marks workbook for recalculation", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook());
 

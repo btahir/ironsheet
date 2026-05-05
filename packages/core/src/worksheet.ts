@@ -16,11 +16,21 @@ export type PatchCellResult = {
   formulaChanged: boolean;
 };
 
+type ExistingCell = {
+  start: number;
+  end: number;
+  styleId?: string;
+};
+
 export function patchCell(xml: string, address: string, value: CellInput): PatchCellResult {
   const parsedAddress = parseCellAddress(address);
-  const cellXml = createCellXml(parsedAddress.address, value);
-  const formulaChanged = isFormulaValue(value);
   const existing = findCellElement(xml, parsedAddress.address);
+  const cellXml = createCellXml(
+    parsedAddress.address,
+    value,
+    existing?.styleId === undefined ? {} : { styleId: existing.styleId }
+  );
+  const formulaChanged = isFormulaValue(value);
   const withCell =
     existing === undefined
       ? insertCell(xml, parsedAddress.address, parsedAddress.row, cellXml)
@@ -32,32 +42,38 @@ export function patchCell(xml: string, address: string, value: CellInput): Patch
   };
 }
 
-export function createCellXml(address: string, value: CellInput): string {
+export function createCellXml(
+  address: string,
+  value: CellInput,
+  options: { styleId?: string } = {}
+): string {
+  const attributes = createCellAttributes(address, value, options);
+
   if (isFormulaValue(value)) {
     const result = value.result === undefined ? "" : createFormulaResultXml(value.result);
-    return `<c r="${escapeXmlAttribute(address)}"><f>${escapeXmlText(value.formula.replace(/^=/, ""))}</f>${result}</c>`;
+    return `<c ${attributes}><f>${escapeXmlText(value.formula.replace(/^=/, ""))}</f>${result}</c>`;
   }
 
   if (value === null) {
-    return `<c r="${escapeXmlAttribute(address)}"/>`;
+    return `<c ${attributes}/>`;
   }
 
   if (typeof value === "number") {
-    return `<c r="${escapeXmlAttribute(address)}"><v>${String(value)}</v></c>`;
+    return `<c ${attributes}><v>${String(value)}</v></c>`;
   }
 
   if (typeof value === "boolean") {
-    return `<c r="${escapeXmlAttribute(address)}" t="b"><v>${value ? "1" : "0"}</v></c>`;
+    return `<c ${attributes}><v>${value ? "1" : "0"}</v></c>`;
   }
 
   if (value instanceof Date) {
-    return `<c r="${escapeXmlAttribute(address)}"><v>${dateToExcelSerial(value)}</v></c>`;
+    return `<c ${attributes}><v>${dateToExcelSerial(value)}</v></c>`;
   }
 
-  return `<c r="${escapeXmlAttribute(address)}" t="inlineStr"><is><t>${escapeXmlText(value)}</t></is></c>`;
+  return `<c ${attributes}><is><t>${escapeXmlText(value)}</t></is></c>`;
 }
 
-function findCellElement(xml: string, address: string): { start: number; end: number } | undefined {
+function findCellElement(xml: string, address: string): ExistingCell | undefined {
   const tags = findStartTags(xml, "c");
   const target = address.toUpperCase();
 
@@ -67,7 +83,7 @@ function findCellElement(xml: string, address: string): { start: number; end: nu
     }
 
     if (tag.selfClosing) {
-      return { start: tag.start, end: tag.end };
+      return existingCell(tag.start, tag.end, tag.attributes.s);
     }
 
     const close = xml.indexOf("</c>", tag.end);
@@ -75,10 +91,18 @@ function findCellElement(xml: string, address: string): { start: number; end: nu
       throw new WorksheetError(`Cell ${address} is missing a closing </c> tag`);
     }
 
-    return { start: tag.start, end: close + "</c>".length };
+    return existingCell(tag.start, close + "</c>".length, tag.attributes.s);
   }
 
   return undefined;
+}
+
+function existingCell(start: number, end: number, styleId: string | undefined): ExistingCell {
+  if (styleId === undefined) {
+    return { start, end };
+  }
+
+  return { start, end, styleId };
 }
 
 function insertCell(xml: string, address: string, rowNumber: number, cellXml: string): string {
@@ -225,6 +249,26 @@ function createFormulaResultXml(value: CellPrimitive): string {
   }
 
   return `<v>${escapeXmlText(value)}</v>`;
+}
+
+function createCellAttributes(
+  address: string,
+  value: CellInput,
+  options: { styleId?: string }
+): string {
+  const attributes: string[] = [`r="${escapeXmlAttribute(address)}"`];
+
+  if (options.styleId !== undefined) {
+    attributes.push(`s="${escapeXmlAttribute(options.styleId)}"`);
+  }
+
+  if (typeof value === "boolean") {
+    attributes.push('t="b"');
+  } else if (typeof value === "string") {
+    attributes.push('t="inlineStr"');
+  }
+
+  return attributes.join(" ");
 }
 
 function dateToExcelSerial(date: Date): number {
