@@ -6,10 +6,17 @@
   "description": "Move fast and break no spreadsheets.",
   "scripts": {
     "verify": "tsx scripts/verify.ts",
-    "commit:safe": "scripts/commit-safe.sh",
+    "commit:safe": "tsx scripts/commit-safe.ts",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "hooks:install": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^25.6.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   },
