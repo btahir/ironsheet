@@ -129,6 +129,16 @@ test("reads shared string cell values", async () => {
   });
 });
 
+test("reads rich inline string cells as combined text", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ useRichInlineString: true }));
+
+  assert.deepEqual(await workbook.readCell("Sheet1", "A1"), {
+    address: "A1",
+    value: "Rich Text",
+    styleId: "1"
+  });
+});
+
 test("patches and reads ranges", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook());
 

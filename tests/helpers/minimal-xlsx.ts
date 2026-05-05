@@ -16,6 +16,7 @@ export type MinimalWorkbookOptions = {
   includeTableTotals?: boolean;
   styledTableBody?: boolean;
   tableRows?: Array<[string, number]>;
+  useRichInlineString?: boolean;
   useSharedStrings?: boolean;
 };
 
@@ -111,7 +112,7 @@ export async function createMinimalWorkbook(
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <dimension ref="${options.includeTable === true ? tableRef : "A1:A1"}"/>
   <sheetData>
-    ${options.includeTable === true ? tableSheetRows(tableRows, options.styledTableBody === true, options.includeTableTotals === true) : `<row r="1">${options.useSharedStrings === true ? '<c r="A1" s="1" t="s"><v>0</v></c>' : '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>'}</row>`}
+    ${options.includeTable === true ? tableSheetRows(tableRows, options.styledTableBody === true, options.includeTableTotals === true) : `<row r="1">${singleCellXml(options)}</row>`}
   </sheetData>
   ${options.includeConditionalFormatting === true ? '<conditionalFormatting sqref="A1:A10"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting>' : ""}
   ${options.includeDataValidation === true ? '<dataValidations count="1"><dataValidation type="whole" operator="between" allowBlank="1" sqref="B2:B10"><formula1>0</formula1><formula2>100</formula2></dataValidation></dataValidations>' : ""}
@@ -241,6 +242,18 @@ function sheetRelationshipsXml(options: MinimalWorkbookOptions): string {
   ]
     .filter((relationship): relationship is string => relationship !== undefined)
     .join("\n  ");
+}
+
+function singleCellXml(options: MinimalWorkbookOptions): string {
+  if (options.useSharedStrings === true) {
+    return '<c r="A1" s="1" t="s"><v>0</v></c>';
+  }
+
+  if (options.useRichInlineString === true) {
+    return '<c r="A1" s="1" t="inlineStr"><is><r><t>Rich </t></r><r><t>Text</t></r></is></c>';
+  }
+
+  return '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>';
 }
 
 function tableSheetRows(

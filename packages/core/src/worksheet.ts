@@ -550,7 +550,7 @@ function createCellAttributes(
 
 function readCellValue(cellXml: string, sharedStrings: string[]): CellPrimitive {
   if (/t=(["'])inlineStr\1/.test(cellXml)) {
-    return readTagText(cellXml, "t") ?? "";
+    return readTextRuns(cellXml).join("");
   }
 
   if (/t=(["'])s\1/.test(cellXml)) {
@@ -562,6 +562,10 @@ function readCellValue(cellXml: string, sharedStrings: string[]): CellPrimitive 
     return readTagText(cellXml, "v") === "1";
   }
 
+  if (/t=(["'])(?:str|e)\1/.test(cellXml)) {
+    return readTagText(cellXml, "v") ?? "";
+  }
+
   const value = readTagText(cellXml, "v");
   if (value === undefined) {
     return null;
@@ -569,6 +573,26 @@ function readCellValue(cellXml: string, sharedStrings: string[]): CellPrimitive 
 
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : value;
+}
+
+function readTextRuns(xml: string): string[] {
+  return findStartTags(xml, "t").map((tag) => {
+    if (tag.selfClosing) {
+      return "";
+    }
+
+    const close = findTextRunClose(xml, tag.end);
+    return close === -1 ? "" : decodeXml(xml.slice(tag.end, close));
+  });
+}
+
+function findTextRunClose(xml: string, start: number): number {
+  const close = xml.indexOf("</t>", start);
+  if (close !== -1) {
+    return close;
+  }
+
+  return findPrefixedClose(xml, "t", start);
 }
 
 function readTagText(xml: string, localName: string): string | undefined {
