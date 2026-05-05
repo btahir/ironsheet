@@ -9,7 +9,14 @@ type PackageJson = {
 };
 
 const blockedPaths = new Set<string>(["IRONSHEET_SPEC.md"]);
-const optionalChecks = ["format:check", "lint", "typecheck", "test", "build"] as const;
+const optionalChecks = [
+  "format:check",
+  "lint",
+  "typecheck",
+  "test",
+  "runtime:check",
+  "build"
+] as const;
 const forbiddenScriptExtensions = new Set<string>([".js", ".mjs", ".cjs"]);
 
 function run(command: string, args: string[]): void {
