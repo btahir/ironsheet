@@ -20,8 +20,9 @@ export function findStartTags(xml: string, localName: string): XmlTag[] {
       break;
     }
 
-    if (isSpecialTag(xml, start)) {
-      offset = start + 1;
+    const specialTagEnd = findSpecialTagEnd(xml, start);
+    if (specialTagEnd !== undefined) {
+      offset = specialTagEnd + 1;
       continue;
     }
 
@@ -178,6 +179,40 @@ function findNameEnd(source: string): number {
   return offset;
 }
 
-function isSpecialTag(xml: string, start: number): boolean {
-  return xml.startsWith("</", start) || xml.startsWith("<?", start) || xml.startsWith("<!", start);
+function findSpecialTagEnd(xml: string, start: number): number | undefined {
+  if (xml.startsWith("</", start)) {
+    return findTagEnd(xml, start);
+  }
+
+  if (xml.startsWith("<?", start)) {
+    return findDelimitedEnd(xml, "?>", start, "processing instruction");
+  }
+
+  if (xml.startsWith("<!--", start)) {
+    return findDelimitedEnd(xml, "-->", start, "comment");
+  }
+
+  if (xml.startsWith("<![CDATA[", start)) {
+    return findDelimitedEnd(xml, "]]>", start, "CDATA section");
+  }
+
+  if (xml.startsWith("<!", start)) {
+    return findTagEnd(xml, start);
+  }
+
+  return undefined;
+}
+
+function findDelimitedEnd(
+  xml: string,
+  delimiter: string,
+  start: number,
+  description: string
+): number {
+  const end = xml.indexOf(delimiter, start + delimiter.length);
+  if (end === -1) {
+    throw new PackageError(`Unterminated XML ${description} at byte ${start}`);
+  }
+
+  return end + delimiter.length - 1;
 }
