@@ -9,10 +9,10 @@ node_modules/
 # Build/test output.
 dist/
 coverage/
+compat-output/
 .turbo/
 .cache/
 
 # OS/editor noise.
 .DS_Store
 *.swp
-

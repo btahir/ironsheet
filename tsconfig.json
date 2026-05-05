@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
@@ -19,5 +20,5 @@
     "target": "ES2023",
     "types": ["node"]
   },
-  "include": ["scripts/**/*.ts", "tests/**/*.ts", "packages/**/*.ts"]
+  "include": ["packages/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
 }
