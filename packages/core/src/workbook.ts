@@ -7,6 +7,8 @@ const officeDocumentRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
 const worksheetRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+const calcChainRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
 
 export type WorkbookSheet = {
   name: string;
@@ -85,6 +87,7 @@ export class Workbook {
         this.workbookPart,
         `${xml.slice(0, workbookClose)}<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>${xml.slice(workbookClose)}`
       );
+      await this.removeCalcChain();
       return;
     }
 
@@ -99,10 +102,20 @@ export class Workbook {
       `${xml.slice(0, calcPr.start)}${replacement}${xml.slice(calcPr.end)}`
     );
 
-    if (this.pkg.hasPart("xl/calcChain.xml")) {
-      // Deleting parts is intentionally deferred. Preserving the stale calcChain is worse than ideal,
-      // but this vertical slice only mutates workbook metadata and worksheet XML.
+    await this.removeCalcChain();
+  }
+
+  private async removeCalcChain(): Promise<void> {
+    if (!this.pkg.hasPart("xl/calcChain.xml")) {
+      return;
     }
+
+    this.pkg.deletePart("xl/calcChain.xml");
+    await this.pkg.removeContentTypeOverride("xl/calcChain.xml");
+    await this.pkg.removeRelationships(this.workbookPart, (relationship) => {
+      const target = resolveRelationshipTarget(this.workbookPart, relationship.target);
+      return relationship.type === calcChainRelationship || target === "xl/calcChain.xml";
+    });
   }
 }
 

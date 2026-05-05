@@ -1,5 +1,5 @@
 import { PackageError } from "./errors.ts";
-import { findStartTags } from "./xml.ts";
+import { escapeXmlAttribute, findStartTags } from "./xml.ts";
 import {
   type CompressionAdapter,
   parseZip,
@@ -80,6 +80,10 @@ export class OoxmlPackage {
     part.dirtyText = text;
   }
 
+  deletePart(partName: string): boolean {
+    return this.parts.delete(normalizePartName(partName));
+  }
+
   async relationshipsFor(partName: string): Promise<Relationship[]> {
     const normalized = normalizePartName(partName);
     const relationshipPart = relationshipPartName(normalized);
@@ -89,6 +93,61 @@ export class OoxmlPackage {
     }
 
     return parseRelationships(await this.readText(relationshipPart));
+  }
+
+  async removeRelationships(
+    partName: string,
+    predicate: (relationship: Relationship) => boolean
+  ): Promise<number> {
+    const normalized = normalizePartName(partName);
+    const relationshipPart = relationshipPartName(normalized);
+
+    if (!this.hasPart(relationshipPart)) {
+      return 0;
+    }
+
+    const xml = await this.readText(relationshipPart);
+    const removals = findStartTags(xml, "Relationship")
+      .map((tag) => ({
+        tag,
+        relationship: relationshipFromAttributes(tag.attributes)
+      }))
+      .filter(({ relationship }) => predicate(relationship));
+
+    if (removals.length === 0) {
+      return 0;
+    }
+
+    let nextXml = xml;
+    for (const removal of removals.toReversed()) {
+      const end = removal.tag.selfClosing
+        ? removal.tag.end
+        : findRelationshipClose(nextXml, removal.tag.end);
+      nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(end)}`;
+    }
+
+    this.setText(relationshipPart, nextXml);
+    return removals.length;
+  }
+
+  async removeContentTypeOverride(partName: string): Promise<boolean> {
+    if (!this.hasPart("[Content_Types].xml")) {
+      return false;
+    }
+
+    const normalized = `/${normalizePartName(partName)}`;
+    const xml = await this.readText("[Content_Types].xml");
+    const override = findStartTags(xml, "Override").find(
+      (tag) => tag.attributes.PartName === normalized
+    );
+
+    if (override === undefined) {
+      return false;
+    }
+
+    const end = override.selfClosing ? override.end : findOverrideClose(xml, override.end);
+    this.setText("[Content_Types].xml", `${xml.slice(0, override.start)}${xml.slice(end)}`);
+    return true;
   }
 
   async rootRelationships(): Promise<Relationship[]> {
@@ -164,19 +223,9 @@ export class OoxmlPackage {
 }
 
 export function parseRelationships(xml: string): Relationship[] {
-  return findStartTags(xml, "Relationship").map((tag) => {
-    const relationship: Relationship = {
-      id: requireAttribute(tag.attributes, "Id"),
-      type: requireAttribute(tag.attributes, "Type"),
-      target: requireAttribute(tag.attributes, "Target")
-    };
-
-    if (tag.attributes.TargetMode !== undefined) {
-      relationship.targetMode = tag.attributes.TargetMode;
-    }
-
-    return relationship;
-  });
+  return findStartTags(xml, "Relationship").map((tag) =>
+    relationshipFromAttributes(tag.attributes)
+  );
 }
 
 export function normalizePartName(partName: string): string {
@@ -227,4 +276,40 @@ function requireAttribute(attributes: Record<string, string>, name: string): str
   }
 
   return value;
+}
+
+function relationshipFromAttributes(attributes: Record<string, string>): Relationship {
+  const relationship: Relationship = {
+    id: requireAttribute(attributes, "Id"),
+    type: requireAttribute(attributes, "Type"),
+    target: requireAttribute(attributes, "Target")
+  };
+
+  if (attributes.TargetMode !== undefined) {
+    relationship.targetMode = attributes.TargetMode;
+  }
+
+  return relationship;
+}
+
+function findRelationshipClose(xml: string, start: number): number {
+  const close = xml.indexOf("</Relationship>", start);
+  if (close === -1) {
+    throw new PackageError("Relationship element is missing closing tag");
+  }
+
+  return close + "</Relationship>".length;
+}
+
+function findOverrideClose(xml: string, start: number): number {
+  const close = xml.indexOf("</Override>", start);
+  if (close === -1) {
+    throw new PackageError("Content type override is missing closing tag");
+  }
+
+  return close + "</Override>".length;
+}
+
+export function contentTypeOverrideXml(partName: string, contentType: string): string {
+  return `<Override PartName="/${escapeXmlAttribute(normalizePartName(partName))}" ContentType="${escapeXmlAttribute(contentType)}"/>`;
 }

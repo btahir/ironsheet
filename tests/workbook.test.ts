@@ -57,3 +57,25 @@ test("patches formulas and marks workbook for recalculation", async () => {
 
   assert.match(workbookXml, /<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"\/>/);
 });
+
+test("formula patches remove stale calculation chain parts", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeCalcChain: true }));
+
+  await workbook.patchCell("Sheet1", "C3", { formula: "=SUM(A1:B2)" });
+  const outputZip = parseZip(await workbook.write());
+  const names = outputZip.entries.map((entry) => entry.name);
+
+  assert.equal(names.includes("xl/calcChain.xml"), false);
+
+  const relsEntry = outputZip.entries.find((entry) => entry.name === "xl/_rels/workbook.xml.rels");
+  assert.ok(relsEntry);
+  const relsXml = textDecoder.decode(await readEntryData(relsEntry, nodeCompressionAdapter));
+  assert.doesNotMatch(relsXml, /calcChain/);
+
+  const contentTypesEntry = outputZip.entries.find((entry) => entry.name === "[Content_Types].xml");
+  assert.ok(contentTypesEntry);
+  const contentTypesXml = textDecoder.decode(
+    await readEntryData(contentTypesEntry, nodeCompressionAdapter)
+  );
+  assert.doesNotMatch(contentTypesXml, /calcChain/);
+});

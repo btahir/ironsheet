@@ -2,7 +2,13 @@ import { crc32, writeZip, type ZipWriteEntry } from "../../packages/core/src/ind
 
 const textEncoder = new TextEncoder();
 
-export async function createMinimalWorkbook(): Promise<Uint8Array> {
+export type MinimalWorkbookOptions = {
+  includeCalcChain?: boolean;
+};
+
+export async function createMinimalWorkbook(
+  options: MinimalWorkbookOptions = {}
+): Promise<Uint8Array> {
   const entries: ZipWriteEntry[] = [
     textPart(
       "[Content_Types].xml",
@@ -13,6 +19,7 @@ export async function createMinimalWorkbook(): Promise<Uint8Array> {
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${options.includeCalcChain === true ? '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>' : ""}
 </Types>`
     ),
     textPart(
@@ -37,6 +44,7 @@ export async function createMinimalWorkbook(): Promise<Uint8Array> {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  ${options.includeCalcChain === true ? '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/>' : ""}
 </Relationships>`
     ),
     textPart(
@@ -61,6 +69,18 @@ export async function createMinimalWorkbook(): Promise<Uint8Array> {
 </worksheet>`
     )
   ];
+
+  if (options.includeCalcChain === true) {
+    entries.push(
+      textPart(
+        "xl/calcChain.xml",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <c r="A1" i="1"/>
+</calcChain>`
+      )
+    );
+  }
 
   return writeZip(entries);
 }
