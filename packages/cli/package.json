@@ -1,0 +1,16 @@
+{
+  "name": "@ironsheet/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Command-line interface for Ironsheet workbook inspection and edits.",
+  "bin": {
+    "ironsheet": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@ironsheet/core": "0.0.0",
+    "@ironsheet/node": "0.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

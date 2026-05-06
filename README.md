@@ -38,6 +38,7 @@ This repository currently implements the first vertical slice:
 - CLI inspection, read, patch, range patch, table replacement/rename, and package diff commands.
 - Compatibility harness with ZIP integrity, Ironsheet semantic validation, and optional app-level checks.
 - Runtime guard that automatically scans every core source file for Node-only imports and runtime dependencies.
+- Workspace package manifests for core, node, compat, and CLI packages plus CI wiring.
 
 ## Commands
 
@@ -45,6 +46,12 @@ Run the full quality gate:
 
 ```bash
 npm run verify
+```
+
+Run the CI-equivalent local gate:
+
+```bash
+npm run ci
 ```
 
 Inspect a workbook:

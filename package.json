@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Move fast and break no spreadsheets.",
+  "workspaces": ["packages/*"],
   "scripts": {
+    "ci": "npm run verify && npm run compat:corpus",
     "verify": "tsx scripts/verify.ts",
     "commit:safe": "tsx scripts/commit-safe.ts",
     "format": "biome format --write .",

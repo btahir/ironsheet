@@ -1,0 +1,13 @@
+{
+  "name": "@ironsheet/core",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Runtime-neutral OOXML workbook engine for Ironsheet.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  }
+}
