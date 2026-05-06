@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   createCompatibilityReport,
@@ -6,6 +7,7 @@ import {
   parseCompatibilityFixtureManifest,
   requiredValidatorsPassed
 } from "../packages/compat/src/index.ts";
+import { runCompatibilityChecks } from "../scripts/compat.ts";
 
 test("compatibility reports detect failing checks", () => {
   const report = createCompatibilityReport("/tmp/workbook.xlsx", [
@@ -123,4 +125,11 @@ test("required fixture validators must pass", () => {
 
   assert.equal(requiredValidatorsPassed(report, ["file"]), true);
   assert.equal(requiredValidatorsPassed(report, ["file", "zip"]), false);
+});
+
+test("compatibility checks report missing files without throwing", async () => {
+  const report = await runCompatibilityChecks(resolve("compat-output/missing-test-workbook.xlsx"));
+  const fileCheck = report.checks.find((check) => check.validator === "file");
+
+  assert.equal(fileCheck?.status, "fail");
 });

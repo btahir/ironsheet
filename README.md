@@ -165,6 +165,8 @@ Run the fixture corpus compatibility matrix:
 npm run compat:corpus
 ```
 
+This builds ignored generated smoke workbooks, then validates the active corpus fixtures.
+
 Open in Numbers for an interactive smoke check on macOS:
 
 ```bash

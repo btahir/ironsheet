@@ -29,13 +29,15 @@ npm run compat:check -- path/to/workbook.xlsx
 
 This writes a JSON report under `compat-output/`.
 
-Run the fixture corpus:
+Build generated smoke fixtures and run the fixture corpus:
 
 ```bash
 npm run compat:corpus
 ```
 
-The default manifest is `fixtures/corpus/manifest.json`. It intentionally starts with pending fixture slots for the workbook shapes we need to cover. Add cleared workbooks under `fixtures/corpus/workbooks/`, flip the matching manifest entry to `active`, and rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
+The default manifest is `fixtures/corpus/manifest.json`. It contains generated active smoke fixtures plus pending fixture slots for the real-world workbook shapes we still need to cover. `npm run compat:corpus` builds the generated fixtures first, then validates the manifest.
+
+Generated fixtures are ignored under `fixtures/corpus/workbooks/generated/`. Add cleared real workbooks under `fixtures/corpus/workbooks/`, flip the matching manifest entry to `active`, and rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
 
 ## Numbers Smoke Checks
 

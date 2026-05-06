@@ -17,7 +17,8 @@
     "runtime:check": "tsx scripts/runtime-check.ts",
     "cli": "tsx packages/cli/src/cli.ts",
     "compat:check": "tsx scripts/compat.ts",
-    "compat:corpus": "tsx scripts/compat-corpus.ts",
+    "compat:fixtures": "tsx scripts/build-compat-fixtures.ts",
+    "compat:corpus": "npm run compat:fixtures && tsx scripts/compat-corpus.ts",
     "hooks:install": "git config core.hooksPath .githooks"
   },
   "devDependencies": {

@@ -8,6 +8,7 @@ export type MinimalWorkbookOptions = {
   includeDataValidation?: boolean;
   includeDefinedName?: boolean;
   includeDrawing?: boolean;
+  includeFormulaCell?: boolean;
   includeHiddenSheet?: boolean;
   includeHyperlink?: boolean;
   includeMacro?: boolean;
@@ -266,7 +267,21 @@ export async function createMinimalWorkbook(
       textPart(
         "xl/charts/chart1.xml",
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title></c:chart></c:chartSpace>`
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title>
+    <c:plotArea>
+      <c:barChart>
+        <c:ser>
+          <c:idx val="0"/>
+          <c:order val="0"/>
+          <c:cat><c:strRef><c:f>Sheet1!$A$2:$A$3</c:f></c:strRef></c:cat>
+          <c:val><c:numRef><c:f>Sheet1!$B$2:$B$3</c:f></c:numRef></c:val>
+        </c:ser>
+      </c:barChart>
+    </c:plotArea>
+  </c:chart>
+</c:chartSpace>`
       ),
       {
         name: "xl/media/image1.png",
@@ -304,6 +319,10 @@ function sheetRelationshipsXml(options: MinimalWorkbookOptions): string {
 }
 
 function singleCellXml(options: MinimalWorkbookOptions): string {
+  if (options.includeFormulaCell === true) {
+    return '<c r="A1" s="1"><f>1+1</f><v>2</v></c>';
+  }
+
   if (options.useSharedStrings === true) {
     return '<c r="A1" s="1" t="s"><v>0</v></c>';
   }

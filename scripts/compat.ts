@@ -264,7 +264,9 @@ function checkExcel(): CompatibilityCheck {
 }
 
 export async function runCompatibilityChecks(workbookPath: string): Promise<CompatibilityReport> {
-  const absolutePath = realpathSync(workbookPath);
+  const absolutePath = existsSync(workbookPath)
+    ? realpathSync(workbookPath)
+    : resolve(workbookPath);
   const checks = [
     checkFile(absolutePath),
     checkZip(absolutePath),

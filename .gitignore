@@ -10,6 +10,7 @@ node_modules/
 dist/
 coverage/
 compat-output/
+fixtures/corpus/workbooks/generated/
 .turbo/
 .cache/
 

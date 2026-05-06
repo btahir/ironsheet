@@ -2,6 +2,54 @@
   "schemaVersion": 1,
   "fixtures": [
     {
+      "id": "generated-styled-table-report",
+      "path": "workbooks/generated/styled-table-report.xlsx",
+      "description": "Generated smoke workbook for styled table reports with totals rows, validations, defined names, conditional formatting, and body style propagation.",
+      "features": [
+        "tables",
+        "formulas",
+        "styles",
+        "filters",
+        "defined-names",
+        "data-validation",
+        "conditional-formatting"
+      ],
+      "status": "active",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "generated-macro-enabled-model",
+      "path": "workbooks/generated/macro-enabled-model.xlsm",
+      "description": "Generated smoke workbook for macro-enabled package preservation, shared strings, defined names, and calc-chain invalidation behavior.",
+      "features": ["macros", "formulas", "defined-names", "shared-strings", "calc-chain"],
+      "status": "active",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "generated-chart-dashboard",
+      "path": "workbooks/generated/chart-dashboard.xlsx",
+      "description": "Generated smoke workbook for drawing, chart, image, hidden-sheet, table, and defined-name preservation.",
+      "features": ["charts", "drawings", "images", "hidden-sheets", "tables", "defined-names"],
+      "status": "active",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "generated-pivot-cache-workbook",
+      "path": "workbooks/generated/pivot-cache-workbook.xlsx",
+      "description": "Generated smoke workbook for pivot table relationships, pivot cache definitions, worksheet cache sources, tables, and defined names.",
+      "features": ["pivot-tables", "pivot-caches", "tables", "defined-names"],
+      "status": "active",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "generated-large-sheet-export",
+      "path": "workbooks/generated/large-sheet-export.xlsx",
+      "description": "Generated smoke workbook for larger worksheet exports and streaming row traversal.",
+      "features": ["large-worksheets", "streaming", "styles", "tables"],
+      "status": "active",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
       "id": "styled-table-report",
       "path": "workbooks/styled-table-report.xlsx",
       "description": "Styled operational report with table formulas, totals rows, frozen panes, filters, and dense style reuse.",
