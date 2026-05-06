@@ -63,7 +63,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateWorkbookSheets(pkg, issues);
   await validateWorksheetRelationshipIds(pkg, issues, parts);
   await validateDrawingRelationshipIds(pkg, issues, parts);
-  await validateDefinedNames(pkg, issues);
+  await validateDefinedNames(pkg, issues, parts);
   await validateWorksheetFormulas(pkg, issues, parts);
   await validateWorksheetDimensions(pkg, issues, parts);
   await validateStyleReferences(pkg, issues, parts);
@@ -415,7 +415,11 @@ async function validateCalcChain(
   }
 }
 
-async function validateDefinedNames(pkg: OoxmlPackage, issues: ValidationIssue[]): Promise<void> {
+async function validateDefinedNames(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
   if (!pkg.hasPart("xl/workbook.xml")) {
     return;
   }
@@ -423,6 +427,7 @@ async function validateDefinedNames(pkg: OoxmlPackage, issues: ValidationIssue[]
   const workbookXml = await pkg.readText("xl/workbook.xml");
   const sheets = findStartTags(workbookXml, "sheet");
   const sheetNames = workbookSheetNames(workbookXml);
+  const tableNames = await workbookTableNames(pkg, parts);
   const definedNameScopes = new Set<string>();
 
   for (const definedName of parseDefinedNames(workbookXml)) {
@@ -457,6 +462,30 @@ async function validateDefinedNames(pkg: OoxmlPackage, issues: ValidationIssue[]
           severity: "warning",
           code: "DEFINED_NAME_SHEET_MISSING",
           message: `Defined name ${definedName.name} references missing sheet ${sheetName}`,
+          part: "xl/workbook.xml",
+          target: definedName.name
+        });
+      }
+    }
+
+    for (const reference of parseFormulaReferences(definedName.text)) {
+      if (!formulaReferenceWithinExcelBounds(reference)) {
+        issues.push({
+          severity: "error",
+          code: "DEFINED_NAME_REFERENCE_OUT_OF_BOUNDS",
+          message: `Defined name ${definedName.name} references ${reference.ref}, which is outside the Excel worksheet grid`,
+          part: "xl/workbook.xml",
+          target: definedName.name
+        });
+      }
+    }
+
+    for (const reference of parseFormulaStructuredReferences(definedName.text)) {
+      if (!tableNames.has(reference.tableName)) {
+        issues.push({
+          severity: "warning",
+          code: "DEFINED_NAME_TABLE_MISSING",
+          message: `Defined name ${definedName.name} references missing table ${reference.tableName}`,
           part: "xl/workbook.xml",
           target: definedName.name
         });

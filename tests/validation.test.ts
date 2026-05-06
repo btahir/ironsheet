@@ -283,6 +283,32 @@ test("validation reports duplicate defined names in the same scope", async () =>
   assert.equal(report.issues[0]?.target, "RevenueRange");
 });
 
+test("validation reports defined names with references outside the Excel grid", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  pkg.setText("xl/workbook.xml", workbookXml.replace("Sheet1!$A$1:$B$2", "Sheet1!$XFE$1"));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "DEFINED_NAME_REFERENCE_OUT_OF_BOUNDS");
+  assert.equal(report.issues[0]?.target, "RevenueRange");
+});
+
+test("validation reports defined names that reference missing tables", async () => {
+  const pkg = await openPackage(
+    await createMinimalWorkbook({ includeDefinedName: true, includeTable: true })
+  );
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  pkg.setText("xl/workbook.xml", workbookXml.replace("Sheet1!$A$1:$B$2", "MissingTable[Amount]"));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "DEFINED_NAME_TABLE_MISSING");
+  assert.equal(report.issues[0]?.target, "RevenueRange");
+});
+
 test("validation reports formulas that reference missing sheets", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
