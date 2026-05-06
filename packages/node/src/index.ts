@@ -9,7 +9,7 @@ import {
   type ChartFormulaRetarget,
   type PivotCacheSourceRetarget,
   type WorkbookCellStyleInput
-} from "../../core/src/index.ts";
+} from "@ironsheet/core";
 
 export const nodeCompressionAdapter: CompressionAdapter = {
   inflateRaw(data) {

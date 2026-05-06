@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import process from "node:process";
 import { readFile } from "node:fs/promises";
-import { diffZipPackages } from "../../core/src/index.ts";
+import { diffZipPackages } from "@ironsheet/core";
 import {
   appendWorkbookRows,
   appendWorkbookTableColumn,
@@ -21,13 +21,13 @@ import {
   retargetWorkbookPivotCacheSourcesFile,
   styleWorkbookCell,
   validateWorkbookFile
-} from "../../node/src/index.ts";
+} from "@ironsheet/node";
 import type {
   CellInput,
   ChartFormulaRetarget,
   PivotCacheSourceRetarget,
   WorkbookCellStyleInput
-} from "../../core/src/index.ts";
+} from "@ironsheet/core";
 
 type Command =
   | "inspect"

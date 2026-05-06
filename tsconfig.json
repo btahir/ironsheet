@@ -3,6 +3,7 @@
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
     "exactOptionalPropertyTypes": true,
+    "baseUrl": ".",
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "lib": ["ES2023"],
@@ -14,6 +15,11 @@
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "paths": {
+      "@ironsheet/compat": ["packages/compat/src/index.ts"],
+      "@ironsheet/core": ["packages/core/src/index.ts"],
+      "@ironsheet/node": ["packages/node/src/index.ts"]
+    },
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
