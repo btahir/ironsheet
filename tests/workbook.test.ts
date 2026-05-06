@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseZip, readEntryData, Workbook } from "../packages/core/src/index.ts";
+import {
+  imageExtentFromPixels,
+  parseZip,
+  pixelsToEmu,
+  readEntryData,
+  Workbook
+} from "../packages/core/src/index.ts";
 import { openPackage, openWorkbook, nodeCompressionAdapter } from "../packages/node/src/index.ts";
 import { createMinimalWorkbook } from "./helpers/minimal-xlsx.ts";
 
@@ -180,6 +186,11 @@ test("lists workbook images and replaces existing image bytes", async () => {
     drawingRelationshipId: "rIdDrawing1",
     imageRelationshipId: "rIdImage1",
     target: "../media/image1.png",
+    anchor: {
+      kind: "twoCell" as const,
+      from: { column: 3, row: 1 },
+      to: { column: 5, row: 8 }
+    },
     imagePartName: "xl/media/image1.png"
   };
 
@@ -228,7 +239,15 @@ test("inserts a new image into a sheet without an existing drawing", async () =>
     drawingRelationshipId: "rId1",
     imageRelationshipId: "rId1",
     target: "../media/image1.png",
-    imagePartName: "xl/media/image1.png"
+    anchor: {
+      kind: "oneCell",
+      from: { column: 2, row: 3, columnOffset: 10, rowOffset: 20 },
+      ext: { cx: 1000, cy: 2000 }
+    },
+    description: "Logo",
+    imagePartName: "xl/media/image1.png",
+    name: "Logo",
+    pictureId: 1
   });
   assert.deepEqual(Array.from(await workbook.pkg.readPart("xl/media/image1.png")), [...imageData]);
   assert.match(await workbook.pkg.readText("xl/worksheets/sheet1.xml"), /<drawing r:id="rId1"\/>/);
@@ -283,6 +302,12 @@ test("image insertion rejects bytes that do not match the requested extension", 
     }),
     /expects PNG bytes/
   );
+});
+
+test("converts image pixel dimensions to OOXML EMUs", () => {
+  assert.equal(pixelsToEmu(96), 914400);
+  assert.deepEqual(imageExtentFromPixels(640, 360), { cx: 6096000, cy: 3429000 });
+  assert.throws(() => imageExtentFromPixels(0, 360), /positive integer/);
 });
 
 test("renders template patches across cells ranges tables and images", async () => {
@@ -733,6 +758,27 @@ test("lists workbook chart formulas", async () => {
   ]);
 });
 
+test("lists workbook chart formula caches", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDrawing: true }));
+  const chartXml = await pkg.readText("xl/charts/chart1.xml");
+  pkg.setText(
+    "xl/charts/chart1.xml",
+    chartXml.replace(
+      "<c:numRef><c:f>Sheet1!$B$2:$B$3</c:f></c:numRef>",
+      '<c:numRef><c:f>Sheet1!$B$2:$B$3</c:f><c:numCache><c:ptCount val="2"/></c:numCache></c:numRef>'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  assert.deepEqual(await workbook.charts(), [
+    {
+      partName: "xl/charts/chart1.xml",
+      cachedFormulaCount: 1,
+      formulas: ["Sheet1!$A$2:$A$3", "Sheet1!$B$2:$B$3"]
+    }
+  ]);
+});
+
 test("retargets pivot cache worksheet sources", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includePivotTable: true }));
   const workbook = await Workbook.fromPackage(pkg);
@@ -760,6 +806,31 @@ test("lists workbook pivot cache worksheet sources", async () => {
     {
       partName: "xl/pivotCache/pivotCacheDefinition1.xml",
       ref: "A1:B2",
+      sheet: "Sheet1"
+    }
+  ]);
+});
+
+test("lists workbook pivot cache refresh metadata", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includePivotTable: true }));
+  const pivotXml = await pkg.readText("xl/pivotCache/pivotCacheDefinition1.xml");
+  pkg.setText(
+    "xl/pivotCache/pivotCacheDefinition1.xml",
+    pivotXml.replace(
+      '<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      '<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" refreshOnLoad="0" refreshedVersion="8" recordCount="2" saveData="1">'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  assert.deepEqual(await workbook.pivotCacheSources(), [
+    {
+      partName: "xl/pivotCache/pivotCacheDefinition1.xml",
+      ref: "A1:B2",
+      refreshOnLoad: false,
+      refreshedVersion: "8",
+      recordCount: "2",
+      saveData: true,
       sheet: "Sheet1"
     }
   ]);
@@ -1761,9 +1832,26 @@ test("data edits report defined name, chart, and table impact diagnostics", asyn
 });
 
 test("data edit diagnostics identify directly affected chart and pivot sources", async () => {
-  const workbook = await openWorkbook(
+  const pkg = await openPackage(
     await createMinimalWorkbook({ includeDrawing: true, includePivotTable: true })
   );
+  const chartXml = await pkg.readText("xl/charts/chart1.xml");
+  pkg.setText(
+    "xl/charts/chart1.xml",
+    chartXml.replace(
+      "<c:numRef><c:f>Sheet1!$B$2:$B$3</c:f></c:numRef>",
+      '<c:numRef><c:f>Sheet1!$B$2:$B$3</c:f><c:numCache><c:ptCount val="2"/></c:numCache></c:numRef>'
+    )
+  );
+  const pivotXml = await pkg.readText("xl/pivotCache/pivotCacheDefinition1.xml");
+  pkg.setText(
+    "xl/pivotCache/pivotCacheDefinition1.xml",
+    pivotXml.replace(
+      '<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      '<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" refreshOnLoad="0" recordCount="2" saveData="1">'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
 
   await workbook.patchCell("Sheet1", "B2", "changed");
   const diagnostics = workbook.diagnostics();
@@ -1774,8 +1862,12 @@ test("data edit diagnostics identify directly affected chart and pivot sources",
 
   assert.equal(chart?.part, "xl/charts/chart1.xml");
   assert.match(chart?.message ?? "", /Sheet1!\$B\$2:\$B\$3/);
+  assert.match(chart?.message ?? "", /cached chart data/);
   assert.equal(pivot?.part, "xl/pivotCache/pivotCacheDefinition1.xml");
   assert.match(pivot?.message ?? "", /Sheet1!A1:B2/);
+  assert.match(pivot?.message ?? "", /refreshOnLoad is not enabled/);
+  assert.match(pivot?.message ?? "", /cached records are saved/);
+  assert.match(pivot?.message ?? "", /recordCount=2/);
 });
 
 test("table replacement reports dependent workbook structures without table resize warning", async () => {

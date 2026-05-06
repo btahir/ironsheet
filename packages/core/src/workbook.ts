@@ -34,6 +34,7 @@ import {
   imageContentTypeForExtension,
   imageExtensionForBytes,
   imageRelationship,
+  listDrawingImageReferences,
   nextDrawingPictureId,
   normalizeImageExtension,
   type WorkbookImage,
@@ -734,13 +735,8 @@ export class Workbook {
           ])
         );
 
-        for (const blip of findStartTags(drawingXml, "blip")) {
-          const imageRelationshipId = blip.attributes["r:embed"] ?? blip.attributes["r:link"];
-          if (imageRelationshipId === undefined) {
-            continue;
-          }
-
-          const image = drawingRelationships.get(imageRelationshipId);
+        for (const reference of listDrawingImageReferences(drawingXml)) {
+          const image = drawingRelationships.get(reference.imageRelationshipId);
           if (image?.type !== imageRelationship) {
             continue;
           }
@@ -754,9 +750,13 @@ export class Workbook {
             sheetPartName: sheet.partName,
             drawingPartName,
             drawingRelationshipId,
-            imageRelationshipId,
+            imageRelationshipId: reference.imageRelationshipId,
             target: image.target,
+            ...(reference.anchor === undefined ? {} : { anchor: reference.anchor }),
             ...(imagePartName === undefined ? {} : { imagePartName }),
+            ...(reference.description === undefined ? {} : { description: reference.description }),
+            ...(reference.name === undefined ? {} : { name: reference.name }),
+            ...(reference.pictureId === undefined ? {} : { pictureId: reference.pictureId }),
             ...(image.targetMode === undefined ? {} : { targetMode: image.targetMode })
           });
         }
@@ -829,6 +829,15 @@ export class Workbook {
 
     const drawingXml = await this.pkg.readText(drawing.drawingPartName);
     const pictureId = nextDrawingPictureId(drawingXml);
+    const anchor =
+      options.anchor ??
+      ({
+        kind: "oneCell",
+        from: { column: 0, row: 0 },
+        ext: { cx: 914400, cy: 914400 }
+      } satisfies WorkbookImageAnchor);
+    const name = options.name ?? `Picture ${pictureId}`;
+    const description = options.description ?? name;
     this.pkg.setText(
       drawing.drawingPartName,
       appendDrawingAnchorXml(
@@ -844,7 +853,11 @@ export class Workbook {
       drawingRelationshipId: drawing.relationshipId,
       imageRelationshipId,
       target,
-      imagePartName
+      anchor,
+      description,
+      imagePartName,
+      name,
+      pictureId
     };
   }
 
@@ -1801,7 +1814,7 @@ export class Workbook {
           this.addDiagnostic({
             severity: "warning",
             code: "CHARTS_MAY_NEED_REFRESH",
-            message: `Chart ${chart.partName} references edited range(s): ${chart.formulas.join(", ")}`,
+            message: `Chart ${chart.partName} references edited range(s): ${chart.formulas.join(", ")}${chartCacheHint(chart)}`,
             part: chart.partName
           });
         }
@@ -1832,7 +1845,7 @@ export class Workbook {
           this.addDiagnostic({
             severity: "warning",
             code: "PIVOT_TABLES_MAY_NEED_REFRESH",
-            message: `Pivot cache ${source.partName} references edited source ${pivotSourceLabel(source)}`,
+            message: `Pivot cache ${source.partName} references edited source ${pivotSourceLabel(source)}${pivotCacheHint(source)}`,
             part: source.partName
           });
         }
@@ -1901,15 +1914,21 @@ function chartFormulasAffectedByRanges(
   sheetParts: Map<string, string>,
   editedSheetPartName: string,
   affectedRanges: CellRange[]
-): Array<{ partName: string; formulas: string[] }> {
-  const affected: Array<{ partName: string; formulas: string[] }> = [];
+): Array<{ cachedFormulaCount?: number; formulas: string[]; partName: string }> {
+  const affected: Array<{ cachedFormulaCount?: number; formulas: string[]; partName: string }> = [];
 
   for (const chart of charts) {
     const formulas = chart.formulas.filter((formula) =>
       formulaReferencesRanges(formula, sheetParts, editedSheetPartName, affectedRanges)
     );
     if (formulas.length > 0) {
-      affected.push({ partName: chart.partName, formulas });
+      affected.push({
+        partName: chart.partName,
+        ...(chart.cachedFormulaCount === undefined
+          ? {}
+          : { cachedFormulaCount: chart.cachedFormulaCount }),
+        formulas
+      });
     }
   }
 
@@ -1968,6 +1987,28 @@ function pivotCacheSourcesAffectedByRanges(
 
 function pivotSourceLabel(source: WorkbookPivotCacheSource): string {
   return [source.sheet, source.ref, source.name].filter((value) => value !== undefined).join("!");
+}
+
+function chartCacheHint(chart: { cachedFormulaCount?: number }): string {
+  if (chart.cachedFormulaCount === undefined) {
+    return "";
+  }
+
+  return `; ${chart.cachedFormulaCount} cached chart data cache(s) may be stale until Excel recalculates`;
+}
+
+function pivotCacheHint(source: WorkbookPivotCacheSource): string {
+  const hints = [
+    source.refreshOnLoad === true ? undefined : "refreshOnLoad is not enabled",
+    source.saveData === true ? "cached records are saved and may be stale" : undefined,
+    source.recordCount === undefined ? undefined : `recordCount=${source.recordCount}`
+  ].filter((hint): hint is string => hint !== undefined);
+
+  if (hints.length === 0) {
+    return "";
+  }
+
+  return ` (${hints.join("; ")})`;
 }
 
 function assertValuesFitNamedRange(range: WorkbookNamedRange, values: CellInput[][]): void {

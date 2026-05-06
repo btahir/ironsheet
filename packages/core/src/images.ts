@@ -1,7 +1,9 @@
 import { WorkbookError } from "./errors.ts";
 import {
+  decodeXml,
   escapeXmlAttribute,
   findElementCloseStart,
+  findElementEnd,
   findFirstStartTag,
   findStartTags,
   type XmlTag
@@ -64,8 +66,20 @@ export type WorkbookImage = {
   drawingRelationshipId: string;
   imageRelationshipId: string;
   target: string;
+  anchor?: WorkbookImageAnchor;
   imagePartName?: string;
+  name?: string;
+  pictureId?: number;
+  description?: string;
   targetMode?: string;
+};
+
+export type DrawingImageReference = {
+  imageRelationshipId: string;
+  anchor?: WorkbookImageAnchor;
+  description?: string;
+  name?: string;
+  pictureId?: number;
 };
 
 const defaultImageExtent: WorkbookImageExtent = { cx: 914400, cy: 914400 };
@@ -163,6 +177,17 @@ export function appendDrawingAnchorXml(drawingXml: string, anchorXml: string): s
 ${namespaced.slice(insertOffset)}`;
 }
 
+export function listDrawingImageReferences(drawingXml: string): DrawingImageReference[] {
+  return [
+    ...findStartTags(drawingXml, "oneCellAnchor").flatMap((anchor) =>
+      imageReferencesFromAnchor(drawingXml, anchor, "oneCell")
+    ),
+    ...findStartTags(drawingXml, "twoCellAnchor").flatMap((anchor) =>
+      imageReferencesFromAnchor(drawingXml, anchor, "twoCell")
+    )
+  ];
+}
+
 export function createPictureAnchorXml(
   relationshipId: string,
   pictureId: number,
@@ -194,6 +219,17 @@ export function createPictureAnchorXml(
     ${pictureXml}
     <xdr:clientData/>
   </xdr:twoCellAnchor>`;
+}
+
+export function imageExtentFromPixels(width: number, height: number): WorkbookImageExtent {
+  assertPositiveInteger(width, "image width");
+  assertPositiveInteger(height, "image height");
+  return { cx: pixelsToEmu(width), cy: pixelsToEmu(height) };
+}
+
+export function pixelsToEmu(pixels: number): number {
+  assertPositiveInteger(pixels, "pixel value");
+  return pixels * 9525;
 }
 
 export function nextDrawingPictureId(drawingXml: string): number {
@@ -229,6 +265,135 @@ function createPictureXml(
 
 function markerXml(name: "from" | "to", marker: WorkbookImageAnchorMarker): string {
   return `<xdr:${name}><xdr:col>${marker.column}</xdr:col><xdr:colOff>${marker.columnOffset ?? 0}</xdr:colOff><xdr:row>${marker.row}</xdr:row><xdr:rowOff>${marker.rowOffset ?? 0}</xdr:rowOff></xdr:${name}>`;
+}
+
+function imageReferencesFromAnchor(
+  drawingXml: string,
+  anchor: XmlTag,
+  kind: "oneCell" | "twoCell"
+): DrawingImageReference[] {
+  if (anchor.selfClosing) {
+    return [];
+  }
+
+  const raw = drawingXml.slice(anchor.start, findElementEnd(drawingXml, anchor));
+  const parsedAnchor = parseAnchor(raw, kind, anchor);
+  const picture = parsePictureMetadata(raw);
+
+  return findStartTags(raw, "blip")
+    .map((blip) => blip.attributes["r:embed"] ?? blip.attributes["r:link"])
+    .filter((relationshipId): relationshipId is string => relationshipId !== undefined)
+    .map((imageRelationshipId) => ({
+      imageRelationshipId,
+      ...(parsedAnchor === undefined ? {} : { anchor: parsedAnchor }),
+      ...(picture.description === undefined ? {} : { description: picture.description }),
+      ...(picture.name === undefined ? {} : { name: picture.name }),
+      ...(picture.pictureId === undefined ? {} : { pictureId: picture.pictureId })
+    }));
+}
+
+function parseAnchor(
+  raw: string,
+  kind: "oneCell" | "twoCell",
+  anchor: XmlTag
+): WorkbookImageAnchor | undefined {
+  const from = parseMarker(raw, "from");
+  if (from === undefined) {
+    return undefined;
+  }
+
+  if (kind === "oneCell") {
+    const ext = findFirstStartTag(raw, "ext");
+    const cx = numberAttribute(ext, "cx");
+    const cy = numberAttribute(ext, "cy");
+    if (cx === undefined || cy === undefined) {
+      return undefined;
+    }
+
+    return { kind, from, ext: { cx, cy } };
+  }
+
+  const to = parseMarker(raw, "to");
+  if (to === undefined) {
+    return undefined;
+  }
+
+  const editAs = anchor.attributes.editAs;
+  return {
+    kind,
+    from,
+    to,
+    ...(editAs === "twoCell" || editAs === "oneCell" || editAs === "absolute" ? { editAs } : {})
+  };
+}
+
+function parseMarker(raw: string, localName: "from" | "to"): WorkbookImageAnchorMarker | undefined {
+  const marker = findFirstStartTag(raw, localName);
+  if (marker === undefined || marker.selfClosing) {
+    return undefined;
+  }
+
+  const markerXmlText = raw.slice(marker.start, findElementEnd(raw, marker));
+  const column = numberText(markerXmlText, "col");
+  const row = numberText(markerXmlText, "row");
+  if (column === undefined || row === undefined) {
+    return undefined;
+  }
+
+  const columnOffset = numberText(markerXmlText, "colOff");
+  const rowOffset = numberText(markerXmlText, "rowOff");
+  return {
+    column,
+    row,
+    ...(columnOffset === undefined ? {} : { columnOffset }),
+    ...(rowOffset === undefined ? {} : { rowOffset })
+  };
+}
+
+function parsePictureMetadata(raw: string): {
+  description?: string;
+  name?: string;
+  pictureId?: number;
+} {
+  const properties = findFirstStartTag(raw, "cNvPr");
+  if (properties === undefined) {
+    return {};
+  }
+
+  const pictureId = numberAttribute(properties, "id");
+  return {
+    ...(properties.attributes.descr === undefined
+      ? {}
+      : { description: properties.attributes.descr }),
+    ...(properties.attributes.name === undefined ? {} : { name: properties.attributes.name }),
+    ...(pictureId === undefined ? {} : { pictureId })
+  };
+}
+
+function numberText(raw: string, localName: string): number | undefined {
+  const tag = findFirstStartTag(raw, localName);
+  if (tag === undefined || tag.selfClosing) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(decodeXml(raw.slice(tag.end, findElementCloseStart(raw, tag))), 10);
+  return Number.isSafeInteger(value) ? value : undefined;
+}
+
+function numberAttribute(tag: XmlTag | undefined, name: string): number | undefined {
+  const rawValue = tag?.attributes[name];
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(rawValue, 10);
+  return Number.isSafeInteger(value) ? value : undefined;
+}
+
+function assertPositiveInteger(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new WorkbookError(`${label} must be a positive integer`);
+  }
 }
 
 function ensureDrawingNamespaces(xml: string, drawing: XmlTag): string {

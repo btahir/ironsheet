@@ -41,6 +41,12 @@ Build generated smoke fixtures and run the fixture corpus:
 npm run compat:corpus
 ```
 
+Build demo/regression starter templates:
+
+```bash
+npm run templates:build
+```
+
 Run the release-style strict corpus gate:
 
 ```bash
@@ -52,6 +58,8 @@ Strict mode fails if any manifest fixture is still skipped. Use it before releas
 The default manifest is `fixtures/corpus/manifest.json`. It contains generated active smoke fixtures plus pending fixture slots for the real-world workbook shapes we still need to cover. `npm run compat:corpus` builds the generated fixtures first, then validates the manifest.
 
 Generated fixtures are ignored under `fixtures/corpus/workbooks/generated/`. Add cleared real workbooks under `fixtures/corpus/workbooks/`, flip the matching manifest entry to `active`, and rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
+
+Starter templates are ignored under `templates/generated/`. They are useful for demos and quick smoke checks, but the release bar remains real Excel-authored files in the corpus.
 
 See `fixtures/corpus/workbooks/README.md` for the intake checklist.
 
@@ -95,7 +103,7 @@ Future options:
 
 Open XML SDK validation can catch schema-level issues. The compatibility runner now looks for `tools/openxml-validator/OpenXmlValidator.csproj`; when both that project and the .NET SDK are available, set `IRONSHEET_RUN_OPENXML_SDK=1` to run it against a workbook.
 
-Until the harness is added, the Open XML SDK check reports a manual capability state instead of blocking local CI.
+When the .NET SDK is unavailable, the Open XML SDK check is skipped instead of blocking local CI.
 
 ## Release Preflight
 

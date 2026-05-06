@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "id": "styled-report-template",
+      "path": "generated/styled-report-template.xlsx",
+      "title": "Styled Report Template",
+      "description": "Dense operational report template with styled table rows, totals, defined names, validation, and conditional formatting.",
+      "patchExample": {
+        "tables": [
+          {
+            "tableName": "RevenueTable",
+            "rows": [["North", 42000], ["South", 31500], ["West", 38800]]
+          }
+        ],
+        "names": [
+          {
+            "name": "RevenueRange",
+            "values": [["Region", "Amount"], ["North", 42000]]
+          }
+        ]
+      }
+    },
+    {
+      "id": "macro-model-template",
+      "path": "generated/macro-model-template.xlsm",
+      "title": "Macro Model Template",
+      "description": "Macro-enabled workbook template for testing safe edits while preserving VBA project bytes and recalculation metadata.",
+      "patchExample": {
+        "cells": [
+          {
+            "sheetName": "Sheet1",
+            "address": "A1",
+            "value": {
+              "formula": "SUM(1,2)",
+              "result": 3
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dashboard-template",
+      "path": "generated/dashboard-template.xlsx",
+      "title": "Dashboard Template",
+      "description": "Dashboard workbook template with chart, drawing, image, hidden sheet, table, and defined-name anchors.",
+      "patchExample": {
+        "tables": [
+          {
+            "tableName": "RevenueTable",
+            "rows": [["Plan", 500], ["Actual", 625]]
+          }
+        ],
+        "images": [
+          {
+            "imagePartName": "xl/media/image1.png",
+            "path": "logo.png"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pivot-source-template",
+      "path": "generated/pivot-source-template.xlsx",
+      "title": "Pivot Source Template",
+      "description": "Pivot-source workbook template with pivot cache source metadata, table source data, and defined names.",
+      "patchExample": {
+        "tables": [
+          {
+            "tableName": "RevenueTable",
+            "rows": [["Hardware", 400], ["Services", 700], ["Support", 300]]
+          }
+        ]
+      }
+    },
+    {
+      "id": "large-export-template",
+      "path": "generated/large-export-template.xlsx",
+      "title": "Large Export Template",
+      "description": "Larger worksheet template for streaming and memory regression workflows.",
+      "patchExample": {
+        "ranges": [
+          {
+            "sheetName": "Sheet1",
+            "startAddress": "A2",
+            "values": [["Row 1", 1], ["Row 2", 2]]
+          }
+        ]
+      }
+    }
+  ]
+}

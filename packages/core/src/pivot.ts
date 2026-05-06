@@ -1,5 +1,5 @@
 import type { OoxmlPackage } from "./opc.ts";
-import { escapeXmlAttribute, findStartTags } from "./xml.ts";
+import { escapeXmlAttribute, findFirstStartTag, findStartTags } from "./xml.ts";
 
 export type PivotCacheSourceRetarget = {
   from?: {
@@ -16,6 +16,10 @@ export type WorkbookPivotCacheSource = {
   partName: string;
   name?: string;
   ref?: string;
+  refreshOnLoad?: boolean;
+  refreshedVersion?: string;
+  recordCount?: string;
+  saveData?: boolean;
   sheet?: string;
 };
 
@@ -26,9 +30,12 @@ export async function listWorkbookPivotCacheSources(
 
   for (const partName of pivotCacheDefinitionParts(pkg)) {
     const xml = await pkg.readText(partName);
+    const root = findFirstStartTag(xml, "pivotCacheDefinition");
+    const cacheMetadata = pivotCacheMetadata(root);
     for (const source of findStartTags(xml, "worksheetSource")) {
       sources.push({
         partName,
+        ...cacheMetadata,
         ...(source.attributes.name === undefined ? {} : { name: source.attributes.name }),
         ...(source.attributes.ref === undefined ? {} : { ref: source.attributes.ref }),
         ...(source.attributes.sheet === undefined ? {} : { sheet: source.attributes.sheet })
@@ -37,6 +44,36 @@ export async function listWorkbookPivotCacheSources(
   }
 
   return sources;
+}
+
+function pivotCacheMetadata(
+  root: ReturnType<typeof findFirstStartTag>
+): Pick<
+  WorkbookPivotCacheSource,
+  "refreshOnLoad" | "refreshedVersion" | "recordCount" | "saveData"
+> {
+  if (root === undefined) {
+    return {};
+  }
+
+  return {
+    ...(root.attributes.refreshOnLoad === undefined
+      ? {}
+      : { refreshOnLoad: xmlBoolean(root.attributes.refreshOnLoad) }),
+    ...(root.attributes.refreshedVersion === undefined
+      ? {}
+      : { refreshedVersion: root.attributes.refreshedVersion }),
+    ...(root.attributes.recordCount === undefined
+      ? {}
+      : { recordCount: root.attributes.recordCount }),
+    ...(root.attributes.saveData === undefined
+      ? {}
+      : { saveData: xmlBoolean(root.attributes.saveData) })
+  };
+}
+
+function xmlBoolean(value: string): boolean {
+  return value === "1" || value === "true";
 }
 
 export async function retargetWorkbookPivotCacheSources(

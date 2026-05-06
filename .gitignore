@@ -11,6 +11,7 @@ dist/
 coverage/
 compat-output/
 fixtures/corpus/workbooks/generated/
+templates/generated/
 .turbo/
 .cache/
 

@@ -8,6 +8,7 @@ export type ChartFormulaRetarget = {
 
 export type WorkbookChart = {
   partName: string;
+  cachedFormulaCount?: number;
   formulas: string[];
 };
 
@@ -15,9 +16,12 @@ export async function listWorkbookCharts(pkg: OoxmlPackage): Promise<WorkbookCha
   const charts: WorkbookChart[] = [];
 
   for (const partName of pkg.listParts().filter((part) => /^xl\/charts\/.+\.xml$/.test(part))) {
+    const xml = await pkg.readText(partName);
+    const cachedFormulaCount = chartCacheCount(xml);
     charts.push({
       partName,
-      formulas: chartFormulaTexts(await pkg.readText(partName))
+      ...(cachedFormulaCount === 0 ? {} : { cachedFormulaCount }),
+      formulas: chartFormulaTexts(xml)
     });
   }
 
@@ -80,4 +84,8 @@ function chartFormulaTexts(xml: string): string[] {
   return findStartTags(xml, "f")
     .filter((formula) => !formula.selfClosing)
     .map((formula) => decodeXml(xml.slice(formula.end, findElementCloseStart(xml, formula))));
+}
+
+function chartCacheCount(xml: string): number {
+  return findStartTags(xml, "numCache").length + findStartTags(xml, "strCache").length;
 }

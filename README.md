@@ -199,6 +199,12 @@ Run the CI-equivalent local gate:
 npm run ci
 ```
 
+Build local demo/regression workbook templates:
+
+```bash
+npm run templates:build
+```
+
 Build publishable JS and declaration output under each package `dist/` directory:
 
 ```bash

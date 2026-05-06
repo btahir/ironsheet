@@ -24,6 +24,7 @@
     "compat:fixtures": "tsx scripts/build-compat-fixtures.ts",
     "compat:corpus": "npm run compat:fixtures && tsx scripts/compat-corpus.ts",
     "compat:corpus:strict": "npm run compat:fixtures && tsx scripts/compat-corpus.ts --strict",
+    "templates:build": "tsx scripts/build-templates.ts",
     "hooks:install": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
