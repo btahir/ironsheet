@@ -141,6 +141,8 @@ export async function writeZip(
   entries: ZipWriteEntry[],
   compression?: CompressionAdapter
 ): Promise<Uint8Array> {
+  assertSafeEntryNames(entries.map((entry) => entry.name));
+
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
   let offset = 0;
@@ -236,19 +238,31 @@ function decodeFileName(data: Uint8Array, flags: number): string {
 }
 
 function assertUniqueEntryNames(entries: ZipEntry[]): void {
+  assertSafeEntryNames(entries.map((entry) => entry.name));
+}
+
+function assertSafeEntryNames(names: string[]): void {
   const seen = new Set<string>();
 
-  for (const entry of entries) {
-    if (entry.name.includes("..") || entry.name.startsWith("/")) {
-      throw new ZipError(`Unsafe ZIP entry path: ${entry.name}`);
+  for (const name of names) {
+    if (isUnsafeEntryName(name)) {
+      throw new ZipError(`Unsafe ZIP entry path: ${name}`);
     }
 
-    if (seen.has(entry.name)) {
-      throw new ZipError(`Duplicate ZIP entry: ${entry.name}`);
+    if (seen.has(name)) {
+      throw new ZipError(`Duplicate ZIP entry: ${name}`);
     }
 
-    seen.add(entry.name);
+    seen.add(name);
   }
+}
+
+function isUnsafeEntryName(name: string): boolean {
+  return (
+    name.startsWith("/") ||
+    name.includes("\\") ||
+    name.split("/").some((segment) => segment === "..")
+  );
 }
 
 async function prepareEntry(
