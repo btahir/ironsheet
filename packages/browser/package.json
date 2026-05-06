@@ -1,10 +1,10 @@
 {
-  "name": "@ironsheet/node",
+  "name": "@ironsheet/browser",
   "version": "0.0.0",
   "type": "module",
-  "description": "Node.js IO, compression, and safe-write adapter for Ironsheet workbooks.",
+  "description": "Browser compression and file adapters for Ironsheet workbooks.",
   "license": "UNLICENSED",
-  "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "typescript", "node"],
+  "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "browser"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -17,8 +17,5 @@
     "@ironsheet/core": "0.0.0"
   },
   "files": ["dist", "src"],
-  "sideEffects": false,
-  "engines": {
-    "node": ">=18"
-  }
+  "sideEffects": false
 }

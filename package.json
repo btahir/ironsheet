@@ -13,12 +13,15 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
+    "build": "tsx scripts/build.ts",
+    "pack:check": "npm run build && npm pack --workspaces --dry-run",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "runtime:check": "tsx scripts/runtime-check.ts",
     "cli": "tsx packages/cli/src/cli.ts",
     "compat:check": "tsx scripts/compat.ts",
     "compat:fixtures": "tsx scripts/build-compat-fixtures.ts",
     "compat:corpus": "npm run compat:fixtures && tsx scripts/compat-corpus.ts",
+    "compat:corpus:strict": "npm run compat:fixtures && tsx scripts/compat-corpus.ts --strict",
     "hooks:install": "git config core.hooksPath .githooks"
   },
   "devDependencies": {

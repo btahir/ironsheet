@@ -9,6 +9,7 @@ import {
   parseFormulaStructuredReferences
 } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
+import { excelCellFormatLimit } from "./styles.ts";
 import {
   decodeXml,
   findElementCloseStart,
@@ -34,7 +35,6 @@ const tableRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
 const worksheetRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
-const excelCellFormatLimit = 65_490;
 
 export type ValidationSeverity = "error" | "warning" | "info";
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { readFile } from "node:fs/promises";

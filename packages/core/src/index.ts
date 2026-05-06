@@ -1,9 +1,11 @@
 export { formatCellAddress, parseCellAddress, parseCellRange } from "./address.ts";
 export type { CellRange } from "./address.ts";
 export {
+  listWorkbookCharts,
   retargetChartFormulaXml,
   retargetWorkbookChartFormulas,
-  type ChartFormulaRetarget
+  type ChartFormulaRetarget,
+  type WorkbookChart
 } from "./chart.ts";
 export {
   parseWorksheetComments,
@@ -38,14 +40,18 @@ export {
 } from "./images.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
 export {
+  listWorkbookPivotCacheSources,
   retargetPivotCacheSourceXml,
   retargetWorkbookPivotCacheSources,
-  type PivotCacheSourceRetarget
+  type PivotCacheSourceRetarget,
+  type WorkbookPivotCacheSource
 } from "./pivot.ts";
 export { parseSharedStrings } from "./shared-strings.ts";
 export {
   ensureWorkbookCellFormat,
   ensureWorkbookNumberFormat,
+  excelCellFormatLimit,
+  excelCellFormatWarningThreshold,
   parseWorkbookStyles,
   type WorkbookCellFormat,
   type WorkbookCellStyleInput,

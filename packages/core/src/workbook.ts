@@ -1,5 +1,10 @@
 import { type CellRange, parseCellAddress, parseCellRange } from "./address.ts";
-import { retargetWorkbookChartFormulas, type ChartFormulaRetarget } from "./chart.ts";
+import {
+  listWorkbookCharts,
+  retargetWorkbookChartFormulas,
+  type ChartFormulaRetarget,
+  type WorkbookChart
+} from "./chart.ts";
 import {
   parseWorksheetComments,
   worksheetCommentsRelationship,
@@ -25,11 +30,18 @@ import {
   type Relationship,
   resolveRelationshipTarget
 } from "./opc.ts";
-import { retargetWorkbookPivotCacheSources, type PivotCacheSourceRetarget } from "./pivot.ts";
+import {
+  listWorkbookPivotCacheSources,
+  retargetWorkbookPivotCacheSources,
+  type PivotCacheSourceRetarget,
+  type WorkbookPivotCacheSource
+} from "./pivot.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import {
   ensureWorkbookCellFormat,
   ensureWorkbookNumberFormat,
+  excelCellFormatLimit,
+  excelCellFormatWarningThreshold,
   parseWorkbookStyles,
   type WorkbookCellFormat,
   type WorkbookCellStyleInput,
@@ -164,6 +176,8 @@ export type WorkbookFormula = {
   sharedIndex?: string;
   structuredReferences: FormulaStructuredReference[];
 };
+
+export type { WorkbookChart, WorkbookPivotCacheSource };
 
 export type WorkbookHyperlink = {
   sheetName: string;
@@ -924,6 +938,17 @@ export class Workbook {
 
     const result = ensureWorkbookCellFormat(stylesXml, cellFormatFromStyleInput(styleInput));
     this.pkg.setText("xl/styles.xml", result.xml);
+    if (result.created) {
+      const count = parseWorkbookStyles(result.xml).counts.cellXfs;
+      if (count >= excelCellFormatWarningThreshold) {
+        this.addDiagnostic({
+          severity: "warning",
+          code: "STYLE_BUDGET_NEAR_LIMIT",
+          message: `Workbook has ${count} cell style formats; Excel limit is ${excelCellFormatLimit}`,
+          part: "xl/styles.xml"
+        });
+      }
+    }
     return result.styleId;
   }
 
@@ -1108,6 +1133,14 @@ export class Workbook {
 
   retargetPivotCacheSources(retargets: PivotCacheSourceRetarget[]): Promise<number> {
     return retargetWorkbookPivotCacheSources(this.pkg, retargets);
+  }
+
+  charts(): Promise<WorkbookChart[]> {
+    return listWorkbookCharts(this.pkg);
+  }
+
+  pivotCacheSources(): Promise<WorkbookPivotCacheSource[]> {
+    return listWorkbookPivotCacheSources(this.pkg);
   }
 
   tables(): Promise<WorkbookTable[]> {
@@ -1590,21 +1623,65 @@ export class Workbook {
       });
     }
 
-    if (countParts(parts, /^xl\/charts\//) > 0) {
-      this.addDiagnostic({
-        severity: "warning",
-        code: "CHARTS_MAY_NEED_REFRESH",
-        message: "Workbook contains charts; verify chart ranges after worksheet data edits"
-      });
+    const charts = await this.charts();
+    if (charts.length > 0) {
+      const affectedCharts =
+        options.sheetPartName === undefined || options.affectedRanges === undefined
+          ? []
+          : chartFormulasAffectedByRanges(
+              charts,
+              sheetPartByName(this.sheets()),
+              options.sheetPartName,
+              options.affectedRanges
+            );
+
+      if (affectedCharts.length === 0) {
+        this.addDiagnostic({
+          severity: "warning",
+          code: "CHARTS_MAY_NEED_REFRESH",
+          message: "Workbook contains charts; verify chart ranges after worksheet data edits"
+        });
+      } else {
+        for (const chart of affectedCharts) {
+          this.addDiagnostic({
+            severity: "warning",
+            code: "CHARTS_MAY_NEED_REFRESH",
+            message: `Chart ${chart.partName} references edited range(s): ${chart.formulas.join(", ")}`,
+            part: chart.partName
+          });
+        }
+      }
     }
 
-    if (countParts(parts, /^xl\/pivotTables\//) > 0) {
-      this.addDiagnostic({
-        severity: "warning",
-        code: "PIVOT_TABLES_MAY_NEED_REFRESH",
-        message:
-          "Workbook contains pivot tables; Excel may need to refresh pivot caches after data edits"
-      });
+    const pivotCacheSources = await this.pivotCacheSources();
+    if (countParts(parts, /^xl\/pivotTables\//) > 0 || pivotCacheSources.length > 0) {
+      const affectedSources =
+        options.sheetPartName === undefined || options.affectedRanges === undefined
+          ? []
+          : pivotCacheSourcesAffectedByRanges(
+              pivotCacheSources,
+              sheetPartByName(this.sheets()),
+              options.sheetPartName,
+              options.affectedRanges
+            );
+
+      if (affectedSources.length === 0) {
+        this.addDiagnostic({
+          severity: "warning",
+          code: "PIVOT_TABLES_MAY_NEED_REFRESH",
+          message:
+            "Workbook contains pivot tables; Excel may need to refresh pivot caches after data edits"
+        });
+      } else {
+        for (const source of affectedSources) {
+          this.addDiagnostic({
+            severity: "warning",
+            code: "PIVOT_TABLES_MAY_NEED_REFRESH",
+            message: `Pivot cache ${source.partName} references edited source ${pivotSourceLabel(source)}`,
+            part: source.partName
+          });
+        }
+      }
     }
 
     if (
@@ -1658,6 +1735,84 @@ function formulaReferenceRange(reference: FormulaReference): CellRange {
   }
 
   return parseCellRange(reference.ref);
+}
+
+function sheetPartByName(sheets: WorkbookSheet[]): Map<string, string> {
+  return new Map(sheets.map((sheet) => [sheet.name.toLowerCase(), sheet.partName]));
+}
+
+function chartFormulasAffectedByRanges(
+  charts: WorkbookChart[],
+  sheetParts: Map<string, string>,
+  editedSheetPartName: string,
+  affectedRanges: CellRange[]
+): Array<{ partName: string; formulas: string[] }> {
+  const affected: Array<{ partName: string; formulas: string[] }> = [];
+
+  for (const chart of charts) {
+    const formulas = chart.formulas.filter((formula) =>
+      formulaReferencesRanges(formula, sheetParts, editedSheetPartName, affectedRanges)
+    );
+    if (formulas.length > 0) {
+      affected.push({ partName: chart.partName, formulas });
+    }
+  }
+
+  return affected;
+}
+
+function formulaReferencesRanges(
+  formula: string,
+  sheetParts: Map<string, string>,
+  editedSheetPartName: string,
+  affectedRanges: CellRange[]
+): boolean {
+  for (const reference of parseFormulaReferences(formula)) {
+    const referenceSheetPart =
+      reference.sheetName === undefined
+        ? editedSheetPartName
+        : sheetParts.get(reference.sheetName.toLowerCase());
+    if (referenceSheetPart !== editedSheetPartName) {
+      continue;
+    }
+
+    const referenceRange = formulaReferenceRange(reference);
+    if (affectedRanges.some((affectedRange) => rangesIntersect(referenceRange, affectedRange))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function pivotCacheSourcesAffectedByRanges(
+  sources: WorkbookPivotCacheSource[],
+  sheetParts: Map<string, string>,
+  editedSheetPartName: string,
+  affectedRanges: CellRange[]
+): WorkbookPivotCacheSource[] {
+  return sources.filter((source) => {
+    if (source.ref === undefined) {
+      return false;
+    }
+
+    const sourceSheetPart =
+      source.sheet === undefined ? editedSheetPartName : sheetParts.get(source.sheet.toLowerCase());
+    if (sourceSheetPart !== editedSheetPartName) {
+      return false;
+    }
+
+    try {
+      const sourceRange = parseCellRange(source.ref);
+      return affectedRanges.some((affectedRange) => rangesIntersect(sourceRange, affectedRange));
+    } catch (_error) {
+      return false;
+    }
+  });
+}
+
+function pivotSourceLabel(source: WorkbookPivotCacheSource): string {
+  return [source.sheet, source.ref, source.name].filter((value) => value !== undefined).join("!");
 }
 
 function assertValuesFitNamedRange(range: WorkbookNamedRange, values: CellInput[][]): void {

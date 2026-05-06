@@ -12,15 +12,40 @@ export type PivotCacheSourceRetarget = {
   };
 };
 
+export type WorkbookPivotCacheSource = {
+  partName: string;
+  name?: string;
+  ref?: string;
+  sheet?: string;
+};
+
+export async function listWorkbookPivotCacheSources(
+  pkg: OoxmlPackage
+): Promise<WorkbookPivotCacheSource[]> {
+  const sources: WorkbookPivotCacheSource[] = [];
+
+  for (const partName of pivotCacheDefinitionParts(pkg)) {
+    const xml = await pkg.readText(partName);
+    for (const source of findStartTags(xml, "worksheetSource")) {
+      sources.push({
+        partName,
+        ...(source.attributes.name === undefined ? {} : { name: source.attributes.name }),
+        ...(source.attributes.ref === undefined ? {} : { ref: source.attributes.ref }),
+        ...(source.attributes.sheet === undefined ? {} : { sheet: source.attributes.sheet })
+      });
+    }
+  }
+
+  return sources;
+}
+
 export async function retargetWorkbookPivotCacheSources(
   pkg: OoxmlPackage,
   retargets: PivotCacheSourceRetarget[]
 ): Promise<number> {
   let changed = 0;
 
-  for (const partName of pkg
-    .listParts()
-    .filter((part) => /^xl\/pivotCache\/pivotCacheDefinition.+\.xml$/.test(part))) {
+  for (const partName of pivotCacheDefinitionParts(pkg)) {
     const xml = await pkg.readText(partName);
     const result = retargetPivotCacheSourceXml(xml, retargets);
     if (result.xml !== xml) {
@@ -30,6 +55,12 @@ export async function retargetWorkbookPivotCacheSources(
   }
 
   return changed;
+}
+
+function pivotCacheDefinitionParts(pkg: OoxmlPackage): string[] {
+  return pkg
+    .listParts()
+    .filter((part) => /^xl\/pivotCache\/pivotCacheDefinition.+\.xml$/.test(part));
 }
 
 export function retargetPivotCacheSourceXml(

@@ -152,6 +152,7 @@ Runtime split:
 
 - `@ironsheet/core`: runtime-neutral workbook engine and low-level OOXML primitives.
 - `@ironsheet/node`: Node file IO, compression adapter, and safe write helpers.
+- `@ironsheet/browser`: browser compression adapter and Blob/ArrayBuffer helpers over the core engine.
 - `@ironsheet/compat`: compatibility report and fixture manifest types.
 - `@ironsheet/cli`: command-line interface over the Node adapter.
 
@@ -196,6 +197,12 @@ Run the CI-equivalent local gate:
 
 ```bash
 npm run ci
+```
+
+Build publishable JS and declaration output under each package `dist/` directory:
+
+```bash
+npm run build
 ```
 
 Use the safe commit loop:

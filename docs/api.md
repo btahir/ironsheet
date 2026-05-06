@@ -6,6 +6,7 @@ Ironsheet is a preservation-first XLSX/XLSM engine. The stable path is: open an 
 
 - `@ironsheet/core`: runtime-neutral ZIP, OPC, XML, OOXML workbook model, validators, streaming XML helpers, and lossless mutation primitives.
 - `@ironsheet/node`: Node file IO, zlib compression adapter, and safe-write helpers.
+- `@ironsheet/browser`: browser compression adapter and Blob/ArrayBuffer helpers.
 - `@ironsheet/cli`: command-line inspection, validation, template rendering, and safe mutations.
 - `@ironsheet/compat`: compatibility report and fixture manifest utilities.
 
@@ -175,23 +176,20 @@ Ironsheet should fail clearly instead of silently damaging workbooks:
 - Invalid worksheet dimensions and cell refs are reported as validation issues instead of throwing.
 - XLSM macro parts are preserved byte-for-byte unless explicitly edited by a future macro API.
 
-## Browser/Core Usage
+## Browser Usage
 
-Core can open packages with any compression adapter:
+Use `@ironsheet/browser` when the workbook bytes come from `Blob`, `File`, `ArrayBuffer`, or browser fetch APIs:
 
 ```ts
-import { OoxmlPackage, Workbook, type CompressionAdapter } from "@ironsheet/core";
+import { openWorkbookFromBlob, writeWorkbookToBlob } from "@ironsheet/browser";
 
-const compression: CompressionAdapter = {
-  inflateRaw: inflateRawBrowser,
-  deflateRaw: deflateRawBrowser
-};
+const workbook = await openWorkbookFromBlob(file);
+await workbook.patchCell("Sheet1", "B2", "Hello");
 
-const pkg = OoxmlPackage.open(xlsxBytes, compression);
-const workbook = await Workbook.fromPackage(pkg);
+const output = await writeWorkbookToBlob(workbook);
 ```
 
-`inflateRawBrowser` and `deflateRawBrowser` should wrap browser compression primitives such as `CompressionStream` and `DecompressionStream` and return `Uint8Array`. The core package only requires that adapter boundary; it does not import Node `zlib`.
+The browser adapter uses `CompressionStream` and `DecompressionStream` with `deflate-raw`. The core package only requires a `CompressionAdapter` boundary; it does not import Node `zlib`.
 
 ## Compatibility Gates
 
@@ -205,6 +203,12 @@ Run the full generated fixture corpus:
 
 ```bash
 npm run ci
+```
+
+Run the strict corpus gate before release:
+
+```bash
+npm run compat:corpus:strict
 ```
 
 Real workbook fixtures are the next release gate. Add cleared XLSX/XLSM templates under `fixtures/corpus/workbooks/`, mark them active in `fixtures/corpus/manifest.json`, and require them to pass `ironsheet-validation` plus any available app validators.

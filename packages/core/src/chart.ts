@@ -6,6 +6,24 @@ export type ChartFormulaRetarget = {
   to: string;
 };
 
+export type WorkbookChart = {
+  partName: string;
+  formulas: string[];
+};
+
+export async function listWorkbookCharts(pkg: OoxmlPackage): Promise<WorkbookChart[]> {
+  const charts: WorkbookChart[] = [];
+
+  for (const partName of pkg.listParts().filter((part) => /^xl\/charts\/.+\.xml$/.test(part))) {
+    charts.push({
+      partName,
+      formulas: chartFormulaTexts(await pkg.readText(partName))
+    });
+  }
+
+  return charts;
+}
+
 export async function retargetWorkbookChartFormulas(
   pkg: OoxmlPackage,
   retargets: ChartFormulaRetarget[]
@@ -56,4 +74,10 @@ export function retargetChartFormulaXml(
     changed,
     xml: changed === 0 ? xml : result + xml.slice(offset)
   };
+}
+
+function chartFormulaTexts(xml: string): string[] {
+  return findStartTags(xml, "f")
+    .filter((formula) => !formula.selfClosing)
+    .map((formula) => decodeXml(xml.slice(formula.end, findElementCloseStart(xml, formula))));
 }

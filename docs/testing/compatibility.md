@@ -41,9 +41,19 @@ Build generated smoke fixtures and run the fixture corpus:
 npm run compat:corpus
 ```
 
+Run the release-style strict corpus gate:
+
+```bash
+npm run compat:corpus:strict
+```
+
+Strict mode fails if any manifest fixture is still skipped. Use it before release after real Excel-authored fixtures have been added and activated.
+
 The default manifest is `fixtures/corpus/manifest.json`. It contains generated active smoke fixtures plus pending fixture slots for the real-world workbook shapes we still need to cover. `npm run compat:corpus` builds the generated fixtures first, then validates the manifest.
 
 Generated fixtures are ignored under `fixtures/corpus/workbooks/generated/`. Add cleared real workbooks under `fixtures/corpus/workbooks/`, flip the matching manifest entry to `active`, and rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
+
+See `fixtures/corpus/workbooks/README.md` for the intake checklist.
 
 ## Numbers Smoke Checks
 

@@ -25,6 +25,7 @@ type CorpusReport = {
   schemaVersion: 1;
   generatedAt: string;
   manifestPath: string;
+  strict: boolean;
   summary: {
     passed: number;
     failed: number;
@@ -34,7 +35,10 @@ type CorpusReport = {
   fixtures: CorpusFixtureResult[];
 };
 
-async function runCorpus(manifestPath: string): Promise<CorpusReport> {
+async function runCorpus(
+  manifestPath: string,
+  options: { strict: boolean }
+): Promise<CorpusReport> {
   const absoluteManifestPath = resolve(manifestPath);
   const manifest = parseCompatibilityFixtureManifest(
     JSON.parse(await readFile(absoluteManifestPath, "utf8")) as unknown
@@ -50,6 +54,7 @@ async function runCorpus(manifestPath: string): Promise<CorpusReport> {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     manifestPath: absoluteManifestPath,
+    strict: options.strict,
     summary: {
       passed: fixtures.filter((fixture) => fixture.status === "pass").length,
       failed: fixtures.filter((fixture) => fixture.status === "fail").length,
@@ -127,11 +132,13 @@ async function writeCorpusReport(report: CorpusReport): Promise<string> {
   return outputPath;
 }
 
-const manifestPath = process.argv[2] ?? "fixtures/corpus/manifest.json";
-const report = await runCorpus(manifestPath);
+const args = process.argv.slice(2);
+const manifestPath = args.find((arg) => arg !== "--strict") ?? "fixtures/corpus/manifest.json";
+const strict = args.includes("--strict") || process.env.IRONSHEET_STRICT_CORPUS === "1";
+const report = await runCorpus(manifestPath, { strict });
 console.log(JSON.stringify(report, null, 2));
 await writeCorpusReport(report);
 
-if (report.summary.failed > 0) {
+if (report.summary.failed > 0 || (report.strict && report.summary.skipped > 0)) {
   process.exit(1);
 }

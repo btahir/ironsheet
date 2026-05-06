@@ -645,6 +645,17 @@ test("retargets chart formulas exactly", async () => {
   assert.equal((await workbook.validate()).summary.errors, 0);
 });
 
+test("lists workbook chart formulas", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDrawing: true }));
+
+  assert.deepEqual(await workbook.charts(), [
+    {
+      partName: "xl/charts/chart1.xml",
+      formulas: ["Sheet1!$A$2:$A$3", "Sheet1!$B$2:$B$3"]
+    }
+  ]);
+});
+
 test("retargets pivot cache worksheet sources", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includePivotTable: true }));
   const workbook = await Workbook.fromPackage(pkg);
@@ -663,6 +674,18 @@ test("retargets pivot cache worksheet sources", async () => {
     /worksheetSource ref="A1:C2" sheet="Sheet1"/
   );
   assert.equal((await workbook.validate()).summary.errors, 0);
+});
+
+test("lists workbook pivot cache worksheet sources", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includePivotTable: true }));
+
+  assert.deepEqual(await workbook.pivotCacheSources(), [
+    {
+      partName: "xl/pivotCache/pivotCacheDefinition1.xml",
+      ref: "A1:B2",
+      sheet: "Sheet1"
+    }
+  ]);
 });
 
 test("reads workbook formula inventory with parsed dependencies", async () => {
@@ -1230,6 +1253,27 @@ test("styles cells with deduped custom number formats", async () => {
   });
 });
 
+test("style creation warns near Excel cell format limits", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const stylesXml = await pkg.readText("xl/styles.xml");
+  const manyCellFormats = Array.from({ length: 59_999 }, () => '<xf numFmtId="0"/>').join("");
+  pkg.setText(
+    "xl/styles.xml",
+    stylesXml.replace(
+      /<cellXfs count="5">.*<\/cellXfs>/s,
+      `<cellXfs count="59999">${manyCellFormats}</cellXfs>`
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  await workbook.styleCell("Sheet1", "A1", { numberFormat: "0.0000" });
+
+  assert.equal(
+    workbook.diagnostics().some((diagnostic) => diagnostic.code === "STYLE_BUDGET_NEAR_LIMIT"),
+    true
+  );
+});
+
 test("reads existing cell values and style ids", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook());
 
@@ -1637,6 +1681,24 @@ test("data edits report defined name, chart, and table impact diagnostics", asyn
       .map((diagnostic) => diagnostic.code),
     ["DEFINED_NAMES_MAY_NEED_REVIEW", "CHARTS_MAY_NEED_REFRESH", "WORKSHEET_TABLES_NOT_RESIZED"]
   );
+});
+
+test("data edit diagnostics identify directly affected chart and pivot sources", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeDrawing: true, includePivotTable: true })
+  );
+
+  await workbook.patchCell("Sheet1", "B2", "changed");
+  const diagnostics = workbook.diagnostics();
+  const chart = diagnostics.find((diagnostic) => diagnostic.code === "CHARTS_MAY_NEED_REFRESH");
+  const pivot = diagnostics.find(
+    (diagnostic) => diagnostic.code === "PIVOT_TABLES_MAY_NEED_REFRESH"
+  );
+
+  assert.equal(chart?.part, "xl/charts/chart1.xml");
+  assert.match(chart?.message ?? "", /Sheet1!\$B\$2:\$B\$3/);
+  assert.equal(pivot?.part, "xl/pivotCache/pivotCacheDefinition1.xml");
+  assert.match(pivot?.message ?? "", /Sheet1!A1:B2/);
 });
 
 test("table replacement reports dependent workbook structures without table resize warning", async () => {

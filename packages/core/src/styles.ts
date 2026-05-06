@@ -7,6 +7,9 @@ import {
   type XmlTag
 } from "./xml.ts";
 
+export const excelCellFormatLimit = 65_490;
+export const excelCellFormatWarningThreshold = 60_000;
+
 export type WorkbookStyles = {
   cellStyleXfs: WorkbookCellFormat[];
   cellXfs: WorkbookCellFormat[];

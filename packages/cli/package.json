@@ -5,14 +5,16 @@
   "description": "Safe command-line workbook inspection, validation, and XLSX/XLSM edits for Ironsheet.",
   "license": "UNLICENSED",
   "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "cli"],
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
   "bin": {
-    "ironsheet": "./src/cli.ts"
+    "ironsheet": "./dist/cli.js"
   },
   "dependencies": {
     "@ironsheet/core": "0.0.0",
     "@ironsheet/node": "0.0.0"
   },
-  "files": ["src"],
+  "files": ["dist", "src"],
   "engines": {
     "node": ">=18"
   }

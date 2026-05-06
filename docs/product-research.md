@@ -62,7 +62,7 @@ Release-critical:
 
 Next-tier:
 
-- Browser compression adapter package.
+- Browser compression adapter package. Initial `@ironsheet/browser` support exists; it still needs real-browser bundler smoke tests.
 - New image insertion with controlled drawing anchors and content-type updates.
 - Pivot-cache refresh diagnostics and explicit refresh flags.
 - Chart cache diagnostics and targeted chart-series retargeting.
@@ -89,9 +89,9 @@ Non-goals for the first paid wedge:
 
 ## Current Gaps To Close
 
-- Add real fixtures and promote them from pending to active.
+- Add real fixtures and promote them from pending to active, then require `npm run compat:corpus:strict` before release.
 - Add stronger table collision tests for tables below the edited table, totals rows, filters, and calculated columns.
-- Add chart and pivot cache diagnostics that state exactly which parts reference edited ranges.
+- Expand chart and pivot diagnostics beyond direct formula/source intersections into cache freshness, refresh flags, and stale cached values.
 - Add image insertion after drawing anchor and content-type helpers are ready.
 - Add ZIP64 support before claiming very-large-workbook support.
-- Publish built JS and `.d.ts` artifacts before npm release; current workspace exports TypeScript source for development.
+- Add release automation around the built JS and `.d.ts` artifacts, including provenance, changelog, and npm dry-run checks.

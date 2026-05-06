@@ -5,9 +5,14 @@
   "description": "Lossless TypeScript OOXML workbook engine for editing real XLSX and XLSM files.",
   "license": "UNLICENSED",
   "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "typescript", "workbook"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "files": ["src"],
+  "files": ["dist", "src"],
   "sideEffects": false
 }
