@@ -15,9 +15,10 @@ import {
   renameWorkbookTable,
   renameWorkbookTableColumn,
   replaceWorkbookTableRows,
+  styleWorkbookCell,
   validateWorkbookFile
 } from "../../node/src/index.ts";
-import type { CellInput } from "../../core/src/index.ts";
+import type { CellInput, WorkbookCellStyleInput } from "../../core/src/index.ts";
 
 type Command =
   | "inspect"
@@ -30,6 +31,7 @@ type Command =
   | "rename-table-column"
   | "rename-table"
   | "replace-table"
+  | "style-cell"
   | "styles"
   | "tables"
   | "validate"
@@ -45,6 +47,7 @@ function usage(): never {
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
   npm run cli -- read-range <workbook.xlsx> <sheet> <range>
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
+  npm run cli -- style-cell <input.xlsx> <output.xlsx> <sheet> <cell> <jsonStyle>
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- rename-table <input.xlsx> <output.xlsx> <table> <newName>
@@ -105,6 +108,17 @@ async function patch(
 ): Promise<void> {
   await patchWorkbookCell(inputPath, outputPath, sheetName, address, parseCliValue(rawValue));
   console.log(`patched ${sheetName}!${address} -> ${outputPath}`);
+}
+
+async function styleCellCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  address: string,
+  rawStyle: string
+): Promise<void> {
+  await styleWorkbookCell(inputPath, outputPath, sheetName, address, parseStyle(rawStyle));
+  console.log(`styled ${sheetName}!${address} -> ${outputPath}`);
 }
 
 async function patchRangeCommand(
@@ -186,6 +200,15 @@ function parseRows(rawRows: string): CellInput[][] {
   }
 
   return parsed.map((row) => row.map((cell) => parseJsonCell(cell as unknown)));
+}
+
+function parseStyle(rawStyle: string): WorkbookCellStyleInput {
+  const parsed: unknown = JSON.parse(rawStyle);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("jsonStyle must be an object");
+  }
+
+  return parsed as WorkbookCellStyleInput;
 }
 
 function parseJsonCell(value: unknown): CellInput {
@@ -285,6 +308,18 @@ try {
       usage();
     }
     await patchRangeCommand(inputPath, outputPath, sheetName, startAddress, rawRows);
+  } else if (command === "style-cell") {
+    const [inputPath, outputPath, sheetName, address, rawStyle] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      address === undefined ||
+      rawStyle === undefined
+    ) {
+      usage();
+    }
+    await styleCellCommand(inputPath, outputPath, sheetName, address, rawStyle);
   } else if (command === "append-rows") {
     const [inputPath, outputPath, sheetName, rawRows] = args;
     if (

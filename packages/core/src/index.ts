@@ -22,8 +22,12 @@ export {
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
 export { parseSharedStrings } from "./shared-strings.ts";
 export {
+  ensureWorkbookCellFormat,
+  ensureWorkbookNumberFormat,
   parseWorkbookStyles,
   type WorkbookCellFormat,
+  type WorkbookCellStyleInput,
+  type WorkbookNumberFormat,
   type WorkbookStyles
 } from "./styles.ts";
 export {
@@ -52,6 +56,7 @@ export {
   type CellInput,
   type CellPatch,
   type FormulaValue,
+  applyCellStyle,
   appendRows,
   createRowsXml,
   patchCell,

@@ -192,6 +192,29 @@ export function patchRange(
   return patchCells(xml, patches);
 }
 
+export function applyCellStyle(xml: string, address: string, styleId: string): PatchCellResult {
+  const parsedAddress = parseCellAddress(address);
+  const existing = findCellElement(xml, parsedAddress.address);
+  const styled =
+    existing === undefined
+      ? insertCell(
+          xml,
+          parsedAddress.address,
+          parsedAddress.row,
+          createCellXml(parsedAddress.address, null, {
+            prefix: inferWorksheetPrefix(xml),
+            styleId
+          })
+        )
+      : `${xml.slice(0, existing.start)}${upsertCellStyle(existing.raw, styleId)}${xml.slice(existing.end)}`;
+
+  return {
+    xml: updateDimension(styled, parsedAddress.address),
+    formulaChanged: false,
+    affectedRanges: [parseCellRange(parsedAddress.address)]
+  };
+}
+
 export function appendRows(
   xml: string,
   rows: CellInput[][],
@@ -646,6 +669,26 @@ function upsertRefAttribute(rawTag: string, ref: string): string {
 
   const closing = rawTag.endsWith("/>") ? "/>" : ">";
   return `${rawTag.slice(0, -closing.length)} ref="${escapeXmlAttribute(ref)}"${closing}`;
+}
+
+function upsertCellStyle(cellXml: string, styleId: string): string {
+  const cell = findFirstStartTag(cellXml, "c");
+  if (cell === undefined) {
+    throw new WorksheetError("Cell XML is missing c tag");
+  }
+
+  return `${cellXml.slice(0, cell.start)}${upsertTagAttribute(cell.raw, "s", styleId)}${cellXml.slice(cell.end)}`;
+}
+
+function upsertTagAttribute(rawTag: string, name: string, value: string): string {
+  const escapedValue = escapeXmlAttribute(value);
+  const pattern = new RegExp(`\\s${name}=(["']).*?\\1`);
+  if (pattern.test(rawTag)) {
+    return rawTag.replace(pattern, ` ${name}="${escapedValue}"`);
+  }
+
+  const closing = rawTag.endsWith("/>") ? "/>" : ">";
+  return `${rawTag.slice(0, -closing.length)} ${name}="${escapedValue}"${closing}`;
 }
 
 function createFormulaResultXml(value: CellPrimitive, prefix: string | undefined): string {

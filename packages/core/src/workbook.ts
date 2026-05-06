@@ -12,7 +12,14 @@ import {
 } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
-import { parseWorkbookStyles, type WorkbookStyles } from "./styles.ts";
+import {
+  ensureWorkbookCellFormat,
+  ensureWorkbookNumberFormat,
+  parseWorkbookStyles,
+  type WorkbookCellFormat,
+  type WorkbookCellStyleInput,
+  type WorkbookStyles
+} from "./styles.ts";
 import {
   listWorkbookTables,
   renameWorkbookTableColumn,
@@ -23,6 +30,7 @@ import {
 import { validateWorkbookPackage, type ValidationReport } from "./validation.ts";
 import {
   appendRows,
+  applyCellStyle,
   patchCell,
   patchCells,
   patchRange,
@@ -243,6 +251,39 @@ export class Workbook {
     return readRange(xml, rangeRef, { sharedStrings: await this.sharedStrings() });
   }
 
+  async ensureCellStyle(style: WorkbookCellStyleInput): Promise<string> {
+    let stylesXml = await this.readOrCreateStylesXml();
+    const styleInput = { ...style };
+    if (styleInput.numberFormat !== undefined) {
+      const numberFormat = ensureWorkbookNumberFormat(stylesXml, styleInput.numberFormat);
+      stylesXml = numberFormat.xml;
+      styleInput.numFmtId = numberFormat.numFmtId;
+      styleInput.applyNumberFormat = "1";
+    }
+
+    const result = ensureWorkbookCellFormat(stylesXml, cellFormatFromStyleInput(styleInput));
+    this.pkg.setText("xl/styles.xml", result.xml);
+    return result.styleId;
+  }
+
+  async styleCell(
+    sheetName: string,
+    address: string,
+    style: WorkbookCellStyleInput
+  ): Promise<string> {
+    const sheet = this.sheet(sheetName);
+    const sheetXml = await this.pkg.readText(sheet.partName);
+    const existingCell = readCell(sheetXml, address, { sharedStrings: await this.sharedStrings() });
+    const baseStyle =
+      existingCell?.styleId === undefined
+        ? {}
+        : await this.cellFormatForStyleId(existingCell.styleId);
+    const styleId = await this.ensureCellStyle({ ...baseStyle, ...style });
+    const result = applyCellStyle(sheetXml, address, styleId);
+    this.pkg.setText(sheet.partName, result.xml);
+    return styleId;
+  }
+
   async replaceTableRows(tableName: string, rows: CellInput[][]): Promise<WorkbookTable> {
     const table = await replaceTableRows(this.pkg, tableName, rows);
     if (table.totalsRowCount > 0 || rows.some((row) => row.some(isFormulaValue))) {
@@ -319,11 +360,34 @@ export class Workbook {
           fills: 0,
           fonts: 0,
           numFmts: 0
-        }
+        },
+        numberFormats: []
       };
     }
 
     return parseWorkbookStyles(await this.pkg.readText("xl/styles.xml"));
+  }
+
+  private async readOrCreateStylesXml(): Promise<string> {
+    if (this.pkg.hasPart("xl/styles.xml")) {
+      return this.pkg.readText("xl/styles.xml");
+    }
+
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>';
+  }
+
+  private async cellFormatForStyleId(styleId: string): Promise<WorkbookCellFormat> {
+    const index = Number.parseInt(styleId, 10);
+    if (!Number.isInteger(index) || index < 0) {
+      throw new WorkbookError(`Invalid style id ${styleId}`);
+    }
+
+    const style = (await this.styles()).cellXfs[index];
+    if (style === undefined) {
+      throw new WorkbookError(`Unknown style id ${styleId}`);
+    }
+
+    return style;
   }
 
   async formulas(): Promise<WorkbookFormula[]> {
@@ -591,6 +655,23 @@ function isFormulaValue(value: CellInput): value is FormulaValue {
   return (
     typeof value === "object" && value !== null && !(value instanceof Date) && "formula" in value
   );
+}
+
+function cellFormatFromStyleInput(style: WorkbookCellStyleInput): WorkbookCellFormat {
+  return {
+    ...(style.applyAlignment === undefined ? {} : { applyAlignment: style.applyAlignment }),
+    ...(style.applyBorder === undefined ? {} : { applyBorder: style.applyBorder }),
+    ...(style.applyFill === undefined ? {} : { applyFill: style.applyFill }),
+    ...(style.applyFont === undefined ? {} : { applyFont: style.applyFont }),
+    ...(style.applyNumberFormat === undefined
+      ? {}
+      : { applyNumberFormat: style.applyNumberFormat }),
+    ...(style.borderId === undefined ? {} : { borderId: style.borderId }),
+    ...(style.fillId === undefined ? {} : { fillId: style.fillId }),
+    ...(style.fontId === undefined ? {} : { fontId: style.fontId }),
+    ...(style.numFmtId === undefined ? {} : { numFmtId: style.numFmtId }),
+    ...(style.xfId === undefined ? {} : { xfId: style.xfId })
+  };
 }
 
 function formulaReferenceRange(reference: FormulaReference): CellRange {

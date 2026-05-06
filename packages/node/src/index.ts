@@ -5,7 +5,8 @@ import {
   Workbook,
   type CompressionAdapter,
   type CellInput,
-  type CellPatch
+  type CellPatch,
+  type WorkbookCellStyleInput
 } from "../../core/src/index.ts";
 
 export const nodeCompressionAdapter: CompressionAdapter = {
@@ -66,6 +67,18 @@ export async function patchWorkbookRange(
 ): Promise<void> {
   const workbook = await readWorkbook(inputPath);
   await workbook.patchRange(sheetName, startAddress, values);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function styleWorkbookCell(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  address: string,
+  style: WorkbookCellStyleInput
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.styleCell(sheetName, address, style);
   await writeWorkbook(workbook, outputPath);
 }
 

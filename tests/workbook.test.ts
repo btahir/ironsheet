@@ -363,7 +363,61 @@ test("reads workbook style metadata", async () => {
       fills: 1,
       fonts: 1,
       numFmts: 0
-    }
+    },
+    numberFormats: []
+  });
+});
+
+test("styles cells with deduped custom number formats", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  const firstStyleId = await workbook.styleCell("Sheet1", "A1", {
+    numberFormat: "$#,##0.00"
+  });
+  const secondStyleId = await workbook.styleCell("Sheet1", "A1", {
+    numberFormat: "$#,##0.00"
+  });
+
+  assert.equal(firstStyleId, secondStyleId);
+  assert.deepEqual(await workbook.readCell("Sheet1", "A1"), {
+    address: "A1",
+    value: "Original",
+    styleId: firstStyleId
+  });
+  assert.deepEqual(await workbook.styles(), {
+    cellStyleXfs: [{ numFmtId: "0", fontId: "0", fillId: "0", borderId: "0" }],
+    cellXfs: [
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0" },
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0", applyFont: "1" },
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0", applyFill: "1" },
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0", applyBorder: "1" },
+      {
+        numFmtId: "0",
+        fontId: "0",
+        fillId: "0",
+        borderId: "0",
+        xfId: "0",
+        applyNumberFormat: "1"
+      },
+      {
+        numFmtId: "164",
+        fontId: "0",
+        fillId: "0",
+        borderId: "0",
+        xfId: "0",
+        applyFont: "1",
+        applyNumberFormat: "1"
+      }
+    ],
+    counts: {
+      borders: 1,
+      cellStyleXfs: 1,
+      cellXfs: 6,
+      fills: 1,
+      fonts: 1,
+      numFmts: 1
+    },
+    numberFormats: [{ numFmtId: "164", formatCode: "$#,##0.00" }]
   });
 });
 

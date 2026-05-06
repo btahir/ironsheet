@@ -18,6 +18,7 @@ This repository currently implements the first vertical slice:
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
 - Style metadata inspection with cell format counts.
+- Deduped cell style creation with custom number formats and style application.
 - Cell, batch-cell, and range read/write APIs.
 - Append-row API for template-backed exports.
 - Chunked worksheet row XML reader for future large-sheet transforms.
@@ -89,6 +90,12 @@ Patch a single cell:
 
 ```bash
 npm run cli -- patch input.xlsx output.xlsx Sheet1 B2 "Hello from Ironsheet"
+```
+
+Apply a cell style:
+
+```bash
+npm run cli -- style-cell input.xlsx output.xlsx Sheet1 B2 '{"numberFormat":"$#,##0.00"}'
 ```
 
 Patch a range:
