@@ -102,6 +102,32 @@ test("inspect counts worksheet formula cells", async () => {
   assert.equal((await workbook.inspect()).features.formulaCells, 1);
 });
 
+test("reads workbook formula inventory with parsed dependencies", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<c r="A2" t="inlineStr"><is><t>Old</t></is></c>',
+      '<c r="A2"><f>SUM(A1:B1,RevenueTable[Amount])</f><v>1</v></c>'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+  const [formula] = await workbook.formulas();
+
+  assert.equal(formula?.sheetName, "Sheet1");
+  assert.equal(formula?.sheetPartName, "xl/worksheets/sheet1.xml");
+  assert.equal(formula?.address, "A2");
+  assert.equal(formula?.formula, "SUM(A1:B1,RevenueTable[Amount])");
+  assert.deepEqual(
+    formula?.references.map((reference) => reference.ref),
+    ["A1:B1"]
+  );
+  assert.deepEqual(formula?.structuredReferences, [
+    { tableName: "RevenueTable", raw: "RevenueTable[Amount]" }
+  ]);
+});
+
 test("reads workbook defined names", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook({ includeDefinedName: true }));
 
@@ -320,6 +346,54 @@ test("formula patches remove stale calculation chain parts", async () => {
     await readEntryData(contentTypesEntry, nodeCompressionAdapter)
   );
   assert.doesNotMatch(contentTypesXml, /calcChain/);
+});
+
+test("replacing an existing formula with a value removes stale calculation chain parts", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeCalcChain: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>',
+      '<c r="A1"><f>1+1</f><v>2</v></c>'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  await workbook.patchCell("Sheet1", "A1", 7);
+  const outputZip = parseZip(await workbook.write());
+  const names = outputZip.entries.map((entry) => entry.name);
+
+  assert.equal(names.includes("xl/calcChain.xml"), false);
+});
+
+test("value edits that feed formulas mark the workbook for recalculation", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c></row>',
+      '<row r="1"><c r="A1"><v>1</v></c><c r="C1"><f>A1*2</f><v>2</v></c></row>'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  await workbook.patchCell("Sheet1", "A1", 3);
+  const outputZip = parseZip(await workbook.write());
+  const workbookEntry = outputZip.entries.find((entry) => entry.name === "xl/workbook.xml");
+  assert.ok(workbookEntry);
+  const workbookXml = textDecoder.decode(
+    await readEntryData(workbookEntry, nodeCompressionAdapter)
+  );
+
+  assert.match(workbookXml, /<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"\/>/);
+  assert.equal(
+    workbook
+      .diagnostics()
+      .some((diagnostic) => diagnostic.code === "FORMULA_DEPENDENCIES_RECALCULATED"),
+    true
+  );
 });
 
 test("cell patches preserve macro-enabled workbook parts", async () => {

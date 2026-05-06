@@ -1,6 +1,15 @@
+import { type CellRange, parseCellRange } from "./address.ts";
 import type { Diagnostic } from "./diagnostics.ts";
 import { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 import { PackageError, WorkbookError } from "./errors.ts";
+import {
+  parseFormulaReferences,
+  parseFormulaSheetReferences,
+  parseFormulaStructuredReferences,
+  type FormulaReference,
+  type FormulaSheetReference,
+  type FormulaStructuredReference
+} from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import { replaceTableRows, type WorkbookTable } from "./table.ts";
@@ -18,7 +27,13 @@ import {
   type ReadCellResult,
   type ReadRangeResult
 } from "./worksheet.ts";
-import { findElementCloseStart, findFirstStartTag, findStartTags } from "./xml.ts";
+import {
+  decodeXml,
+  findElementCloseStart,
+  findElementEnd,
+  findFirstStartTag,
+  findStartTags
+} from "./xml.ts";
 
 const officeDocumentRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
@@ -30,6 +45,7 @@ const calcChainRelationship =
 type MutationImpactOptions = {
   operation: "cell" | "range" | "appendRows" | "table";
   sheetPartName?: string;
+  affectedRanges?: CellRange[];
 };
 
 export type WorkbookSheet = {
@@ -69,6 +85,16 @@ export type WorkbookFeatureSummary = {
   pivotTables: number;
   sharedStrings: number;
   tables: number;
+};
+
+export type WorkbookFormula = {
+  sheetName: string;
+  sheetPartName: string;
+  address: string;
+  formula: string;
+  references: FormulaReference[];
+  sheetReferences: FormulaSheetReference[];
+  structuredReferences: FormulaStructuredReference[];
 };
 
 export class Workbook {
@@ -111,11 +137,17 @@ export class Workbook {
 
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
+    } else {
+      await this.forceRecalculateIfFormulaDependenciesTouched(
+        sheet.partName,
+        result.affectedRanges
+      );
     }
 
     await this.recordMutationImpactDiagnostics({
       operation: "cell",
-      sheetPartName: sheet.partName
+      sheetPartName: sheet.partName,
+      affectedRanges: result.affectedRanges
     });
   }
 
@@ -127,11 +159,17 @@ export class Workbook {
 
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
+    } else {
+      await this.forceRecalculateIfFormulaDependenciesTouched(
+        sheet.partName,
+        result.affectedRanges
+      );
     }
 
     await this.recordMutationImpactDiagnostics({
       operation: "range",
-      sheetPartName: sheet.partName
+      sheetPartName: sheet.partName,
+      affectedRanges: result.affectedRanges
     });
   }
 
@@ -143,11 +181,17 @@ export class Workbook {
 
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
+    } else {
+      await this.forceRecalculateIfFormulaDependenciesTouched(
+        sheet.partName,
+        result.affectedRanges
+      );
     }
 
     await this.recordMutationImpactDiagnostics({
       operation: "range",
-      sheetPartName: sheet.partName
+      sheetPartName: sheet.partName,
+      affectedRanges: result.affectedRanges
     });
   }
 
@@ -163,11 +207,17 @@ export class Workbook {
 
     if (result.formulaChanged) {
       await this.forceRecalculateOnOpen();
+    } else {
+      await this.forceRecalculateIfFormulaDependenciesTouched(
+        sheet.partName,
+        result.affectedRanges
+      );
     }
 
     await this.recordMutationImpactDiagnostics({
       operation: "appendRows",
-      sheetPartName: sheet.partName
+      sheetPartName: sheet.partName,
+      affectedRanges: result.affectedRanges
     });
   }
 
@@ -185,7 +235,7 @@ export class Workbook {
 
   async replaceTableRows(tableName: string, rows: CellInput[][]): Promise<WorkbookTable> {
     const table = await replaceTableRows(this.pkg, tableName, rows);
-    if (rows.some((row) => row.some(isFormulaValue))) {
+    if (table.totalsRowCount > 0 || rows.some((row) => row.some(isFormulaValue))) {
       await this.forceRecalculateOnOpen();
     }
 
@@ -215,6 +265,41 @@ export class Workbook {
 
   async definedNames(): Promise<WorkbookDefinedName[]> {
     return parseDefinedNames(await this.pkg.readText(this.workbookPart));
+  }
+
+  async formulas(): Promise<WorkbookFormula[]> {
+    const formulas: WorkbookFormula[] = [];
+
+    for (const sheet of this.sheets()) {
+      const xml = await this.pkg.readText(sheet.partName);
+      for (const cell of findStartTags(xml, "c")) {
+        const address = cell.attributes.r;
+        if (address === undefined || cell.selfClosing) {
+          continue;
+        }
+
+        const cellXml = xml.slice(cell.start, findElementEnd(xml, cell));
+        const formulaTag = findFirstStartTag(cellXml, "f");
+        if (formulaTag === undefined) {
+          continue;
+        }
+
+        const formula = formulaTag.selfClosing
+          ? ""
+          : decodeXml(cellXml.slice(formulaTag.end, findElementCloseStart(cellXml, formulaTag)));
+        formulas.push({
+          sheetName: sheet.name,
+          sheetPartName: sheet.partName,
+          address,
+          formula,
+          references: parseFormulaReferences(formula),
+          sheetReferences: parseFormulaSheetReferences(formula),
+          structuredReferences: parseFormulaStructuredReferences(formula)
+        });
+      }
+    }
+
+    return formulas;
   }
 
   diagnostics(): Diagnostic[] {
@@ -276,6 +361,60 @@ export class Workbook {
       message: "Removed stale calcChain.xml after formula mutation",
       part: "xl/calcChain.xml"
     });
+  }
+
+  private async forceRecalculateIfFormulaDependenciesTouched(
+    sheetPartName: string,
+    affectedRanges: CellRange[]
+  ): Promise<void> {
+    if (affectedRanges.length === 0) {
+      return;
+    }
+
+    const affected = await this.formulasAffectedByRanges(sheetPartName, affectedRanges);
+    if (affected.length === 0) {
+      return;
+    }
+
+    await this.forceRecalculateOnOpen();
+    this.addDiagnostic({
+      severity: "info",
+      code: "FORMULA_DEPENDENCIES_RECALCULATED",
+      message: `Marked workbook for recalculation because ${affected.length} formula cell(s) reference edited range(s)`,
+      part: sheetPartName
+    });
+  }
+
+  private async formulasAffectedByRanges(
+    sheetPartName: string,
+    affectedRanges: CellRange[]
+  ): Promise<WorkbookFormula[]> {
+    const sheetPartByName = new Map(
+      this.sheets().map((sheet) => [sheet.name.toLowerCase(), sheet.partName])
+    );
+    const affected: WorkbookFormula[] = [];
+
+    for (const formula of await this.formulas()) {
+      for (const reference of formula.references) {
+        const referenceSheetPart =
+          reference.sheetName === undefined
+            ? formula.sheetPartName
+            : sheetPartByName.get(reference.sheetName.toLowerCase());
+        if (referenceSheetPart !== sheetPartName) {
+          continue;
+        }
+
+        const referenceRange = formulaReferenceRange(reference);
+        if (
+          affectedRanges.some((affectedRange) => rangesIntersect(referenceRange, affectedRange))
+        ) {
+          affected.push(formula);
+          break;
+        }
+      }
+    }
+
+    return affected;
   }
 
   private async sharedStrings(): Promise<string[]> {
@@ -380,6 +519,23 @@ export class Workbook {
 function isFormulaValue(value: CellInput): value is FormulaValue {
   return (
     typeof value === "object" && value !== null && !(value instanceof Date) && "formula" in value
+  );
+}
+
+function formulaReferenceRange(reference: FormulaReference): CellRange {
+  if (reference.kind === "range") {
+    return reference.range;
+  }
+
+  return parseCellRange(reference.ref);
+}
+
+function rangesIntersect(left: CellRange, right: CellRange): boolean {
+  return (
+    left.start.column <= right.end.column &&
+    left.end.column >= right.start.column &&
+    left.start.row <= right.end.row &&
+    left.end.row >= right.start.row
   );
 }
 

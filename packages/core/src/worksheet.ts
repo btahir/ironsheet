@@ -2,7 +2,8 @@ import {
   compareCellAddresses,
   formatCellAddress,
   parseCellAddress,
-  parseCellRange
+  parseCellRange,
+  type CellRange
 } from "./address.ts";
 import { WorksheetError } from "./errors.ts";
 import {
@@ -44,6 +45,7 @@ export type CellPatch = {
 export type PatchCellResult = {
   xml: string;
   formulaChanged: boolean;
+  affectedRanges: CellRange[];
 };
 
 type ExistingCell = {
@@ -122,12 +124,14 @@ export function patchCell(xml: string, address: string, value: CellInput): Patch
   const parsedAddress = parseCellAddress(address);
   const existing = findCellElement(xml, parsedAddress.address);
   const prefix = inferWorksheetPrefix(xml);
+  const existingFormula =
+    existing === undefined ? false : findFirstStartTag(existing.raw, "f") !== undefined;
   const cellXml = createCellXml(
     parsedAddress.address,
     value,
     existing?.styleId === undefined ? { prefix } : { prefix, styleId: existing.styleId }
   );
-  const formulaChanged = isFormulaValue(value);
+  const formulaChanged = isFormulaValue(value) || existingFormula;
   const withCell =
     existing === undefined
       ? insertCell(xml, parsedAddress.address, parsedAddress.row, cellXml)
@@ -135,23 +139,27 @@ export function patchCell(xml: string, address: string, value: CellInput): Patch
 
   return {
     xml: updateDimension(withCell, parsedAddress.address),
-    formulaChanged
+    formulaChanged,
+    affectedRanges: [parseCellRange(parsedAddress.address)]
   };
 }
 
 export function patchCells(xml: string, patches: CellPatch[]): PatchCellResult {
   let nextXml = xml;
   let formulaChanged = false;
+  const affectedRanges: CellRange[] = [];
 
   for (const patch of patches) {
     const result = patchCell(nextXml, patch.address, patch.value);
     nextXml = result.xml;
     formulaChanged = formulaChanged || result.formulaChanged;
+    affectedRanges.push(...result.affectedRanges);
   }
 
   return {
     xml: nextXml,
-    formulaChanged
+    formulaChanged,
+    affectedRanges
   };
 }
 
@@ -180,6 +188,14 @@ export function appendRows(
   rows: CellInput[][],
   options: { startColumn?: number } = {}
 ): PatchCellResult {
+  if (rows.length === 0) {
+    return {
+      xml,
+      formulaChanged: false,
+      affectedRanges: []
+    };
+  }
+
   const startColumn = options.startColumn ?? 1;
   const startRow = findMaxUsedRow(xml) + 1;
   const rowXml = createRowsXml(rows, { prefix: inferWorksheetPrefix(xml), startColumn, startRow });
@@ -192,7 +208,12 @@ export function appendRows(
 
   return {
     xml: updateDimension(inserted, formatCellAddress(lastColumn, lastRow)),
-    formulaChanged: rows.some((row) => row.some(isFormulaValue))
+    formulaChanged: rows.some((row) => row.some(isFormulaValue)),
+    affectedRanges: [
+      parseCellRange(
+        `${formatCellAddress(startColumn, startRow)}:${formatCellAddress(lastColumn, lastRow)}`
+      )
+    ]
   };
 }
 

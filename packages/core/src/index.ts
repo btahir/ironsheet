@@ -28,6 +28,7 @@ export {
 } from "./validation.ts";
 export {
   Workbook,
+  type WorkbookFormula,
   type WorkbookInspectResult,
   type WorkbookSheet,
   type WorkbookSheetState
