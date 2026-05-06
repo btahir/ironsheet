@@ -87,14 +87,11 @@ test("CLI render-template-safe reports validation and writes output", async () =
   try {
     const inputPath = resolve(directory, "input.xlsx");
     const outputPath = resolve(directory, "output.xlsx");
+    const patchPath = resolve(directory, "patch.json");
     await writeFile(inputPath, await createMinimalWorkbook({ includeDefinedName: true }));
+    await writeFile(patchPath, '{"names":[{"name":"RevenueRange","values":[["North",10]]}]}');
 
-    const result = runCli([
-      "render-template-safe",
-      inputPath,
-      outputPath,
-      '{"names":[{"name":"RevenueRange","values":[["North",10]]}]}'
-    ]);
+    const result = runCli(["render-template-safe", inputPath, outputPath, `@${patchPath}`]);
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /"wrote": true/);
@@ -102,6 +99,36 @@ test("CLI render-template-safe reports validation and writes output", async () =
 
     const workbook = await openWorkbook(new Uint8Array(await readFile(outputPath)));
     assert.equal((await workbook.readCell("Sheet1", "A1"))?.value, "North");
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test("CLI render-template accepts image files in JSON patches", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    const outputPath = resolve(directory, "output.xlsx");
+    const imagePath = resolve(directory, "logo.png");
+    const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 4, 3, 2, 1]);
+    await writeFile(inputPath, await createMinimalWorkbook({ includeDrawing: true }));
+    await writeFile(imagePath, replacement);
+
+    const result = runCli([
+      "render-template",
+      inputPath,
+      outputPath,
+      JSON.stringify({
+        images: [{ imagePartName: "xl/media/image1.png", path: imagePath }]
+      })
+    ]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"images": 1/);
+
+    const pkg = await openPackage(new Uint8Array(await readFile(outputPath)));
+    assert.deepEqual(Array.from(await pkg.readPart("xl/media/image1.png")), [...replacement]);
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

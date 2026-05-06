@@ -247,10 +247,18 @@ Render a template with cells, ranges, and tables in one JSON patch:
 npm run cli -- render-template input.xlsx output.xlsx '{"names":[{"name":"RevenueRange","values":[["Name","Amount"],["ACME",42]]}],"cells":[{"sheetName":"Sheet1","address":"D1","value":"Rendered"}],"ranges":[{"sheetName":"Sheet1","startAddress":"E1","values":[[1,2],[3,4]]}],"tables":[{"tableName":"RevenueTable","rows":[["North",10],["South",20]]}]}'
 ```
 
+Template patches can also be loaded from `@patch.json` and can replace existing workbook images:
+
+```json
+{
+  "images": [{ "imagePartName": "xl/media/image1.png", "path": "logo.png" }]
+}
+```
+
 Render with validation and a package diff before writing:
 
 ```bash
-npm run cli -- render-template-safe input.xlsx output.xlsx '{"names":[{"name":"RevenueRange","values":[["Name","Amount"],["ACME",42]]}]}'
+npm run cli -- render-template-safe input.xlsx output.xlsx @patch.json
 ```
 
 Set or delete a conditional format:

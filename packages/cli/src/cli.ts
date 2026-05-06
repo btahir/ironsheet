@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import { Buffer } from "node:buffer";
 import process from "node:process";
 import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "@ironsheet/core";
@@ -138,8 +139,8 @@ function usage(): never {
   npm run cli -- set-auto-filter <input.xlsx> <output.xlsx> <sheet> <jsonAutoFilter>
   npm run cli -- delete-auto-filter <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- replace-image <input.xlsx> <output.xlsx> <imagePartName> <imageFile>
-  npm run cli -- render-template <input.xlsx> <output.xlsx> <jsonPatch>
-  npm run cli -- render-template-safe <input.xlsx> <output.xlsx> <jsonPatch>
+  npm run cli -- render-template <input.xlsx> <output.xlsx> <jsonPatch|@patch.json>
+  npm run cli -- render-template-safe <input.xlsx> <output.xlsx> <jsonPatch|@patch.json>
   npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
   npm run cli -- delete-conditional-format <input.xlsx> <output.xlsx> <sheet> <sqref>
   npm run cli -- set-data-validation <input.xlsx> <output.xlsx> <sheet> <jsonValidation>
@@ -507,7 +508,11 @@ async function renderTemplate(
   outputPath: string,
   rawPatch: string
 ): Promise<void> {
-  const result = await renderWorkbookTemplate(inputPath, outputPath, parseTemplatePatch(rawPatch));
+  const result = await renderWorkbookTemplate(
+    inputPath,
+    outputPath,
+    await parseTemplatePatch(rawPatch)
+  );
   console.log(JSON.stringify(result, null, 2));
 }
 
@@ -519,7 +524,7 @@ async function renderTemplateSafe(
   const result = await renderWorkbookTemplateSafely(
     inputPath,
     outputPath,
-    parseTemplatePatch(rawPatch)
+    await parseTemplatePatch(rawPatch)
   );
   console.log(JSON.stringify(result, null, 2));
 
@@ -675,8 +680,8 @@ function parseAutoFilter(rawAutoFilter: string): WorksheetAutoFilter {
   return parsed as WorksheetAutoFilter;
 }
 
-function parseTemplatePatch(rawPatch: string): WorkbookTemplatePatch {
-  const parsed: unknown = JSON.parse(rawPatch);
+async function parseTemplatePatch(rawPatch: string): Promise<WorkbookTemplatePatch> {
+  const parsed: unknown = JSON.parse(await readJsonArgument(rawPatch));
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("jsonPatch must be an object");
   }
@@ -684,10 +689,19 @@ function parseTemplatePatch(rawPatch: string): WorkbookTemplatePatch {
   const patch = parsed as Record<string, unknown>;
   return {
     ...parseTemplateCells(patch.cells),
+    ...(await parseTemplateImages(patch.images)),
     ...parseTemplateNames(patch.names),
     ...parseTemplateRanges(patch.ranges),
     ...parseTemplateTables(patch.tables)
   };
+}
+
+async function readJsonArgument(raw: string): Promise<string> {
+  if (!raw.startsWith("@")) {
+    return raw;
+  }
+
+  return readFile(raw.slice(1), "utf8");
 }
 
 function parseTemplateCells(cells: unknown): Pick<WorkbookTemplatePatch, "cells"> {
@@ -720,6 +734,49 @@ function parseTemplateCells(cells: unknown): Pick<WorkbookTemplatePatch, "cells"
         value: parseJsonCell(candidate.value)
       };
     })
+  };
+}
+
+async function parseTemplateImages(
+  images: unknown
+): Promise<Pick<WorkbookTemplatePatch, "images">> {
+  if (images === undefined) {
+    return {};
+  }
+
+  if (!Array.isArray(images)) {
+    throw new Error("jsonPatch.images must be an array");
+  }
+
+  return {
+    images: await Promise.all(
+      images.map(async (image) => {
+        if (typeof image !== "object" || image === null || Array.isArray(image)) {
+          throw new Error("jsonPatch.images entries must be objects");
+        }
+
+        const candidate = image as Record<string, unknown>;
+        if (typeof candidate.imagePartName !== "string") {
+          throw new Error("jsonPatch.images entries need imagePartName");
+        }
+
+        if (typeof candidate.path === "string") {
+          return {
+            imagePartName: candidate.imagePartName,
+            data: new Uint8Array(await readFile(candidate.path))
+          };
+        }
+
+        if (typeof candidate.dataBase64 === "string") {
+          return {
+            imagePartName: candidate.imagePartName,
+            data: new Uint8Array(Buffer.from(candidate.dataBase64, "base64"))
+          };
+        }
+
+        throw new Error("jsonPatch.images entries need path or dataBase64");
+      })
+    )
   };
 }
 
