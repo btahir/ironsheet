@@ -253,6 +253,44 @@ test("validation reports drawing chart and image relationship id gaps", async ()
   );
 });
 
+test("validation reports chart formulas with broken references", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDrawing: true }));
+  pkg.setText(
+    "xl/charts/chart1.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:ser>
+          <c:cat><c:strRef><c:f>Missing!$A$1:$A$2</c:f></c:strRef></c:cat>
+          <c:val><c:numRef><c:f>Sheet1!$XFE$1</c:f></c:numRef></c:val>
+          <c:tx><c:strRef><c:f>MissingTable[Amount]</c:f></c:strRef></c:tx>
+        </c:ser>
+      </c:barChart>
+    </c:plotArea>
+  </c:chart>
+</c:chartSpace>`
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.summary.warnings, 2);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "CHART_FORMULA_SHEET_MISSING"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "CHART_FORMULA_REFERENCE_OUT_OF_BOUNDS"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "CHART_FORMULA_TABLE_MISSING"),
+    true
+  );
+});
+
 test("validation reports defined names that reference missing sheets", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
   const xml = await pkg.readText("xl/workbook.xml");

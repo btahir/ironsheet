@@ -65,6 +65,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateDrawingRelationshipIds(pkg, issues, parts);
   await validateDefinedNames(pkg, issues, parts);
   await validateWorksheetFormulas(pkg, issues, parts);
+  await validateChartFormulas(pkg, issues, parts);
   await validateWorksheetDimensions(pkg, issues, parts);
   await validateStyleReferences(pkg, issues, parts);
   await validateSharedStringReferences(pkg, issues, parts);
@@ -79,6 +80,60 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
       infos: issues.filter((issue) => issue.severity === "info").length
     }
   };
+}
+
+async function validateChartFormulas(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  if (!pkg.hasPart("xl/workbook.xml")) {
+    return;
+  }
+
+  const sheetNames = workbookSheetNames(await pkg.readText("xl/workbook.xml"));
+  const tableNames = await workbookTableNames(pkg, parts);
+
+  for (const part of parts.filter((name) => /^xl\/charts\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    for (const formulaText of xmlFormulaTexts(xml)) {
+      for (const reference of parseFormulaSheetReferences(formulaText)) {
+        if (!sheetNames.has(reference.sheetName)) {
+          issues.push({
+            severity: "warning",
+            code: "CHART_FORMULA_SHEET_MISSING",
+            message: `Chart formula references missing sheet ${reference.sheetName}`,
+            part,
+            target: reference.sheetName
+          });
+        }
+      }
+
+      for (const reference of parseFormulaReferences(formulaText)) {
+        if (!formulaReferenceWithinExcelBounds(reference)) {
+          issues.push({
+            severity: "error",
+            code: "CHART_FORMULA_REFERENCE_OUT_OF_BOUNDS",
+            message: `Chart formula references ${reference.ref}, which is outside the Excel worksheet grid`,
+            part,
+            target: reference.ref
+          });
+        }
+      }
+
+      for (const reference of parseFormulaStructuredReferences(formulaText)) {
+        if (!tableNames.has(reference.tableName)) {
+          issues.push({
+            severity: "warning",
+            code: "CHART_FORMULA_TABLE_MISSING",
+            message: `Chart formula references missing table ${reference.tableName}`,
+            part,
+            target: reference.tableName
+          });
+        }
+      }
+    }
+  }
 }
 
 async function validateRelationshipTargets(
@@ -686,6 +741,20 @@ function worksheetFormulaEntries(xml: string): WorksheetFormulaEntry[] {
         ? ""
         : decodeXml(cellXml.slice(formulaTag.end, findElementCloseStart(cellXml, formulaTag)))
     });
+  }
+
+  return formulas;
+}
+
+function xmlFormulaTexts(xml: string): string[] {
+  const formulas: string[] = [];
+
+  for (const formula of findStartTags(xml, "f")) {
+    if (formula.selfClosing) {
+      continue;
+    }
+
+    formulas.push(decodeXml(xml.slice(formula.end, findElementCloseStart(xml, formula))));
   }
 
   return formulas;
