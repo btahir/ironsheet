@@ -16,6 +16,7 @@ Ironsheet is split into runtime-neutral core APIs and Node-specific IO APIs.
 - Render template patches across named ranges, cells, ranges, tables, and existing images in one typed operation.
 - Preserve untouched ZIP entries and OOXML parts.
 - Validate relationships, dimensions, hyperlinks, merged cells, styles, shared strings, formula references, tables, pivots, charts, and calc chains.
+- Safely mutate Node workbooks with validation, diagnostics, package diffing, and write suppression on validation errors.
 - Retarget exact chart formulas and pivot cache worksheet sources.
 - Stream row XML and replace selected worksheet rows from chunked XML input.
 

@@ -37,6 +37,7 @@ import {
   replaceWorkbookImageFile,
   replaceWorkbookTableRows,
   renderWorkbookTemplate,
+  renderWorkbookTemplateSafely,
   retargetWorkbookChartFormulasFile,
   retargetWorkbookPivotCacheSourcesFile,
   setWorkbookAutoFilter,
@@ -94,6 +95,7 @@ type Command =
   | "replace-image"
   | "replace-table"
   | "render-template"
+  | "render-template-safe"
   | "retarget-chart"
   | "retarget-pivot"
   | "set-auto-filter"
@@ -137,6 +139,7 @@ function usage(): never {
   npm run cli -- delete-auto-filter <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- replace-image <input.xlsx> <output.xlsx> <imagePartName> <imageFile>
   npm run cli -- render-template <input.xlsx> <output.xlsx> <jsonPatch>
+  npm run cli -- render-template-safe <input.xlsx> <output.xlsx> <jsonPatch>
   npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
   npm run cli -- delete-conditional-format <input.xlsx> <output.xlsx> <sheet> <sqref>
   npm run cli -- set-data-validation <input.xlsx> <output.xlsx> <sheet> <jsonValidation>
@@ -506,6 +509,23 @@ async function renderTemplate(
 ): Promise<void> {
   const result = await renderWorkbookTemplate(inputPath, outputPath, parseTemplatePatch(rawPatch));
   console.log(JSON.stringify(result, null, 2));
+}
+
+async function renderTemplateSafe(
+  inputPath: string,
+  outputPath: string,
+  rawPatch: string
+): Promise<void> {
+  const result = await renderWorkbookTemplateSafely(
+    inputPath,
+    outputPath,
+    parseTemplatePatch(rawPatch)
+  );
+  console.log(JSON.stringify(result, null, 2));
+
+  if (!result.wrote) {
+    process.exitCode = 1;
+  }
 }
 
 async function renameTable(
@@ -1273,6 +1293,12 @@ try {
       usage();
     }
     await renderTemplate(inputPath, outputPath, rawPatch);
+  } else if (command === "render-template-safe") {
+    const [inputPath, outputPath, rawPatch] = args;
+    if (inputPath === undefined || outputPath === undefined || rawPatch === undefined) {
+      usage();
+    }
+    await renderTemplateSafe(inputPath, outputPath, rawPatch);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (

@@ -7,7 +7,11 @@ import {
   type CellInput,
   type CellPatch,
   type ChartFormulaRetarget,
+  type Diagnostic,
+  diffZipPackages,
+  type PackageDiff,
   type PivotCacheSourceRetarget,
+  type ValidationReport,
   type WorkbookCellStyleInput,
   type WorkbookNamedRangePatchOptions,
   type WorkbookSheetState,
@@ -41,6 +45,51 @@ export async function readWorkbook(path: string): Promise<Workbook> {
 
 export async function writeWorkbook(workbook: Workbook, path: string): Promise<void> {
   await nodeWriteFile(path, await workbook.write());
+}
+
+export type WorkbookSafeWriteOptions = {
+  allowValidationErrors?: boolean;
+};
+
+export type WorkbookSafeWriteReport = {
+  diagnostics: Diagnostic[];
+  diff: PackageDiff;
+  validation: ValidationReport;
+  wrote: boolean;
+};
+
+export async function writeWorkbookSafely(
+  workbook: Workbook,
+  outputPath: string,
+  beforeData: Uint8Array,
+  options: WorkbookSafeWriteOptions = {}
+): Promise<WorkbookSafeWriteReport> {
+  const afterData = await workbook.write();
+  const validation = await workbook.validate();
+  const report: WorkbookSafeWriteReport = {
+    diagnostics: workbook.diagnostics(),
+    diff: diffZipPackages(beforeData, afterData),
+    validation,
+    wrote: validation.summary.errors === 0 || options.allowValidationErrors === true
+  };
+
+  if (report.wrote) {
+    await nodeWriteFile(outputPath, afterData);
+  }
+
+  return report;
+}
+
+export async function mutateWorkbookFile(
+  inputPath: string,
+  outputPath: string,
+  mutate: (workbook: Workbook) => Promise<void> | void,
+  options: WorkbookSafeWriteOptions = {}
+): Promise<WorkbookSafeWriteReport> {
+  const beforeData = new Uint8Array(await nodeReadFile(inputPath));
+  const workbook = await openWorkbook(beforeData);
+  await mutate(workbook);
+  return writeWorkbookSafely(workbook, outputPath, beforeData, options);
 }
 
 export async function patchWorkbookCell(
@@ -122,6 +171,33 @@ export async function renderWorkbookTemplate(
   const result = await workbook.renderTemplate(patch);
   await writeWorkbook(workbook, outputPath);
   return result;
+}
+
+export type WorkbookSafeTemplateRenderReport = WorkbookSafeWriteReport & {
+  render: Awaited<ReturnType<Workbook["renderTemplate"]>>;
+};
+
+export async function renderWorkbookTemplateSafely(
+  inputPath: string,
+  outputPath: string,
+  patch: WorkbookTemplatePatch,
+  options: WorkbookSafeWriteOptions = {}
+): Promise<WorkbookSafeTemplateRenderReport> {
+  let render: Awaited<ReturnType<Workbook["renderTemplate"]>> | undefined;
+  const report = await mutateWorkbookFile(
+    inputPath,
+    outputPath,
+    async (workbook) => {
+      render = await workbook.renderTemplate(patch);
+    },
+    options
+  );
+
+  if (render === undefined) {
+    throw new Error("Template render did not run");
+  }
+
+  return { ...report, render };
 }
 
 export async function readWorkbookCell(

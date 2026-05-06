@@ -81,6 +81,32 @@ test("CLI patch-named-range updates a defined-name target", async () => {
   }
 });
 
+test("CLI render-template-safe reports validation and writes output", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    const outputPath = resolve(directory, "output.xlsx");
+    await writeFile(inputPath, await createMinimalWorkbook({ includeDefinedName: true }));
+
+    const result = runCli([
+      "render-template-safe",
+      inputPath,
+      outputPath,
+      '{"names":[{"name":"RevenueRange","values":[["North",10]]}]}'
+    ]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"wrote": true/);
+    assert.match(result.stdout, /"errors": 0/);
+
+    const workbook = await openWorkbook(new Uint8Array(await readFile(outputPath)));
+    assert.equal((await workbook.readCell("Sheet1", "A1"))?.value, "North");
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync(
     process.execPath,

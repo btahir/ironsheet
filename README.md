@@ -47,6 +47,7 @@ This repository currently implements the first vertical slice:
 - Streaming XML tokenizer, chunk transform primitives, and streamed element extraction powering local XML helpers and future large-worksheet transforms.
 - Semantic validation for package relationship targets, duplicate relationship IDs, orphan relationship parts, orphan content type overrides, local worksheet/drawing relationship IDs, workbook sheet metadata, content types, worksheet dimensions, merge/validation/conditional-format/hyperlink refs, style indexes and cell format limits, shared string references/counts, worksheet/defined-name/chart formula references, formula bounds, formula table references, shared formula groups, table refs, table part counts, table metadata, table column structure, pivot table/cache source sanity, stale calc chains, and defined-name scope integrity.
 - Node adapter using `node:zlib`.
+- Safe Node mutation helpers that validate, diff, and only write successful workbook mutations.
 - CLI inspection, read, patch, range patch, table replacement/rename, and package diff commands.
 - Compatibility harness with ZIP integrity, Ironsheet semantic validation, and optional app-level checks.
 - Runtime guard that automatically scans every core source file for Node-only imports and runtime dependencies.
@@ -244,6 +245,12 @@ Render a template with cells, ranges, and tables in one JSON patch:
 
 ```bash
 npm run cli -- render-template input.xlsx output.xlsx '{"names":[{"name":"RevenueRange","values":[["Name","Amount"],["ACME",42]]}],"cells":[{"sheetName":"Sheet1","address":"D1","value":"Rendered"}],"ranges":[{"sheetName":"Sheet1","startAddress":"E1","values":[[1,2],[3,4]]}],"tables":[{"tableName":"RevenueTable","rows":[["North",10],["South",20]]}]}'
+```
+
+Render with validation and a package diff before writing:
+
+```bash
+npm run cli -- render-template-safe input.xlsx output.xlsx '{"names":[{"name":"RevenueRange","values":[["Name","Amount"],["ACME",42]]}]}'
 ```
 
 Set or delete a conditional format:
