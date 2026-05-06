@@ -265,6 +265,24 @@ test("validation reports defined names that reference missing sheets", async () 
   assert.equal(report.issues[0]?.target, "RevenueRange");
 });
 
+test("validation reports formulas that reference missing sheets", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>',
+      '<c r="A1" s="1"><f>Missing!A1+Sheet1!A1</f><v>1</v></c>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "FORMULA_SHEET_MISSING");
+  assert.equal(report.issues[0]?.target, "Missing");
+});
+
 test("validation reports defined names with invalid local sheet ids", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
   const workbookXml = await pkg.readText("xl/workbook.xml");

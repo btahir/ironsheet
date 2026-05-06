@@ -1,5 +1,6 @@
 import { parseCellAddress, parseCellRange } from "./address.ts";
 import { parseDefinedNames } from "./defined-names.ts";
+import { parseFormulaSheetReferences } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { findElementCloseStart, findElementEnd, findFirstStartTag, findStartTags } from "./xml.ts";
 
@@ -45,6 +46,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateWorksheetRelationshipIds(pkg, issues, parts);
   await validateDrawingRelationshipIds(pkg, issues, parts);
   await validateDefinedNames(pkg, issues);
+  await validateWorksheetFormulas(pkg, issues, parts);
   await validateWorksheetDimensions(pkg, issues, parts);
   await validateStyleReferences(pkg, issues, parts);
   await validateSharedStringReferences(pkg, issues, parts);
@@ -402,9 +404,7 @@ async function validateDefinedNames(pkg: OoxmlPackage, issues: ValidationIssue[]
 
   const workbookXml = await pkg.readText("xl/workbook.xml");
   const sheets = findStartTags(workbookXml, "sheet");
-  const sheetNames = new Set(
-    sheets.map((tag) => tag.attributes.name).filter((name): name is string => name !== undefined)
-  );
+  const sheetNames = workbookSheetNames(workbookXml);
 
   for (const definedName of parseDefinedNames(workbookXml)) {
     if (definedName.localSheetId !== undefined) {
@@ -549,6 +549,39 @@ function validateRelationshipId(options: {
   }
 }
 
+async function validateWorksheetFormulas(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  if (!pkg.hasPart("xl/workbook.xml")) {
+    return;
+  }
+
+  const sheetNames = workbookSheetNames(await pkg.readText("xl/workbook.xml"));
+  for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    for (const formula of findStartTags(xml, "f")) {
+      if (formula.selfClosing) {
+        continue;
+      }
+
+      const formulaText = xml.slice(formula.end, findElementCloseStart(xml, formula));
+      for (const reference of parseFormulaSheetReferences(formulaText)) {
+        if (!sheetNames.has(reference.sheetName)) {
+          issues.push({
+            severity: "warning",
+            code: "FORMULA_SHEET_MISSING",
+            message: `Formula references missing sheet ${reference.sheetName}`,
+            part,
+            target: reference.sheetName
+          });
+        }
+      }
+    }
+  }
+}
+
 function worksheetCellHasFormula(xml: string, address: string): boolean {
   const target = address.toUpperCase();
   for (const cell of findStartTags(xml, "c")) {
@@ -567,27 +600,15 @@ function worksheetCellHasFormula(xml: string, address: string): boolean {
 }
 
 function sheetReferencesInFormulaText(text: string): string[] {
-  const references = new Set<string>();
-  const pattern = /(?:^|[, (])((?:'(?:(?:'')|[^'])+'|[A-Za-z_][A-Za-z0-9_ .]*))!/g;
-
-  for (const match of text.matchAll(pattern)) {
-    const rawName = match[1];
-    if (rawName === undefined || rawName.includes("[")) {
-      continue;
-    }
-
-    references.add(unquoteSheetName(rawName));
-  }
-
-  return [...references];
+  return parseFormulaSheetReferences(text).map((reference) => reference.sheetName);
 }
 
-function unquoteSheetName(name: string): string {
-  if (name.startsWith("'") && name.endsWith("'")) {
-    return name.slice(1, -1).replaceAll("''", "'");
-  }
-
-  return name.trim();
+function workbookSheetNames(workbookXml: string): Set<string> {
+  return new Set(
+    findStartTags(workbookXml, "sheet")
+      .map((tag) => tag.attributes.name)
+      .filter((name): name is string => name !== undefined)
+  );
 }
 
 function sourcePartFromRelationshipPart(part: string): string | undefined {
