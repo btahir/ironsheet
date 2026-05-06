@@ -16,7 +16,7 @@ This repository currently implements the first vertical slice:
 - Workbook sheet discovery.
 - Defined-name inspection.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
-- Safe table renaming with structured-reference retargeting across formulas and defined names.
+- Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
 - Style metadata inspection with cell format counts.
 - Cell, batch-cell, and range read/write APIs.
 - Append-row API for template-backed exports.
@@ -109,10 +109,11 @@ Replace basic table rows:
 npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["New",10],["Growth",20]]'
 ```
 
-Rename a table and retarget structured references:
+Rename a table or table column and retarget structured references:
 
 ```bash
 npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
+npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
 ```
 
 Diff two workbook packages:

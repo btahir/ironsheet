@@ -199,6 +199,60 @@ test("renaming tables rejects duplicate and invalid names", async () => {
   await assert.rejects(() => workbook.renameTable("RevenueTable", "A1"), /cell reference/);
 });
 
+test("renames table columns and retargets structured references", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const tableXml = await pkg.readText("xl/tables/table1.xml");
+  pkg.setText(
+    "xl/tables/table1.xml",
+    tableXml.replace(
+      '<tableColumn id="2" name="Amount"/>',
+      '<tableColumn id="2" name="Amount"><calculatedColumnFormula>[@Amount]*2</calculatedColumnFormula></tableColumn>'
+    )
+  );
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      "</sheetData>",
+      '<row r="3"><c r="C3"><f>SUM(RevenueTable[Amount])</f><v>1</v></c></row></sheetData>'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  const renamed = await workbook.renameTableColumn("RevenueTable", "Amount", "NetAmount");
+
+  assert.deepEqual(renamed.columns, [
+    { id: "1", name: "Name" },
+    { id: "2", name: "NetAmount" }
+  ]);
+  assert.deepEqual(await workbook.readCell("Sheet1", "B1"), {
+    address: "B1",
+    value: "NetAmount"
+  });
+  assert.match(await pkg.readText("xl/tables/table1.xml"), /name="NetAmount"/);
+  assert.match(await pkg.readText("xl/tables/table1.xml"), /\[@NetAmount\]\*2/);
+  assert.equal(
+    (await workbook.formulas()).some(
+      (formula) => formula.formula === "SUM(RevenueTable[NetAmount])"
+    ),
+    true
+  );
+  assert.match(await pkg.readText("xl/workbook.xml"), /forceFullCalc="1"/);
+});
+
+test("renaming table columns rejects duplicate and empty names", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeTable: true }));
+
+  await assert.rejects(
+    () => workbook.renameTableColumn("RevenueTable", "Amount", "Name"),
+    /already used/
+  );
+  await assert.rejects(
+    () => workbook.renameTableColumn("RevenueTable", "Amount", ""),
+    /cannot be empty/
+  );
+});
+
 test("reads workbook formula inventory with parsed dependencies", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");

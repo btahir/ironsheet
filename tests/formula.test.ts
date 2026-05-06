@@ -5,6 +5,7 @@ import {
   parseFormulaReferences,
   parseFormulaSheetReferences,
   parseFormulaStructuredReferences,
+  renameFormulaStructuredReferenceColumn,
   renameFormulaStructuredReferenceTable
 } from "../packages/core/src/index.ts";
 
@@ -127,5 +128,30 @@ test("formula structured reference rename retargets table tokens only", () => {
       "SalesData"
     ),
     'SUM(SalesData[Amount],SalesData[[#Totals],[Amount]],OtherTable[Amount],"RevenueTable[Amount]")'
+  );
+});
+
+test("formula structured reference column rename retargets target table columns only", () => {
+  assert.equal(
+    renameFormulaStructuredReferenceColumn(
+      'SUM(RevenueTable[amount],RevenueTable[[#Totals],[Amount]],RevenueTable[@Amount],OtherTable[Amount],"RevenueTable[Amount]")',
+      ["RevenueTable"],
+      "Amount",
+      "NetAmount"
+    ),
+    'SUM(RevenueTable[NetAmount],RevenueTable[[#Totals],[NetAmount]],RevenueTable[@NetAmount],OtherTable[Amount],"RevenueTable[Amount]")'
+  );
+});
+
+test("formula structured reference column rename handles in-table references", () => {
+  assert.equal(
+    renameFormulaStructuredReferenceColumn(
+      "SUM([Amount],[@Amount],OtherTable[Amount])",
+      ["RevenueTable"],
+      "Amount",
+      "NetAmount",
+      { includeUnqualified: true }
+    ),
+    "SUM([NetAmount],[@NetAmount],OtherTable[Amount])"
   );
 });

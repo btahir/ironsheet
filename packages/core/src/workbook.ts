@@ -15,6 +15,7 @@ import { parseSharedStrings } from "./shared-strings.ts";
 import { parseWorkbookStyles, type WorkbookStyles } from "./styles.ts";
 import {
   listWorkbookTables,
+  renameWorkbookTableColumn,
   renameWorkbookTable,
   replaceTableRows,
   type WorkbookTable
@@ -258,6 +259,21 @@ export class Workbook {
 
   async renameTable(tableName: string, nextName: string): Promise<WorkbookTable> {
     const table = await renameWorkbookTable(this.pkg, tableName, nextName);
+    await this.forceRecalculateOnOpen();
+    await this.recordMutationImpactDiagnostics({
+      operation: "table",
+      sheetPartName: table.worksheetPartName
+    });
+
+    return table;
+  }
+
+  async renameTableColumn(
+    tableName: string,
+    columnName: string,
+    nextName: string
+  ): Promise<WorkbookTable> {
+    const table = await renameWorkbookTableColumn(this.pkg, tableName, columnName, nextName);
     await this.forceRecalculateOnOpen();
     await this.recordMutationImpactDiagnostics({
       operation: "table",

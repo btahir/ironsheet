@@ -76,6 +76,65 @@ export function renameFormulaStructuredReferenceTable(
   return result + formula.slice(lastCopiedOffset);
 }
 
+export function renameFormulaStructuredReferenceColumn(
+  formula: string,
+  tableNames: string[],
+  oldColumnName: string,
+  nextColumnName: string,
+  options: { includeUnqualified?: boolean } = {}
+): string {
+  const targetTableNames = new Set(tableNames.map((name) => name.toLowerCase()));
+  const scrubbed = stripDoubleQuotedStrings(formula);
+  const ranges = findStructuredReferenceRanges(scrubbed);
+  const replacements: TextReplacement[] = [];
+
+  for (const range of ranges) {
+    if (!targetTableNames.has(range.tableName.toLowerCase())) {
+      continue;
+    }
+
+    const body = formula.slice(range.bracket, range.end);
+    const rewritten = rewriteStructuredReferenceColumnBody(body, oldColumnName, nextColumnName);
+    if (rewritten !== body) {
+      replacements.push({ start: range.bracket, end: range.end, text: rewritten });
+    }
+  }
+
+  if (options.includeUnqualified === true) {
+    let offset = 0;
+    while (offset < scrubbed.length) {
+      const bracket = scrubbed.indexOf("[", offset);
+      if (bracket === -1) {
+        break;
+      }
+
+      const containingRange = ranges.find(
+        (range) => bracket >= range.tableStart && bracket < range.end
+      );
+      if (containingRange !== undefined) {
+        offset = containingRange.end;
+        continue;
+      }
+
+      const end = findStructuredReferenceEnd(scrubbed, bracket);
+      if (end === undefined) {
+        offset = bracket + 1;
+        continue;
+      }
+
+      const body = formula.slice(bracket, end);
+      const rewritten = rewriteStructuredReferenceColumnBody(body, oldColumnName, nextColumnName);
+      if (rewritten !== body) {
+        replacements.push({ start: bracket, end, text: rewritten });
+      }
+
+      offset = end;
+    }
+  }
+
+  return applyTextReplacements(formula, replacements);
+}
+
 export function parseFormulaSheetReferences(formula: string): FormulaSheetReference[] {
   const references = new Set<string>();
   const scrubbed = stripDoubleQuotedStrings(formula);
@@ -131,6 +190,126 @@ export function parseFormulaStructuredReferences(formula: string): FormulaStruct
   }
 
   return [...references.values()];
+}
+
+type StructuredReferenceRange = {
+  tableName: string;
+  tableStart: number;
+  bracket: number;
+  end: number;
+};
+
+type TextReplacement = {
+  start: number;
+  end: number;
+  text: string;
+};
+
+function findStructuredReferenceRanges(source: string): StructuredReferenceRange[] {
+  const ranges: StructuredReferenceRange[] = [];
+  let offset = 0;
+
+  while (offset < source.length) {
+    const bracket = source.indexOf("[", offset);
+    if (bracket === -1) {
+      break;
+    }
+
+    const tableStart = findTableNameStart(source, bracket);
+    if (tableStart === undefined || !isReferenceBoundaryBefore(source, tableStart)) {
+      offset = bracket + 1;
+      continue;
+    }
+
+    const end = findStructuredReferenceEnd(source, bracket);
+    if (end === undefined) {
+      offset = bracket + 1;
+      continue;
+    }
+
+    ranges.push({
+      tableName: source.slice(tableStart, bracket),
+      tableStart,
+      bracket,
+      end
+    });
+    offset = end;
+  }
+
+  return ranges;
+}
+
+function rewriteStructuredReferenceColumnBody(
+  body: string,
+  oldColumnName: string,
+  nextColumnName: string
+): string {
+  const replacements: TextReplacement[] = [];
+  let offset = 0;
+
+  while (offset < body.length) {
+    const bracket = body.indexOf("[", offset);
+    if (bracket === -1) {
+      break;
+    }
+
+    if (body[bracket + 1] === "[") {
+      offset = bracket + 1;
+      continue;
+    }
+
+    const close = body.indexOf("]", bracket + 1);
+    if (close === -1) {
+      break;
+    }
+
+    const token = body.slice(bracket + 1, close);
+    const rewritten = rewriteStructuredReferenceColumnToken(token, oldColumnName, nextColumnName);
+    if (rewritten !== token) {
+      replacements.push({ start: bracket + 1, end: close, text: rewritten });
+    }
+
+    offset = close + 1;
+  }
+
+  return applyTextReplacements(body, replacements);
+}
+
+function rewriteStructuredReferenceColumnToken(
+  token: string,
+  oldColumnName: string,
+  nextColumnName: string
+): string {
+  if (token.toLowerCase() === oldColumnName.toLowerCase()) {
+    return nextColumnName;
+  }
+
+  if (token.toLowerCase() === `@${oldColumnName.toLowerCase()}`) {
+    return `@${nextColumnName}`;
+  }
+
+  return token;
+}
+
+function applyTextReplacements(source: string, replacements: TextReplacement[]): string {
+  if (replacements.length === 0) {
+    return source;
+  }
+
+  let result = "";
+  let offset = 0;
+
+  for (const replacement of replacements.sort((left, right) => left.start - right.start)) {
+    if (replacement.start < offset) {
+      continue;
+    }
+
+    result += source.slice(offset, replacement.start);
+    result += replacement.text;
+    offset = replacement.end;
+  }
+
+  return result + source.slice(offset);
 }
 
 export function parseFormulaReferences(formula: string): FormulaReference[] {

@@ -13,6 +13,7 @@ import {
   readWorkbookCell,
   readWorkbookRange,
   renameWorkbookTable,
+  renameWorkbookTableColumn,
   replaceWorkbookTableRows,
   validateWorkbookFile
 } from "../../node/src/index.ts";
@@ -26,6 +27,7 @@ type Command =
   | "patch-range"
   | "read-cell"
   | "read-range"
+  | "rename-table-column"
   | "rename-table"
   | "replace-table"
   | "styles"
@@ -46,6 +48,7 @@ function usage(): never {
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- rename-table <input.xlsx> <output.xlsx> <table> <newName>
+  npm run cli -- rename-table-column <input.xlsx> <output.xlsx> <table> <column> <newName>
   npm run cli -- replace-table <input.xlsx> <output.xlsx> <table> <jsonRows>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
@@ -143,6 +146,17 @@ async function renameTable(
 ): Promise<void> {
   await renameWorkbookTable(inputPath, outputPath, tableName, nextName);
   console.log(`renamed ${tableName} to ${nextName} -> ${outputPath}`);
+}
+
+async function renameTableColumn(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  columnName: string,
+  nextName: string
+): Promise<void> {
+  await renameWorkbookTableColumn(inputPath, outputPath, tableName, columnName, nextName);
+  console.log(`renamed ${tableName}[${columnName}] to ${nextName} -> ${outputPath}`);
 }
 
 function parseCliValue(value: string): CellInput {
@@ -304,6 +318,18 @@ try {
       usage();
     }
     await renameTable(inputPath, outputPath, tableName, nextName);
+  } else if (command === "rename-table-column") {
+    const [inputPath, outputPath, tableName, columnName, nextName] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      tableName === undefined ||
+      columnName === undefined ||
+      nextName === undefined
+    ) {
+      usage();
+    }
+    await renameTableColumn(inputPath, outputPath, tableName, columnName, nextName);
   } else {
     usage();
   }

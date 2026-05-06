@@ -11,6 +11,7 @@ export {
   parseFormulaReferences,
   parseFormulaSheetReferences,
   parseFormulaStructuredReferences,
+  renameFormulaStructuredReferenceColumn,
   renameFormulaStructuredReferenceTable,
   type FormulaCellReference,
   type FormulaRangeReference,
@@ -28,6 +29,7 @@ export {
 export {
   findWorkbookTable,
   listWorkbookTables,
+  renameWorkbookTableColumn,
   renameWorkbookTable,
   replaceTableRows,
   type WorkbookTable,

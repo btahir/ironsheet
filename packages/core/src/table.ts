@@ -1,9 +1,12 @@
-import { numberToColumnLabel, parseCellAddress } from "./address.ts";
+import { formatCellAddress, numberToColumnLabel, parseCellAddress } from "./address.ts";
 import { WorkbookError } from "./errors.ts";
-import { renameFormulaStructuredReferenceTable } from "./formula.ts";
+import {
+  renameFormulaStructuredReferenceColumn,
+  renameFormulaStructuredReferenceTable
+} from "./formula.ts";
 import type { OoxmlPackage } from "./opc.ts";
 import { resolveRelationshipTarget } from "./opc.ts";
-import { replaceRowsInRange, type CellInput } from "./worksheet.ts";
+import { patchCell, replaceRowsInRange, type CellInput } from "./worksheet.ts";
 import {
   decodeXml,
   escapeXmlAttribute,
@@ -169,6 +172,50 @@ export async function renameWorkbookTable(
   };
 }
 
+export async function renameWorkbookTableColumn(
+  pkg: OoxmlPackage,
+  tableName: string,
+  columnName: string,
+  nextName: string
+): Promise<WorkbookTable> {
+  validateTableColumnName(nextName);
+
+  const table = await findWorkbookTable(pkg, tableName);
+  const columnIndex = table.columns.findIndex(
+    (column) => column.name?.toLowerCase() === columnName.toLowerCase()
+  );
+  if (columnIndex === -1) {
+    throw new WorkbookError(`Unknown column ${columnName} in table ${table.displayName}`);
+  }
+  const existingColumnName = table.columns[columnIndex]?.name ?? columnName;
+
+  const duplicate = table.columns.find((column, index) => {
+    return index !== columnIndex && column.name?.toLowerCase() === nextName.toLowerCase();
+  });
+  if (duplicate !== undefined) {
+    throw new WorkbookError(
+      `Column name ${nextName} is already used by table ${table.displayName}`
+    );
+  }
+
+  const tableXml = await pkg.readText(table.partName);
+  pkg.setText(table.partName, updateTableColumnName(tableXml, existingColumnName, nextName));
+
+  const range = parseTableRange(table.ref);
+  const headerAddress = formatCellAddress(range.start.column + columnIndex, range.start.row);
+  const worksheetXml = await pkg.readText(table.worksheetPartName);
+  pkg.setText(table.worksheetPartName, patchCell(worksheetXml, headerAddress, nextName).xml);
+
+  await rewriteTableColumnFormulaReferences(pkg, table, existingColumnName, nextName);
+
+  return {
+    ...table,
+    columns: table.columns.map((column, index) =>
+      index === columnIndex ? { ...column, name: nextName } : column
+    )
+  };
+}
+
 function parseTableRange(ref: string): {
   start: { row: number; column: number };
   end: { row: number; column: number };
@@ -249,6 +296,19 @@ function updateTableIdentity(xml: string, name: string): string {
   })}${xml.slice(table.end)}`;
 }
 
+function updateTableColumnName(xml: string, columnName: string, nextName: string): string {
+  const column = findStartTags(xml, "tableColumn").find(
+    (candidate) => candidate.attributes.name === columnName
+  );
+  if (column === undefined) {
+    throw new WorkbookError(`Table XML is missing column ${columnName}`);
+  }
+
+  return `${xml.slice(0, column.start)}${upsertAttributes(column.raw, {
+    name: nextName
+  })}${xml.slice(column.end)}`;
+}
+
 async function rewriteTableFormulaReferences(
   pkg: OoxmlPackage,
   oldNames: string[],
@@ -256,18 +316,37 @@ async function rewriteTableFormulaReferences(
 ): Promise<void> {
   for (const partName of pkg.listParts().filter((part) => part.endsWith(".xml"))) {
     const xml = await pkg.readText(partName);
-    const nextXml = rewriteFormulaElementTableReferences(xml, oldNames, nextName);
+    const nextXml = rewriteFormulaElements(xml, (formula) =>
+      renameFormulaStructuredReferenceTable(formula, oldNames, nextName)
+    );
     if (nextXml !== xml) {
       pkg.setText(partName, nextXml);
     }
   }
 }
 
-function rewriteFormulaElementTableReferences(
-  xml: string,
-  oldNames: string[],
+async function rewriteTableColumnFormulaReferences(
+  pkg: OoxmlPackage,
+  table: WorkbookTable,
+  columnName: string,
   nextName: string
-): string {
+): Promise<void> {
+  const tableNames = [...new Set([table.name, table.displayName])];
+
+  for (const partName of pkg.listParts().filter((part) => part.endsWith(".xml"))) {
+    const xml = await pkg.readText(partName);
+    const nextXml = rewriteFormulaElements(xml, (formula) =>
+      renameFormulaStructuredReferenceColumn(formula, tableNames, columnName, nextName, {
+        includeUnqualified: partName === table.partName
+      })
+    );
+    if (nextXml !== xml) {
+      pkg.setText(partName, nextXml);
+    }
+  }
+}
+
+function rewriteFormulaElements(xml: string, rewriteFormula: (formula: string) => string): string {
   const formulaTags = findFormulaElementTags(xml);
   if (formulaTags.length === 0) {
     return xml;
@@ -290,7 +369,7 @@ function rewriteFormulaElementTableReferences(
     }
 
     const formula = decodeXml(rawText);
-    const rewritten = renameFormulaStructuredReferenceTable(formula, oldNames, nextName);
+    const rewritten = rewriteFormula(formula);
     if (rewritten === formula) {
       continue;
     }
@@ -343,6 +422,12 @@ function validateTableName(name: string): void {
 
   if (/^[A-Za-z]{1,3}[1-9][0-9]{0,6}$/.test(name)) {
     throw new WorkbookError(`Table name ${name} cannot look like a cell reference`);
+  }
+}
+
+function validateTableColumnName(name: string): void {
+  if (name.length === 0) {
+    throw new WorkbookError("Table column name cannot be empty");
   }
 }
 
