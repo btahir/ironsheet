@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "../../core/src/index.ts";
 import {
   appendWorkbookRows,
+  listWorkbookFormulas,
+  listWorkbookTables,
   patchWorkbookCell,
   patchWorkbookRange,
   readWorkbook,
@@ -17,17 +19,21 @@ import type { CellInput } from "../../core/src/index.ts";
 type Command =
   | "inspect"
   | "append-rows"
+  | "formulas"
   | "patch"
   | "patch-range"
   | "read-cell"
   | "read-range"
   | "replace-table"
+  | "tables"
   | "validate"
   | "diff";
 
 function usage(): never {
   console.error(`usage:
   npm run cli -- inspect <workbook.xlsx>
+  npm run cli -- tables <workbook.xlsx>
+  npm run cli -- formulas <workbook.xlsx>
   npm run cli -- validate <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
   npm run cli -- read-range <workbook.xlsx> <sheet> <range>
@@ -49,6 +55,14 @@ async function inspect(path: string): Promise<void> {
   const workbook = await readWorkbook(path);
   const result = await workbook.inspect();
   console.log(JSON.stringify(result, null, 2));
+}
+
+async function tables(path: string): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookTables(path), null, 2));
+}
+
+async function formulas(path: string): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookFormulas(path), null, 2));
 }
 
 async function validate(path: string): Promise<void> {
@@ -171,6 +185,18 @@ try {
       usage();
     }
     await inspect(path);
+  } else if (command === "tables") {
+    const [path] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await tables(path);
+  } else if (command === "formulas") {
+    const [path] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await formulas(path);
   } else if (command === "validate") {
     const [path] = args;
     if (path === undefined) {

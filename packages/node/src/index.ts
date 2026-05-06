@@ -98,6 +98,20 @@ export async function readWorkbookRange(
   return workbook.readRange(sheetName, rangeRef);
 }
 
+export async function listWorkbookFormulas(
+  inputPath: string
+): Promise<Awaited<ReturnType<Workbook["formulas"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.formulas();
+}
+
+export async function listWorkbookTables(
+  inputPath: string
+): Promise<Awaited<ReturnType<Workbook["tables"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.tables();
+}
+
 export async function validateWorkbookFile(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["validate"]>>> {

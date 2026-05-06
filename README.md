@@ -46,6 +46,18 @@ Inspect a workbook:
 npm run cli -- inspect path/to/workbook.xlsx
 ```
 
+List workbook tables:
+
+```bash
+npm run cli -- tables path/to/workbook.xlsx
+```
+
+List workbook formulas:
+
+```bash
+npm run cli -- formulas path/to/workbook.xlsx
+```
+
 Validate package integrity and common workbook invariants:
 
 ```bash
