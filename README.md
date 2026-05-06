@@ -16,6 +16,7 @@ This repository currently implements the first vertical slice:
 - Workbook sheet discovery.
 - Defined-name inspection.
 - Defined-name set/delete helpers for named ranges and scoped workbook names.
+- Conditional-formatting inventory plus set/delete helpers for worksheet-level rule blocks.
 - Data-validation inventory plus set/delete helpers with worksheet count maintenance.
 - Hyperlink inventory plus external hyperlink set/delete with worksheet relationship management.
 - Merged-cell inventory plus guarded merge/unmerge helpers with overlap validation.
@@ -76,6 +77,12 @@ List workbook formulas:
 
 ```bash
 npm run cli -- formulas path/to/workbook.xlsx
+```
+
+List workbook conditional formats:
+
+```bash
+npm run cli -- conditional-formats path/to/workbook.xlsx
 ```
 
 List workbook data validations:
@@ -177,6 +184,13 @@ Set or delete a defined name:
 ```bash
 npm run cli -- set-defined-name input.xlsx output.xlsx ReportRange 'Sheet1!$A$1:$B$10'
 npm run cli -- delete-defined-name input.xlsx output.xlsx ReportRange
+```
+
+Set or delete a conditional format:
+
+```bash
+npm run cli -- set-conditional-format input.xlsx output.xlsx Sheet1 '{"sqref":"C2:C10","rules":[{"type":"cellIs","priority":"1","operator":"greaterThan","formulas":["100"]}]}'
+npm run cli -- delete-conditional-format input.xlsx output.xlsx Sheet1 C2:C10
 ```
 
 Set or delete a data validation:

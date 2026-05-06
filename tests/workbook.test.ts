@@ -146,6 +146,31 @@ test("lists workbook data validations", async () => {
   ]);
 });
 
+test("lists workbook conditional formats", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeConditionalFormatting: true })
+  );
+  const conditionalFormats = await workbook.conditionalFormats();
+
+  assert.equal(conditionalFormats.length, 1);
+  assert.equal(conditionalFormats[0]?.sheetName, "Sheet1");
+  assert.equal(conditionalFormats[0]?.sheetPartName, "xl/worksheets/sheet1.xml");
+  assert.equal(conditionalFormats[0]?.sqref, "A1:A10");
+  assert.deepEqual(conditionalFormats[0]?.rules[0], {
+    attributes: {
+      operator: "greaterThan",
+      priority: "1",
+      type: "cellIs"
+    },
+    formulas: ["10"],
+    operator: "greaterThan",
+    priority: "1",
+    rawXml:
+      '<cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule>',
+    type: "cellIs"
+  });
+});
+
 test("lists workbook table metadata", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeSecondTable: true, includeTable: true })
@@ -601,6 +626,81 @@ test("defined name mutation rejects invalid names and unknown sheet scopes", asy
     () => workbook.setDefinedName("ScopedRange", "Sheet1!$A$1", { sheetName: "Missing" }),
     /Unknown worksheet/
   );
+});
+
+test("sets, replaces, and deletes conditional formats", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDataValidation: true }));
+
+  assert.deepEqual(
+    await workbook.setConditionalFormat("Sheet1", {
+      sqref: "$C$2:$C$10",
+      rules: [
+        {
+          formulas: ["100"],
+          operator: "greaterThan",
+          priority: "1",
+          stopIfTrue: true,
+          type: "cellIs"
+        }
+      ]
+    }),
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      sqref: "C2:C10",
+      rules: [
+        {
+          formulas: ["100"],
+          operator: "greaterThan",
+          priority: "1",
+          stopIfTrue: true,
+          type: "cellIs"
+        }
+      ]
+    }
+  );
+
+  let sheetXml = await workbook.pkg.readText("xl/worksheets/sheet1.xml");
+  assert.match(
+    sheetXml,
+    /<conditionalFormatting sqref="C2:C10"><cfRule type="cellIs" priority="1" operator="greaterThan" stopIfTrue="1"><formula>100<\/formula><\/cfRule><\/conditionalFormatting>/
+  );
+  assert.ok(sheetXml.indexOf("<conditionalFormatting") < sheetXml.indexOf("<dataValidations"));
+
+  await workbook.setConditionalFormat("Sheet1", {
+    sqref: "C2:C10",
+    rules: [
+      {
+        rawXml: '<cfRule type="top10" priority="2" rank="5"/>'
+      }
+    ]
+  });
+  assert.deepEqual(await workbook.conditionalFormats("Sheet1"), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      sqref: "C2:C10",
+      rules: [
+        {
+          attributes: {
+            priority: "2",
+            rank: "5",
+            type: "top10"
+          },
+          priority: "2",
+          rank: "5",
+          rawXml: '<cfRule type="top10" priority="2" rank="5"/>',
+          type: "top10"
+        }
+      ]
+    }
+  ]);
+
+  assert.equal(await workbook.deleteConditionalFormat("Sheet1", "$C$2:$C$10"), true);
+  assert.equal(await workbook.deleteConditionalFormat("Sheet1", "C2:C10"), false);
+  sheetXml = await workbook.pkg.readText("xl/worksheets/sheet1.xml");
+  assert.doesNotMatch(sheetXml, /<conditionalFormatting/);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
 test("sets, replaces, and deletes data validations", async () => {

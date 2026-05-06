@@ -126,6 +126,42 @@ export type DeleteWorksheetDataValidationResult = {
   xml: string;
 };
 
+export type WorksheetConditionalFormatRule = {
+  aboveAverage?: boolean;
+  attributes?: Record<string, string | number | boolean>;
+  bottom?: boolean;
+  dxfId?: string;
+  equalAverage?: boolean;
+  formulas?: string[];
+  operator?: string;
+  percent?: boolean;
+  priority?: string;
+  rank?: string;
+  rawXml?: string;
+  stdDev?: string;
+  stopIfTrue?: boolean;
+  text?: string;
+  timePeriod?: string;
+  type?: string;
+};
+
+export type WorksheetConditionalFormat = {
+  sqref: string;
+  pivot?: boolean;
+  rules: WorksheetConditionalFormatRule[];
+};
+
+export type SetWorksheetConditionalFormatResult = {
+  conditionalFormat: WorksheetConditionalFormat;
+  replaced: boolean;
+  xml: string;
+};
+
+export type DeleteWorksheetConditionalFormatResult = {
+  deleted: boolean;
+  xml: string;
+};
+
 export type WorksheetHyperlink = {
   ref: string;
   display?: string;
@@ -645,6 +681,63 @@ export function deleteWorksheetDataValidation(
   return {
     deleted: true,
     xml: `${nextXml.slice(0, dataValidations.start)}${opening}${nextXml.slice(dataValidations.end)}`
+  };
+}
+
+export function listWorksheetConditionalFormats(xml: string): WorksheetConditionalFormat[] {
+  return findStartTags(xml, "conditionalFormatting").map((tag) =>
+    conditionalFormatFromTag(xml, tag)
+  );
+}
+
+export function setWorksheetConditionalFormat(
+  xml: string,
+  conditionalFormat: WorksheetConditionalFormat
+): SetWorksheetConditionalFormatResult {
+  const normalized = normalizeConditionalFormat(conditionalFormat);
+  const conditionalFormatXml = createConditionalFormatXml(xml, normalized);
+  const existing = findMatchingConditionalFormat(xml, normalized.sqref);
+  if (existing !== undefined) {
+    const end = existing.selfClosing ? existing.end : findElementEnd(xml, existing);
+    return {
+      conditionalFormat: normalized,
+      replaced: true,
+      xml: `${xml.slice(0, existing.start)}${conditionalFormatXml}${xml.slice(end)}`
+    };
+  }
+
+  const insertOffset = conditionalFormatInsertOffset(xml);
+  return {
+    conditionalFormat: normalized,
+    replaced: false,
+    xml: `${xml.slice(0, insertOffset)}${conditionalFormatXml}${xml.slice(insertOffset)}`
+  };
+}
+
+export function deleteWorksheetConditionalFormat(
+  xml: string,
+  sqref: string
+): DeleteWorksheetConditionalFormatResult {
+  const normalizedSqref = normalizeSqref(sqref, "Conditional formatting sqref");
+  const removals = findStartTags(xml, "conditionalFormatting")
+    .filter((tag) => normalizeSqref(tag.attributes.sqref ?? "") === normalizedSqref)
+    .map((tag) => ({
+      tag,
+      end: tag.selfClosing ? tag.end : findElementEnd(xml, tag)
+    }));
+
+  if (removals.length === 0) {
+    return { deleted: false, xml };
+  }
+
+  let nextXml = xml;
+  for (const removal of removals.toReversed()) {
+    nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
+  }
+
+  return {
+    deleted: true,
+    xml: nextXml
   };
 }
 
@@ -1254,7 +1347,7 @@ function normalizeHyperlinkRef(ref: string): string {
   return parseCellRange(ref).ref;
 }
 
-function normalizeSqref(sqref: string): string {
+function normalizeSqref(sqref: string, label = "Data validation sqref"): string {
   const refs = sqref
     .trim()
     .split(/\s+/)
@@ -1262,7 +1355,7 @@ function normalizeSqref(sqref: string): string {
     .map((ref) => parseCellRange(ref.replaceAll("$", "")).ref);
 
   if (refs.length === 0) {
-    throw new WorksheetError("Data validation sqref cannot be empty");
+    throw new WorksheetError(`${label} cannot be empty`);
   }
 
   return refs.join(" ");
@@ -1411,6 +1504,296 @@ function findMatchingDataValidation(
 
 function dataValidationContainerInsertOffset(xml: string): number {
   for (const localName of [
+    "hyperlinks",
+    "printOptions",
+    "pageMargins",
+    "pageSetup",
+    "headerFooter",
+    "rowBreaks",
+    "colBreaks",
+    "customProperties",
+    "cellWatches",
+    "ignoredErrors",
+    "smartTags",
+    "drawing",
+    "legacyDrawing",
+    "legacyDrawingHF",
+    "picture",
+    "oleObjects",
+    "controls",
+    "webPublishItems",
+    "tableParts",
+    "extLst"
+  ]) {
+    const tag = findFirstStartTag(xml, localName);
+    if (tag !== undefined) {
+      return tag.start;
+    }
+  }
+
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined) {
+    throw new WorksheetError("Worksheet is missing worksheet root");
+  }
+
+  return findElementCloseStart(xml, worksheet);
+}
+
+function normalizeConditionalFormat(
+  conditionalFormat: WorksheetConditionalFormat
+): WorksheetConditionalFormat {
+  if (conditionalFormat.rules.length === 0) {
+    throw new WorksheetError("Conditional format must include at least one rule");
+  }
+
+  return {
+    sqref: normalizeSqref(conditionalFormat.sqref, "Conditional formatting sqref"),
+    ...(conditionalFormat.pivot === undefined ? {} : { pivot: conditionalFormat.pivot }),
+    rules: conditionalFormat.rules.map(normalizeConditionalFormatRule)
+  };
+}
+
+function normalizeConditionalFormatRule(
+  rule: WorksheetConditionalFormatRule
+): WorksheetConditionalFormatRule {
+  return {
+    ...(rule.aboveAverage === undefined ? {} : { aboveAverage: rule.aboveAverage }),
+    ...(rule.attributes === undefined ? {} : { attributes: { ...rule.attributes } }),
+    ...(rule.bottom === undefined ? {} : { bottom: rule.bottom }),
+    ...(rule.dxfId === undefined ? {} : { dxfId: rule.dxfId }),
+    ...(rule.equalAverage === undefined ? {} : { equalAverage: rule.equalAverage }),
+    ...(rule.formulas === undefined ? {} : { formulas: [...rule.formulas] }),
+    ...(rule.operator === undefined ? {} : { operator: rule.operator }),
+    ...(rule.percent === undefined ? {} : { percent: rule.percent }),
+    ...(rule.priority === undefined ? {} : { priority: rule.priority }),
+    ...(rule.rank === undefined ? {} : { rank: rule.rank }),
+    ...(rule.rawXml === undefined ? {} : { rawXml: rule.rawXml }),
+    ...(rule.stdDev === undefined ? {} : { stdDev: rule.stdDev }),
+    ...(rule.stopIfTrue === undefined ? {} : { stopIfTrue: rule.stopIfTrue }),
+    ...(rule.text === undefined ? {} : { text: rule.text }),
+    ...(rule.timePeriod === undefined ? {} : { timePeriod: rule.timePeriod }),
+    ...(rule.type === undefined ? {} : { type: rule.type })
+  };
+}
+
+function conditionalFormatFromTag(
+  xml: string,
+  tag: ReturnType<typeof findStartTags>[number]
+): WorksheetConditionalFormat {
+  const rawXml = xml.slice(tag.start, tag.selfClosing ? tag.end : findElementEnd(xml, tag));
+  const conditionalFormat: WorksheetConditionalFormat = {
+    sqref: normalizeSqref(tag.attributes.sqref ?? "", "Conditional formatting sqref"),
+    rules: findStartTags(rawXml, "cfRule").map((rule) => conditionalFormatRuleFromTag(rawXml, rule))
+  };
+
+  if (tag.attributes.pivot !== undefined) {
+    conditionalFormat.pivot = xmlBoolean(tag.attributes.pivot);
+  }
+
+  return conditionalFormat;
+}
+
+function conditionalFormatRuleFromTag(
+  xml: string,
+  tag: ReturnType<typeof findStartTags>[number]
+): WorksheetConditionalFormatRule {
+  const rawXml = xml.slice(tag.start, tag.selfClosing ? tag.end : findElementEnd(xml, tag));
+  const rule: WorksheetConditionalFormatRule = {
+    attributes: { ...tag.attributes },
+    rawXml
+  };
+
+  for (const [attribute, key] of [
+    ["dxfId", "dxfId"],
+    ["operator", "operator"],
+    ["priority", "priority"],
+    ["rank", "rank"],
+    ["stdDev", "stdDev"],
+    ["text", "text"],
+    ["timePeriod", "timePeriod"],
+    ["type", "type"]
+  ] as const) {
+    if (tag.attributes[attribute] !== undefined) {
+      rule[key] = tag.attributes[attribute];
+    }
+  }
+
+  for (const [attribute, key] of [
+    ["aboveAverage", "aboveAverage"],
+    ["bottom", "bottom"],
+    ["equalAverage", "equalAverage"],
+    ["percent", "percent"],
+    ["stopIfTrue", "stopIfTrue"]
+  ] as const) {
+    if (tag.attributes[attribute] !== undefined) {
+      rule[key] = xmlBoolean(tag.attributes[attribute]);
+    }
+  }
+
+  const formulas = findStartTags(rawXml, "formula").map((formula) =>
+    formula.selfClosing
+      ? ""
+      : decodeXml(rawXml.slice(formula.end, findElementCloseStart(rawXml, formula)))
+  );
+  if (formulas.length > 0) {
+    rule.formulas = formulas;
+  }
+
+  return rule;
+}
+
+function createConditionalFormatXml(
+  xml: string,
+  conditionalFormat: WorksheetConditionalFormat
+): string {
+  const prefix = inferWorksheetPrefix(xml);
+  const tagName = qualifiedName(prefix, "conditionalFormatting");
+  const attributes = [
+    `sqref="${escapeXmlAttribute(conditionalFormat.sqref)}"`,
+    conditionalFormat.pivot === undefined
+      ? undefined
+      : `pivot="${conditionalFormat.pivot ? "1" : "0"}"`
+  ]
+    .filter((attribute): attribute is string => attribute !== undefined)
+    .join(" ");
+  const rulesXml = conditionalFormat.rules
+    .map((rule) => createConditionalFormatRuleXml(prefix, rule))
+    .join("");
+
+  return `<${tagName} ${attributes}>${rulesXml}</${tagName}>`;
+}
+
+function createConditionalFormatRuleXml(
+  prefix: string | undefined,
+  rule: WorksheetConditionalFormatRule
+): string {
+  if (rule.rawXml !== undefined) {
+    validateConditionalFormatRuleXml(rule.rawXml);
+    return rule.rawXml;
+  }
+
+  const attributes = conditionalFormatRuleAttributes(rule);
+  if (attributes.type === undefined || attributes.priority === undefined) {
+    throw new WorksheetError("Conditional format rule must include type and priority");
+  }
+
+  const tagName = qualifiedName(prefix, "cfRule");
+  const attributesXml = conditionalFormatRuleAttributeXml(attributes);
+  const formulasXml = (rule.formulas ?? [])
+    .map(
+      (formula) =>
+        `<${qualifiedName(prefix, "formula")}>${escapeXmlText(formula)}</${qualifiedName(prefix, "formula")}>`
+    )
+    .join("");
+
+  return formulasXml.length === 0
+    ? `<${tagName} ${attributesXml}/>`
+    : `<${tagName} ${attributesXml}>${formulasXml}</${tagName}>`;
+}
+
+function validateConditionalFormatRuleXml(rawXml: string): void {
+  const tag = findFirstStartTag(rawXml, "cfRule");
+  if (tag === undefined || tag.start !== 0) {
+    throw new WorksheetError("Conditional format rawXml must start with a cfRule element");
+  }
+
+  const end = tag.selfClosing ? tag.end : findElementEnd(rawXml, tag);
+  if (end !== rawXml.length) {
+    throw new WorksheetError("Conditional format rawXml must contain exactly one cfRule element");
+  }
+}
+
+function conditionalFormatRuleAttributes(
+  rule: WorksheetConditionalFormatRule
+): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  for (const [name, value] of Object.entries(rule.attributes ?? {})) {
+    attributes[name] = conditionalFormatAttributeValue(value);
+  }
+
+  for (const [name, value] of [
+    ["type", rule.type],
+    ["priority", rule.priority],
+    ["operator", rule.operator],
+    ["dxfId", rule.dxfId],
+    ["stopIfTrue", rule.stopIfTrue],
+    ["aboveAverage", rule.aboveAverage],
+    ["percent", rule.percent],
+    ["bottom", rule.bottom],
+    ["equalAverage", rule.equalAverage],
+    ["rank", rule.rank],
+    ["stdDev", rule.stdDev],
+    ["text", rule.text],
+    ["timePeriod", rule.timePeriod]
+  ] as const) {
+    if (value !== undefined) {
+      attributes[name] = conditionalFormatAttributeValue(value);
+    }
+  }
+
+  return attributes;
+}
+
+function conditionalFormatRuleAttributeXml(attributes: Record<string, string>): string {
+  const order = [
+    "type",
+    "priority",
+    "operator",
+    "dxfId",
+    "stopIfTrue",
+    "aboveAverage",
+    "percent",
+    "bottom",
+    "equalAverage",
+    "rank",
+    "stdDev",
+    "text",
+    "timePeriod"
+  ];
+  const emitted = new Set<string>();
+  const parts: string[] = [];
+
+  for (const name of order) {
+    const value = attributes[name];
+    if (value === undefined) {
+      continue;
+    }
+
+    emitted.add(name);
+    parts.push(`${name}="${escapeXmlAttribute(value)}"`);
+  }
+
+  for (const name of Object.keys(attributes).sort()) {
+    if (emitted.has(name)) {
+      continue;
+    }
+
+    parts.push(`${name}="${escapeXmlAttribute(attributes[name] ?? "")}"`);
+  }
+
+  return parts.join(" ");
+}
+
+function conditionalFormatAttributeValue(value: string | number | boolean): string {
+  if (typeof value === "boolean") {
+    return value ? "1" : "0";
+  }
+
+  return String(value);
+}
+
+function findMatchingConditionalFormat(
+  xml: string,
+  sqref: string
+): ReturnType<typeof findStartTags>[number] | undefined {
+  return findStartTags(xml, "conditionalFormatting").find(
+    (tag) => normalizeSqref(tag.attributes.sqref ?? "", "Conditional formatting sqref") === sqref
+  );
+}
+
+function conditionalFormatInsertOffset(xml: string): number {
+  for (const localName of [
+    "dataValidations",
     "hyperlinks",
     "printOptions",
     "pageMargins",

@@ -37,8 +37,10 @@ import { validateWorkbookPackage, type ValidationReport } from "./validation.ts"
 import {
   appendRows,
   applyCellStyle,
+  deleteWorksheetConditionalFormat,
   deleteWorksheetDataValidation,
   deleteWorksheetHyperlink,
+  listWorksheetConditionalFormats,
   listWorksheetDataValidations,
   listWorksheetHyperlinks,
   listWorksheetMergedCells,
@@ -48,6 +50,7 @@ import {
   patchRange,
   readCell,
   readRange,
+  setWorksheetConditionalFormat,
   setWorksheetDataValidation,
   setWorksheetHyperlink,
   unmergeWorksheetCells,
@@ -56,6 +59,7 @@ import {
   type FormulaValue,
   type ReadCellResult,
   type ReadRangeResult,
+  type WorksheetConditionalFormat,
   type WorksheetDataValidation
 } from "./worksheet.ts";
 import {
@@ -154,6 +158,11 @@ export type WorkbookMergedCell = {
 };
 
 export type WorkbookDataValidation = WorksheetDataValidation & {
+  sheetName: string;
+  sheetPartName: string;
+};
+
+export type WorkbookConditionalFormat = WorksheetConditionalFormat & {
   sheetName: string;
   sheetPartName: string;
 };
@@ -369,6 +378,24 @@ export class Workbook {
     return dataValidations;
   }
 
+  async conditionalFormats(sheetName?: string): Promise<WorkbookConditionalFormat[]> {
+    const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
+    const conditionalFormats: WorkbookConditionalFormat[] = [];
+
+    for (const sheet of sheets) {
+      const xml = await this.pkg.readText(sheet.partName);
+      for (const conditionalFormat of listWorksheetConditionalFormats(xml)) {
+        conditionalFormats.push({
+          sheetName: sheet.name,
+          sheetPartName: sheet.partName,
+          ...conditionalFormat
+        });
+      }
+    }
+
+    return conditionalFormats;
+  }
+
   async setDataValidation(
     sheetName: string,
     dataValidation: WorksheetDataValidation
@@ -387,9 +414,38 @@ export class Workbook {
     };
   }
 
+  async setConditionalFormat(
+    sheetName: string,
+    conditionalFormat: WorksheetConditionalFormat
+  ): Promise<WorkbookConditionalFormat> {
+    const sheet = this.sheet(sheetName);
+    const result = setWorksheetConditionalFormat(
+      await this.pkg.readText(sheet.partName),
+      conditionalFormat
+    );
+    this.pkg.setText(sheet.partName, result.xml);
+
+    return {
+      sheetName: sheet.name,
+      sheetPartName: sheet.partName,
+      ...result.conditionalFormat
+    };
+  }
+
   async deleteDataValidation(sheetName: string, sqref: string): Promise<boolean> {
     const sheet = this.sheet(sheetName);
     const result = deleteWorksheetDataValidation(await this.pkg.readText(sheet.partName), sqref);
+    if (!result.deleted) {
+      return false;
+    }
+
+    this.pkg.setText(sheet.partName, result.xml);
+    return true;
+  }
+
+  async deleteConditionalFormat(sheetName: string, sqref: string): Promise<boolean> {
+    const sheet = this.sheet(sheetName);
+    const result = deleteWorksheetConditionalFormat(await this.pkg.readText(sheet.partName), sqref);
     if (!result.deleted) {
       return false;
     }

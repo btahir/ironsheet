@@ -5,11 +5,13 @@ import { diffZipPackages } from "@ironsheet/core";
 import {
   appendWorkbookRows,
   appendWorkbookTableColumn,
+  deleteWorkbookConditionalFormat,
   deleteWorkbookDataValidation,
   deleteWorkbookDefinedName,
   deleteWorkbookHyperlink,
   hideWorkbookSheet,
   inspectWorkbookStyles,
+  listWorkbookConditionalFormats,
   listWorkbookDataValidations,
   listWorkbookFormulas,
   listWorkbookHyperlinks,
@@ -28,6 +30,7 @@ import {
   replaceWorkbookTableRows,
   retargetWorkbookChartFormulasFile,
   retargetWorkbookPivotCacheSourcesFile,
+  setWorkbookConditionalFormat,
   setWorkbookDataValidation,
   setWorkbookDefinedName,
   setWorkbookHyperlink,
@@ -42,6 +45,7 @@ import type {
   PivotCacheSourceRetarget,
   WorkbookCellStyleInput,
   WorkbookSheetState,
+  WorksheetConditionalFormat,
   WorksheetDataValidation
 } from "@ironsheet/core";
 
@@ -49,6 +53,8 @@ type Command =
   | "inspect"
   | "append-rows"
   | "append-table-column"
+  | "conditional-formats"
+  | "delete-conditional-format"
   | "data-validations"
   | "delete-data-validation"
   | "delete-defined-name"
@@ -69,6 +75,7 @@ type Command =
   | "replace-table"
   | "retarget-chart"
   | "retarget-pivot"
+  | "set-conditional-format"
   | "set-data-validation"
   | "set-defined-name"
   | "set-hyperlink"
@@ -85,6 +92,7 @@ function usage(): never {
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- tables <workbook.xlsx>
   npm run cli -- formulas <workbook.xlsx>
+  npm run cli -- conditional-formats <workbook.xlsx> [sheet]
   npm run cli -- data-validations <workbook.xlsx> [sheet]
   npm run cli -- hyperlinks <workbook.xlsx> [sheet]
   npm run cli -- merged-cells <workbook.xlsx> [sheet]
@@ -97,6 +105,8 @@ function usage(): never {
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
+  npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
+  npm run cli -- delete-conditional-format <input.xlsx> <output.xlsx> <sheet> <sqref>
   npm run cli -- set-data-validation <input.xlsx> <output.xlsx> <sheet> <jsonValidation>
   npm run cli -- delete-data-validation <input.xlsx> <output.xlsx> <sheet> <sqref>
   npm run cli -- set-defined-name <input.xlsx> <output.xlsx> <name> <formula> [jsonOptions]
@@ -136,6 +146,10 @@ async function tables(path: string): Promise<void> {
 
 async function formulas(path: string): Promise<void> {
   console.log(JSON.stringify(await listWorkbookFormulas(path), null, 2));
+}
+
+async function conditionalFormats(path: string, sheetName: string | undefined): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookConditionalFormats(path, sheetName), null, 2));
 }
 
 async function dataValidations(path: string, sheetName: string | undefined): Promise<void> {
@@ -267,6 +281,29 @@ async function deleteDefinedName(
     parseDefinedNameDeleteOptions(rawOptions)
   );
   console.log(`${deleted ? "deleted" : "did not find"} defined name ${name} -> ${outputPath}`);
+}
+
+async function setConditionalFormat(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rawConditionalFormat: string
+): Promise<void> {
+  const conditionalFormat = parseConditionalFormat(rawConditionalFormat);
+  await setWorkbookConditionalFormat(inputPath, outputPath, sheetName, conditionalFormat);
+  console.log(`set conditional format ${sheetName}!${conditionalFormat.sqref} -> ${outputPath}`);
+}
+
+async function deleteConditionalFormat(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  sqref: string
+): Promise<void> {
+  const deleted = await deleteWorkbookConditionalFormat(inputPath, outputPath, sheetName, sqref);
+  console.log(
+    `${deleted ? "deleted" : "did not find"} conditional format ${sheetName}!${sqref} -> ${outputPath}`
+  );
 }
 
 async function setDataValidation(
@@ -479,6 +516,23 @@ function parseStyle(rawStyle: string): WorkbookCellStyleInput {
   return parsed as WorkbookCellStyleInput;
 }
 
+function parseConditionalFormat(rawConditionalFormat: string): WorksheetConditionalFormat {
+  const parsed: unknown = JSON.parse(rawConditionalFormat);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("jsonConditionalFormat must be an object");
+  }
+
+  if (!("sqref" in parsed) || typeof parsed.sqref !== "string") {
+    throw new Error("jsonConditionalFormat must include a string sqref");
+  }
+
+  if (!("rules" in parsed) || !Array.isArray(parsed.rules)) {
+    throw new Error("jsonConditionalFormat must include a rules array");
+  }
+
+  return parsed as WorksheetConditionalFormat;
+}
+
 function parseDataValidation(rawValidation: string): WorksheetDataValidation {
   const parsed: unknown = JSON.parse(rawValidation);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -623,6 +677,12 @@ try {
       usage();
     }
     await formulas(path);
+  } else if (command === "conditional-formats") {
+    const [path, sheetName] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await conditionalFormats(path, sheetName);
   } else if (command === "data-validations") {
     const [path, sheetName] = args;
     if (path === undefined) {
@@ -729,6 +789,28 @@ try {
       usage();
     }
     await appendTableColumn(inputPath, outputPath, tableName, columnName, rawValues);
+  } else if (command === "set-conditional-format") {
+    const [inputPath, outputPath, sheetName, rawConditionalFormat] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      rawConditionalFormat === undefined
+    ) {
+      usage();
+    }
+    await setConditionalFormat(inputPath, outputPath, sheetName, rawConditionalFormat);
+  } else if (command === "delete-conditional-format") {
+    const [inputPath, outputPath, sheetName, sqref] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      sqref === undefined
+    ) {
+      usage();
+    }
+    await deleteConditionalFormat(inputPath, outputPath, sheetName, sqref);
   } else if (command === "set-data-validation") {
     const [inputPath, outputPath, sheetName, rawValidation] = args;
     if (

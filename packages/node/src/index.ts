@@ -10,6 +10,7 @@ import {
   type PivotCacheSourceRetarget,
   type WorkbookCellStyleInput,
   type WorkbookSheetState,
+  type WorksheetConditionalFormat,
   type WorksheetDataValidation
 } from "@ironsheet/core";
 
@@ -153,6 +154,14 @@ export async function listWorkbookDataValidations(
   return workbook.dataValidations(sheetName);
 }
 
+export async function listWorkbookConditionalFormats(
+  inputPath: string,
+  sheetName?: string
+): Promise<Awaited<ReturnType<Workbook["conditionalFormats"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.conditionalFormats(sheetName);
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {
@@ -233,6 +242,29 @@ export async function deleteWorkbookDataValidation(
 ): Promise<boolean> {
   const workbook = await readWorkbook(inputPath);
   const deleted = await workbook.deleteDataValidation(sheetName, sqref);
+  await writeWorkbook(workbook, outputPath);
+  return deleted;
+}
+
+export async function setWorkbookConditionalFormat(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  conditionalFormat: WorksheetConditionalFormat
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.setConditionalFormat(sheetName, conditionalFormat);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function deleteWorkbookConditionalFormat(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  sqref: string
+): Promise<boolean> {
+  const workbook = await readWorkbook(inputPath);
+  const deleted = await workbook.deleteConditionalFormat(sheetName, sqref);
   await writeWorkbook(workbook, outputPath);
   return deleted;
 }
