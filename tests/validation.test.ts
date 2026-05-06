@@ -191,6 +191,24 @@ test("validation reports invalid worksheet range attributes", async () => {
   );
 });
 
+test("validation reports worksheet hyperlinks with missing relationships", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      "</sheetData>",
+      '</sheetData><hyperlinks><hyperlink ref="A1" r:id="rIdMissing"/></hyperlinks>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "HYPERLINK_RELATIONSHIP_MISSING");
+  assert.equal(report.issues[0]?.target, "rIdMissing");
+});
+
 test("validation reports worksheet cells that reference missing style indexes", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");

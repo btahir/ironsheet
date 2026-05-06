@@ -83,6 +83,26 @@ export type WorksheetRowReplacement = {
   xml: string;
 };
 
+export type WorksheetHyperlink = {
+  ref: string;
+  display?: string;
+  location?: string;
+  relationshipId?: string;
+  tooltip?: string;
+};
+
+export type SetWorksheetHyperlinkResult = {
+  hyperlink: WorksheetHyperlink;
+  replacedRelationshipId?: string;
+  xml: string;
+};
+
+export type DeleteWorksheetHyperlinkResult = {
+  deleted: boolean;
+  relationshipIds: string[];
+  xml: string;
+};
+
 export function readCell(
   xml: string,
   address: string,
@@ -494,6 +514,115 @@ export async function* streamReplaceWorksheetRowsXml(
   }
 }
 
+export function listWorksheetHyperlinks(xml: string): WorksheetHyperlink[] {
+  return findStartTags(xml, "hyperlink").map((tag) => {
+    const hyperlink: WorksheetHyperlink = {
+      ref: normalizeHyperlinkRef(tag.attributes.ref ?? "")
+    };
+
+    if (tag.attributes.display !== undefined) {
+      hyperlink.display = tag.attributes.display;
+    }
+    if (tag.attributes.location !== undefined) {
+      hyperlink.location = tag.attributes.location;
+    }
+    if (tag.attributes["r:id"] !== undefined) {
+      hyperlink.relationshipId = tag.attributes["r:id"];
+    }
+    if (tag.attributes.tooltip !== undefined) {
+      hyperlink.tooltip = tag.attributes.tooltip;
+    }
+
+    return hyperlink;
+  });
+}
+
+export function setWorksheetHyperlink(
+  xml: string,
+  hyperlink: WorksheetHyperlink
+): SetWorksheetHyperlinkResult {
+  const normalized: WorksheetHyperlink = {
+    ref: normalizeHyperlinkRef(hyperlink.ref),
+    ...(hyperlink.display === undefined ? {} : { display: hyperlink.display }),
+    ...(hyperlink.location === undefined ? {} : { location: hyperlink.location }),
+    ...(hyperlink.relationshipId === undefined ? {} : { relationshipId: hyperlink.relationshipId }),
+    ...(hyperlink.tooltip === undefined ? {} : { tooltip: hyperlink.tooltip })
+  };
+  const nextXml =
+    normalized.relationshipId === undefined ? xml : ensureWorksheetRelationshipNamespace(xml);
+  const hyperlinkXml = createHyperlinkXml(nextXml, normalized);
+  const existing = findMatchingHyperlink(nextXml, normalized.ref);
+  if (existing !== undefined) {
+    const end = existing.selfClosing ? existing.end : findElementEnd(nextXml, existing);
+    const replacedRelationshipId = existing.attributes["r:id"];
+    return {
+      hyperlink: normalized,
+      ...(replacedRelationshipId === undefined ? {} : { replacedRelationshipId }),
+      xml: `${nextXml.slice(0, existing.start)}${hyperlinkXml}${nextXml.slice(end)}`
+    };
+  }
+
+  const hyperlinks = findFirstStartTag(nextXml, "hyperlinks");
+  if (hyperlinks !== undefined) {
+    if (hyperlinks.selfClosing) {
+      const hyperlinksTag = qualifiedName(inferWorksheetPrefix(nextXml), "hyperlinks");
+      return {
+        hyperlink: normalized,
+        xml: `${nextXml.slice(0, hyperlinks.start)}<${hyperlinksTag}>${hyperlinkXml}</${hyperlinksTag}>${nextXml.slice(hyperlinks.end)}`
+      };
+    }
+
+    const insertOffset = findElementCloseStart(nextXml, hyperlinks);
+    return {
+      hyperlink: normalized,
+      xml: `${nextXml.slice(0, insertOffset)}${hyperlinkXml}${nextXml.slice(insertOffset)}`
+    };
+  }
+
+  const insertOffset = hyperlinkContainerInsertOffset(nextXml);
+  const hyperlinksTag = qualifiedName(inferWorksheetPrefix(nextXml), "hyperlinks");
+  return {
+    hyperlink: normalized,
+    xml: `${nextXml.slice(0, insertOffset)}<${hyperlinksTag}>${hyperlinkXml}</${hyperlinksTag}>${nextXml.slice(insertOffset)}`
+  };
+}
+
+export function deleteWorksheetHyperlink(xml: string, ref: string): DeleteWorksheetHyperlinkResult {
+  const normalizedRef = normalizeHyperlinkRef(ref);
+  const removals = findStartTags(xml, "hyperlink")
+    .filter((tag) => normalizeHyperlinkRef(tag.attributes.ref ?? "") === normalizedRef)
+    .map((tag) => ({
+      tag,
+      end: tag.selfClosing ? tag.end : findElementEnd(xml, tag),
+      relationshipId: tag.attributes["r:id"]
+    }));
+
+  if (removals.length === 0) {
+    return { deleted: false, relationshipIds: [], xml };
+  }
+
+  let nextXml = xml;
+  for (const removal of removals.toReversed()) {
+    nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
+  }
+
+  const hyperlinks = findFirstStartTag(nextXml, "hyperlinks");
+  if (hyperlinks !== undefined && !hyperlinks.selfClosing) {
+    const body = nextXml.slice(hyperlinks.end, findElementCloseStart(nextXml, hyperlinks));
+    if (findStartTags(body, "hyperlink").length === 0) {
+      nextXml = `${nextXml.slice(0, hyperlinks.start)}${nextXml.slice(findElementEnd(nextXml, hyperlinks))}`;
+    }
+  }
+
+  return {
+    deleted: true,
+    relationshipIds: removals
+      .map((removal) => removal.relationshipId)
+      .filter((relationshipId): relationshipId is string => relationshipId !== undefined),
+    xml: nextXml
+  };
+}
+
 function findCellElement(xml: string, address: string): ExistingCell | undefined {
   const tags = findStartTags(xml, "c");
   const target = address.toUpperCase();
@@ -889,6 +1018,96 @@ function inferWorksheetPrefix(xml: string): string | undefined {
   }
 
   return undefined;
+}
+
+function normalizeHyperlinkRef(ref: string): string {
+  return parseCellRange(ref).ref;
+}
+
+function createHyperlinkXml(xml: string, hyperlink: WorksheetHyperlink): string {
+  const tagName = qualifiedName(inferWorksheetPrefix(xml), "hyperlink");
+  const attributes = [
+    `ref="${escapeXmlAttribute(hyperlink.ref)}"`,
+    hyperlink.relationshipId === undefined
+      ? undefined
+      : `r:id="${escapeXmlAttribute(hyperlink.relationshipId)}"`,
+    hyperlink.location === undefined
+      ? undefined
+      : `location="${escapeXmlAttribute(hyperlink.location)}"`,
+    hyperlink.display === undefined
+      ? undefined
+      : `display="${escapeXmlAttribute(hyperlink.display)}"`,
+    hyperlink.tooltip === undefined
+      ? undefined
+      : `tooltip="${escapeXmlAttribute(hyperlink.tooltip)}"`
+  ]
+    .filter((attribute): attribute is string => attribute !== undefined)
+    .join(" ");
+
+  return `<${tagName} ${attributes}/>`;
+}
+
+function findMatchingHyperlink(
+  xml: string,
+  ref: string
+): ReturnType<typeof findStartTags>[number] | undefined {
+  return findStartTags(xml, "hyperlink").find(
+    (tag) => normalizeHyperlinkRef(tag.attributes.ref ?? "") === ref
+  );
+}
+
+function hyperlinkContainerInsertOffset(xml: string): number {
+  for (const localName of [
+    "printOptions",
+    "pageMargins",
+    "pageSetup",
+    "headerFooter",
+    "rowBreaks",
+    "colBreaks",
+    "customProperties",
+    "cellWatches",
+    "ignoredErrors",
+    "smartTags",
+    "drawing",
+    "legacyDrawing",
+    "legacyDrawingHF",
+    "picture",
+    "oleObjects",
+    "controls",
+    "webPublishItems",
+    "tableParts",
+    "extLst"
+  ]) {
+    const tag = findFirstStartTag(xml, localName);
+    if (tag !== undefined) {
+      return tag.start;
+    }
+  }
+
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined) {
+    throw new WorksheetError("Worksheet is missing worksheet root");
+  }
+
+  return findElementCloseStart(xml, worksheet);
+}
+
+function ensureWorksheetRelationshipNamespace(xml: string): string {
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined) {
+    throw new WorksheetError("Worksheet is missing worksheet root");
+  }
+
+  if (worksheet.attributes["xmlns:r"] !== undefined) {
+    return xml;
+  }
+
+  const updated = upsertTagAttribute(
+    worksheet.raw,
+    "xmlns:r",
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  );
+  return `${xml.slice(0, worksheet.start)}${updated}${xml.slice(worksheet.end)}`;
 }
 
 function qualifiedName(prefix: string | undefined, localName: string): string {

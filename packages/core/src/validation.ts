@@ -22,6 +22,8 @@ const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
 const drawingRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
+const hyperlinkRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 const imageRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 const pivotCacheDefinitionRelationship =
@@ -576,6 +578,25 @@ async function validateWorksheetRelationshipIds(
         expectedType: drawingRelationship,
         missingCode: "DRAWING_RELATIONSHIP_MISSING",
         message: "Worksheet drawing element points to a missing drawing relationship"
+      });
+    }
+
+    for (const hyperlink of findStartTags(xml, "hyperlink")) {
+      if (
+        hyperlink.attributes.location !== undefined &&
+        hyperlink.attributes["r:id"] === undefined
+      ) {
+        continue;
+      }
+
+      validateRelationshipId({
+        issues,
+        relationships,
+        sourcePart: part,
+        relationshipId: hyperlink.attributes["r:id"],
+        expectedType: hyperlinkRelationship,
+        missingCode: "HYPERLINK_RELATIONSHIP_MISSING",
+        message: "Worksheet hyperlink element points to a missing hyperlink relationship"
       });
     }
 

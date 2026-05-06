@@ -16,6 +16,7 @@ This repository currently implements the first vertical slice:
 - Workbook sheet discovery.
 - Defined-name inspection.
 - Defined-name set/delete helpers for named ranges and scoped workbook names.
+- Hyperlink inventory plus external hyperlink set/delete with worksheet relationship management.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
@@ -72,6 +73,12 @@ List workbook formulas:
 
 ```bash
 npm run cli -- formulas path/to/workbook.xlsx
+```
+
+List workbook hyperlinks:
+
+```bash
+npm run cli -- hyperlinks path/to/workbook.xlsx
 ```
 
 Inspect workbook styles:
@@ -148,6 +155,13 @@ Set or delete a defined name:
 ```bash
 npm run cli -- set-defined-name input.xlsx output.xlsx ReportRange 'Sheet1!$A$1:$B$10'
 npm run cli -- delete-defined-name input.xlsx output.xlsx ReportRange
+```
+
+Set or delete an external hyperlink:
+
+```bash
+npm run cli -- set-hyperlink input.xlsx output.xlsx Sheet1 B2 https://example.com '{"display":"Example"}'
+npm run cli -- delete-hyperlink input.xlsx output.xlsx Sheet1 B2
 ```
 
 Retarget chart formulas or pivot cache sources:

@@ -37,11 +37,14 @@ import { validateWorkbookPackage, type ValidationReport } from "./validation.ts"
 import {
   appendRows,
   applyCellStyle,
+  deleteWorksheetHyperlink,
+  listWorksheetHyperlinks,
   patchCell,
   patchCells,
   patchRange,
   readCell,
   readRange,
+  setWorksheetHyperlink,
   type CellInput,
   type CellPatch,
   type FormulaValue,
@@ -64,6 +67,8 @@ const worksheetRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 const calcChainRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
+const hyperlinkRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 
 type MutationImpactOptions = {
   operation: "cell" | "range" | "appendRows" | "table";
@@ -121,6 +126,18 @@ export type WorkbookFormula = {
   sheetReferences: FormulaSheetReference[];
   sharedIndex?: string;
   structuredReferences: FormulaStructuredReference[];
+};
+
+export type WorkbookHyperlink = {
+  sheetName: string;
+  sheetPartName: string;
+  ref: string;
+  display?: string;
+  location?: string;
+  relationshipId?: string;
+  target?: string;
+  targetMode?: string;
+  tooltip?: string;
 };
 
 export class Workbook {
@@ -257,6 +274,101 @@ export class Workbook {
     const sheet = this.sheet(sheetName);
     const xml = await this.pkg.readText(sheet.partName);
     return readRange(xml, rangeRef, { sharedStrings: await this.sharedStrings() });
+  }
+
+  async hyperlinks(sheetName?: string): Promise<WorkbookHyperlink[]> {
+    const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
+    const hyperlinks: WorkbookHyperlink[] = [];
+
+    for (const sheet of sheets) {
+      const xml = await this.pkg.readText(sheet.partName);
+      const relationships = new Map(
+        (await this.pkg.relationshipsFor(sheet.partName)).map((relationship) => [
+          relationship.id,
+          relationship
+        ])
+      );
+
+      for (const hyperlink of listWorksheetHyperlinks(xml)) {
+        const relationship =
+          hyperlink.relationshipId === undefined
+            ? undefined
+            : relationships.get(hyperlink.relationshipId);
+        hyperlinks.push({
+          sheetName: sheet.name,
+          sheetPartName: sheet.partName,
+          ref: hyperlink.ref,
+          ...(hyperlink.display === undefined ? {} : { display: hyperlink.display }),
+          ...(hyperlink.location === undefined ? {} : { location: hyperlink.location }),
+          ...(hyperlink.relationshipId === undefined
+            ? {}
+            : { relationshipId: hyperlink.relationshipId }),
+          ...(relationship?.target === undefined ? {} : { target: relationship.target }),
+          ...(relationship?.targetMode === undefined
+            ? {}
+            : { targetMode: relationship.targetMode }),
+          ...(hyperlink.tooltip === undefined ? {} : { tooltip: hyperlink.tooltip })
+        });
+      }
+    }
+
+    return hyperlinks;
+  }
+
+  async setHyperlink(
+    sheetName: string,
+    ref: string,
+    target: string,
+    options: { display?: string; tooltip?: string } = {}
+  ): Promise<WorkbookHyperlink> {
+    const sheet = this.sheet(sheetName);
+    const xml = await this.pkg.readText(sheet.partName);
+    const normalizedRef = parseCellRange(ref).ref;
+    const existing = listWorksheetHyperlinks(xml).find(
+      (hyperlink) => hyperlink.ref === normalizedRef
+    );
+    const relationshipId =
+      existing?.relationshipId ?? (await this.pkg.nextRelationshipId(sheet.partName));
+    const result = setWorksheetHyperlink(xml, {
+      ref,
+      relationshipId,
+      ...(options.display === undefined ? {} : { display: options.display }),
+      ...(options.tooltip === undefined ? {} : { tooltip: options.tooltip })
+    });
+
+    this.pkg.setText(sheet.partName, result.xml);
+    await this.pkg.upsertRelationship(sheet.partName, {
+      id: relationshipId,
+      type: hyperlinkRelationship,
+      target,
+      targetMode: "External"
+    });
+
+    return {
+      sheetName: sheet.name,
+      sheetPartName: sheet.partName,
+      ref: result.hyperlink.ref,
+      relationshipId,
+      target,
+      targetMode: "External",
+      ...(options.display === undefined ? {} : { display: options.display }),
+      ...(options.tooltip === undefined ? {} : { tooltip: options.tooltip })
+    };
+  }
+
+  async deleteHyperlink(sheetName: string, ref: string): Promise<boolean> {
+    const sheet = this.sheet(sheetName);
+    const result = deleteWorksheetHyperlink(await this.pkg.readText(sheet.partName), ref);
+    if (!result.deleted) {
+      return false;
+    }
+
+    this.pkg.setText(sheet.partName, result.xml);
+    const relationshipIds = new Set(result.relationshipIds);
+    await this.pkg.removeRelationships(sheet.partName, (relationship) =>
+      relationshipIds.has(relationship.id)
+    );
+    return true;
   }
 
   async ensureCellStyle(style: WorkbookCellStyleInput): Promise<string> {

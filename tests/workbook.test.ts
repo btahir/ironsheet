@@ -102,6 +102,21 @@ test("inspect counts worksheet formula cells", async () => {
   assert.equal((await workbook.inspect()).features.formulaCells, 1);
 });
 
+test("lists workbook hyperlinks with external targets", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeHyperlink: true }));
+
+  assert.deepEqual(await workbook.hyperlinks(), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "A1",
+      relationshipId: "rIdHyperlink1",
+      target: "https://example.com",
+      targetMode: "External"
+    }
+  ]);
+});
+
 test("lists workbook table metadata", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeSecondTable: true, includeTable: true })
@@ -513,6 +528,78 @@ test("defined name mutation rejects invalid names and unknown sheet scopes", asy
     () => workbook.setDefinedName("ScopedRange", "Sheet1!$A$1", { sheetName: "Missing" }),
     /Unknown worksheet/
   );
+});
+
+test("sets, replaces, and deletes external hyperlinks", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  assert.deepEqual(
+    await workbook.setHyperlink("Sheet1", "b2", "https://docs.example.com", {
+      display: "Docs",
+      tooltip: "Open docs"
+    }),
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "B2",
+      relationshipId: "rId1",
+      target: "https://docs.example.com",
+      targetMode: "External",
+      display: "Docs",
+      tooltip: "Open docs"
+    }
+  );
+
+  assert.deepEqual(await workbook.hyperlinks("Sheet1"), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "B2",
+      relationshipId: "rId1",
+      target: "https://docs.example.com",
+      targetMode: "External",
+      display: "Docs",
+      tooltip: "Open docs"
+    }
+  ]);
+
+  assert.match(
+    await workbook.pkg.readText("xl/worksheets/sheet1.xml"),
+    /xmlns:r="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships"/
+  );
+  assert.match(
+    await workbook.pkg.readText("xl/worksheets/sheet1.xml"),
+    /<hyperlinks><hyperlink ref="B2" r:id="rId1" display="Docs" tooltip="Open docs"\/><\/hyperlinks>/
+  );
+  assert.match(
+    await workbook.pkg.readText("xl/worksheets/_rels/sheet1.xml.rels"),
+    /<Relationship Id="rId1" Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/hyperlink" Target="https:\/\/docs\.example\.com" TargetMode="External"\/>/
+  );
+
+  await workbook.setHyperlink("Sheet1", "B2", "https://docs.example.com/v2", {
+    display: "Docs v2"
+  });
+  assert.deepEqual(await workbook.hyperlinks("Sheet1"), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "B2",
+      relationshipId: "rId1",
+      target: "https://docs.example.com/v2",
+      targetMode: "External",
+      display: "Docs v2"
+    }
+  ]);
+
+  assert.equal(await workbook.deleteHyperlink("Sheet1", "B2"), true);
+  assert.equal(await workbook.deleteHyperlink("Sheet1", "B2"), false);
+  assert.deepEqual(await workbook.hyperlinks("Sheet1"), []);
+  assert.doesNotMatch(await workbook.pkg.readText("xl/worksheets/sheet1.xml"), /<hyperlinks>/);
+  assert.doesNotMatch(
+    await workbook.pkg.readText("xl/worksheets/_rels/sheet1.xml.rels"),
+    /hyperlink/
+  );
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
 test("reads workbook style metadata", async () => {

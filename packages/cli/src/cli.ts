@@ -6,8 +6,10 @@ import {
   appendWorkbookRows,
   appendWorkbookTableColumn,
   deleteWorkbookDefinedName,
+  deleteWorkbookHyperlink,
   inspectWorkbookStyles,
   listWorkbookFormulas,
+  listWorkbookHyperlinks,
   listWorkbookTables,
   patchWorkbookCell,
   patchWorkbookRange,
@@ -22,6 +24,7 @@ import {
   retargetWorkbookChartFormulasFile,
   retargetWorkbookPivotCacheSourcesFile,
   setWorkbookDefinedName,
+  setWorkbookHyperlink,
   styleWorkbookCell,
   validateWorkbookFile
 } from "@ironsheet/node";
@@ -37,7 +40,9 @@ type Command =
   | "append-rows"
   | "append-table-column"
   | "delete-defined-name"
+  | "delete-hyperlink"
   | "formulas"
+  | "hyperlinks"
   | "patch"
   | "patch-range"
   | "read-cell"
@@ -50,6 +55,7 @@ type Command =
   | "retarget-chart"
   | "retarget-pivot"
   | "set-defined-name"
+  | "set-hyperlink"
   | "style-cell"
   | "styles"
   | "tables"
@@ -61,6 +67,7 @@ function usage(): never {
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- tables <workbook.xlsx>
   npm run cli -- formulas <workbook.xlsx>
+  npm run cli -- hyperlinks <workbook.xlsx> [sheet]
   npm run cli -- styles <workbook.xlsx>
   npm run cli -- validate <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
@@ -72,6 +79,8 @@ function usage(): never {
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
   npm run cli -- set-defined-name <input.xlsx> <output.xlsx> <name> <formula> [jsonOptions]
   npm run cli -- delete-defined-name <input.xlsx> <output.xlsx> <name> [jsonOptions]
+  npm run cli -- set-hyperlink <input.xlsx> <output.xlsx> <sheet> <ref> <target> [jsonOptions]
+  npm run cli -- delete-hyperlink <input.xlsx> <output.xlsx> <sheet> <ref>
   npm run cli -- rename-sheet <input.xlsx> <output.xlsx> <sheet> <newName>
   npm run cli -- rename-table <input.xlsx> <output.xlsx> <table> <newName>
   npm run cli -- rename-table-column <input.xlsx> <output.xlsx> <table> <column> <newName>
@@ -101,6 +110,10 @@ async function tables(path: string): Promise<void> {
 
 async function formulas(path: string): Promise<void> {
   console.log(JSON.stringify(await listWorkbookFormulas(path), null, 2));
+}
+
+async function hyperlinks(path: string, sheetName: string | undefined): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookHyperlinks(path, sheetName), null, 2));
 }
 
 async function styles(path: string): Promise<void> {
@@ -220,6 +233,37 @@ async function deleteDefinedName(
     parseDefinedNameDeleteOptions(rawOptions)
   );
   console.log(`${deleted ? "deleted" : "did not find"} defined name ${name} -> ${outputPath}`);
+}
+
+async function setHyperlink(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string,
+  target: string,
+  rawOptions: string | undefined
+): Promise<void> {
+  await setWorkbookHyperlink(
+    inputPath,
+    outputPath,
+    sheetName,
+    ref,
+    target,
+    parseHyperlinkOptions(rawOptions)
+  );
+  console.log(`set hyperlink ${sheetName}!${ref} -> ${outputPath}`);
+}
+
+async function deleteHyperlink(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string
+): Promise<void> {
+  const deleted = await deleteWorkbookHyperlink(inputPath, outputPath, sheetName, ref);
+  console.log(
+    `${deleted ? "deleted" : "did not find"} hyperlink ${sheetName}!${ref} -> ${outputPath}`
+  );
 }
 
 async function replaceTable(
@@ -369,6 +413,26 @@ function parseDefinedNameDeleteOptions(rawOptions: string | undefined): { sheetN
   return options.sheetName === undefined ? {} : { sheetName: options.sheetName };
 }
 
+function parseHyperlinkOptions(rawOptions: string | undefined): {
+  display?: string;
+  tooltip?: string;
+} {
+  if (rawOptions === undefined) {
+    return {};
+  }
+
+  const parsed: unknown = JSON.parse(rawOptions);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("jsonOptions must be an object");
+  }
+
+  const options = parsed as Record<string, unknown>;
+  return {
+    ...(typeof options.display === "string" ? { display: options.display } : {}),
+    ...(typeof options.tooltip === "string" ? { tooltip: options.tooltip } : {})
+  };
+}
+
 function parseChartRetargets(rawRetargets: string): ChartFormulaRetarget[] {
   const parsed: unknown = JSON.parse(rawRetargets);
   if (
@@ -441,6 +505,12 @@ try {
       usage();
     }
     await formulas(path);
+  } else if (command === "hyperlinks") {
+    const [path, sheetName] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await hyperlinks(path, sheetName);
   } else if (command === "styles") {
     const [path] = args;
     if (path === undefined) {
@@ -546,6 +616,29 @@ try {
       usage();
     }
     await deleteDefinedName(inputPath, outputPath, name, rawOptions);
+  } else if (command === "set-hyperlink") {
+    const [inputPath, outputPath, sheetName, ref, target, rawOptions] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      ref === undefined ||
+      target === undefined
+    ) {
+      usage();
+    }
+    await setHyperlink(inputPath, outputPath, sheetName, ref, target, rawOptions);
+  } else if (command === "delete-hyperlink") {
+    const [inputPath, outputPath, sheetName, ref] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      ref === undefined
+    ) {
+      usage();
+    }
+    await deleteHyperlink(inputPath, outputPath, sheetName, ref);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (

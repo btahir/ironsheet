@@ -1,5 +1,5 @@
 import { PackageError } from "./errors.ts";
-import { escapeXmlAttribute, findElementEnd, findStartTags } from "./xml.ts";
+import { escapeXmlAttribute, findElementCloseStart, findElementEnd, findStartTags } from "./xml.ts";
 import {
   type CompressionAdapter,
   parseZip,
@@ -20,7 +20,7 @@ export type Relationship = {
 
 export type PackagePart = {
   name: string;
-  entry: ZipEntry;
+  entry?: ZipEntry;
   dirtyText?: string;
 };
 
@@ -62,6 +62,10 @@ export class OoxmlPackage {
       return textEncoder.encode(part.dirtyText);
     }
 
+    if (part.entry === undefined) {
+      throw new PackageError(`Part ${part.name} has no payload`);
+    }
+
     return readEntryData(part.entry, this.compression);
   }
 
@@ -78,6 +82,18 @@ export class OoxmlPackage {
     }
 
     part.dirtyText = text;
+  }
+
+  addTextPart(partName: string, text: string): void {
+    const normalized = normalizePartName(partName);
+    if (this.parts.has(normalized)) {
+      throw new PackageError(`Cannot add existing part ${normalized}`);
+    }
+
+    this.parts.set(normalized, {
+      name: normalized,
+      dirtyText: text
+    });
   }
 
   deletePart(partName: string): boolean {
@@ -126,6 +142,79 @@ export class OoxmlPackage {
 
     this.setText(relationshipPart, nextXml);
     return removals.length;
+  }
+
+  async nextRelationshipId(partName: string, prefix = "rId"): Promise<string> {
+    const relationships = await this.relationshipsFor(partName);
+    const used = new Set(relationships.map((relationship) => relationship.id));
+    const highestNumericId = Math.max(
+      0,
+      ...relationships
+        .map((relationship) =>
+          relationship.id.match(new RegExp(`^${escapeRegExp(prefix)}([1-9][0-9]*)$`))
+        )
+        .filter((match): match is RegExpMatchArray => match !== null)
+        .map((match) => Number.parseInt(match[1] ?? "0", 10))
+    );
+
+    let next = highestNumericId + 1;
+    while (used.has(`${prefix}${next}`)) {
+      next += 1;
+    }
+
+    return `${prefix}${next}`;
+  }
+
+  async upsertRelationship(partName: string, relationship: Relationship): Promise<void> {
+    const normalized = normalizePartName(partName);
+    const relationshipPart = relationshipPartName(normalized);
+    const relationshipXml = relationshipElementXml(relationship);
+
+    if (!this.hasPart(relationshipPart)) {
+      this.addTextPart(
+        relationshipPart,
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${relationshipXml}
+</Relationships>`
+      );
+      return;
+    }
+
+    const xml = await this.readText(relationshipPart);
+    const existing = findStartTags(xml, "Relationship").find(
+      (tag) => tag.attributes.Id === relationship.id
+    );
+    if (existing !== undefined) {
+      const end = existing.selfClosing ? existing.end : findElementEnd(xml, existing);
+      this.setText(
+        relationshipPart,
+        `${xml.slice(0, existing.start)}${relationshipXml}${xml.slice(end)}`
+      );
+      return;
+    }
+
+    const relationships = findStartTags(xml, "Relationships")[0];
+    if (relationships === undefined) {
+      throw new PackageError(`Relationship part ${relationshipPart} is missing Relationships root`);
+    }
+
+    if (relationships.selfClosing) {
+      const opening = relationships.raw.replace(/\/>$/, ">");
+      this.setText(
+        relationshipPart,
+        `${xml.slice(0, relationships.start)}${opening}
+  ${relationshipXml}
+</${relationships.name}>${xml.slice(relationships.end)}`
+      );
+      return;
+    }
+
+    const insertOffset = findElementCloseStart(xml, relationships);
+    this.setText(
+      relationshipPart,
+      `${xml.slice(0, insertOffset)}  ${relationshipXml}\n${xml.slice(insertOffset)}`
+    );
   }
 
   async removeContentTypeOverride(partName: string): Promise<boolean> {
@@ -183,6 +272,10 @@ export class OoxmlPackage {
   async write(): Promise<Uint8Array> {
     const entries = [...this.parts.values()].map((part) => {
       if (part.dirtyText === undefined) {
+        if (part.entry === undefined) {
+          throw new PackageError(`Part ${part.name} has no payload`);
+        }
+
         return {
           name: part.name,
           compressedData: part.entry.compressedData,
@@ -199,9 +292,13 @@ export class OoxmlPackage {
         name: part.name,
         data: textEncoder.encode(part.dirtyText),
         compressionMethod: 8 as const,
-        lastModDate: part.entry.lastModDate,
-        lastModTime: part.entry.lastModTime,
-        externalAttributes: part.entry.externalAttributes
+        ...(part.entry === undefined
+          ? {}
+          : {
+              lastModDate: part.entry.lastModDate,
+              lastModTime: part.entry.lastModTime,
+              externalAttributes: part.entry.externalAttributes
+            })
       };
     });
 
@@ -214,6 +311,10 @@ export class OoxmlPackage {
 
     if (part === undefined) {
       throw new PackageError(`Missing package part ${normalized}`);
+    }
+
+    if (part.entry === undefined && part.dirtyText === undefined) {
+      throw new PackageError(`Missing package part data ${normalized}`);
     }
 
     return part;
@@ -256,7 +357,7 @@ export function resolveRelationshipTarget(sourcePartName: string, target: string
   return resolved.join("/");
 }
 
-function relationshipPartName(partName: string): string {
+export function relationshipPartName(partName: string): string {
   const normalized = normalizePartName(partName);
   const slash = normalized.lastIndexOf("/");
 
@@ -265,6 +366,25 @@ function relationshipPartName(partName: string): string {
   }
 
   return `${normalized.slice(0, slash + 1)}_rels/${normalized.slice(slash + 1)}.rels`;
+}
+
+function relationshipElementXml(relationship: Relationship): string {
+  const attributes = [
+    `Id="${escapeXmlAttribute(relationship.id)}"`,
+    `Type="${escapeXmlAttribute(relationship.type)}"`,
+    `Target="${escapeXmlAttribute(relationship.target)}"`,
+    relationship.targetMode === undefined
+      ? undefined
+      : `TargetMode="${escapeXmlAttribute(relationship.targetMode)}"`
+  ]
+    .filter((attribute): attribute is string => attribute !== undefined)
+    .join(" ");
+
+  return `<Relationship ${attributes}/>`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function requireAttribute(attributes: Record<string, string>, name: string): string {

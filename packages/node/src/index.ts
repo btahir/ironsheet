@@ -127,6 +127,14 @@ export async function listWorkbookTables(
   return workbook.tables();
 }
 
+export async function listWorkbookHyperlinks(
+  inputPath: string,
+  sheetName?: string
+): Promise<Awaited<ReturnType<Workbook["hyperlinks"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.hyperlinks(sheetName);
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {
@@ -161,6 +169,31 @@ export async function deleteWorkbookDefinedName(
 ): Promise<boolean> {
   const workbook = await readWorkbook(inputPath);
   const deleted = await workbook.deleteDefinedName(name, options);
+  await writeWorkbook(workbook, outputPath);
+  return deleted;
+}
+
+export async function setWorkbookHyperlink(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string,
+  target: string,
+  options: Parameters<Workbook["setHyperlink"]>[3] = {}
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.setHyperlink(sheetName, ref, target, options);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function deleteWorkbookHyperlink(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string
+): Promise<boolean> {
+  const workbook = await readWorkbook(inputPath);
+  const deleted = await workbook.deleteHyperlink(sheetName, ref);
   await writeWorkbook(workbook, outputPath);
   return deleted;
 }

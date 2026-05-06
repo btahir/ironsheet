@@ -61,6 +61,7 @@ export {
 export {
   Workbook,
   type WorkbookFormula,
+  type WorkbookHyperlink,
   type WorkbookInspectResult,
   type WorkbookSheet,
   type WorkbookSheetState
@@ -83,6 +84,12 @@ export {
   streamRowsXml,
   streamReplaceWorksheetRowsXml,
   streamWorksheetRowsXml,
+  deleteWorksheetHyperlink,
+  listWorksheetHyperlinks,
+  setWorksheetHyperlink,
+  type DeleteWorksheetHyperlinkResult,
+  type SetWorksheetHyperlinkResult,
+  type WorksheetHyperlink,
   type WorksheetRowReplacement,
   type WorksheetRowXml
 } from "./worksheet.ts";
