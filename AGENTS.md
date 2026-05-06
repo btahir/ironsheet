@@ -19,8 +19,7 @@ These repo-local rules apply to future automated work in this project.
 
 ## Workflow
 
-- Run `npm run verify` before handing work back.
+- Run `npm run ci` before handing work back.
 - Use `npm run commit:safe -- "message"` for local commits.
 - Do not commit `IRONSHEET_SPEC.md`; it is intentionally ignored planning material.
 - Add or update tests with behavior changes.
-

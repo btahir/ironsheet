@@ -21,6 +21,12 @@ Run the fast repo gate:
 npm run verify
 ```
 
+Run the full local gate, including generated compatibility fixtures:
+
+```bash
+npm run ci
+```
+
 Run compatibility checks against a workbook:
 
 ```bash

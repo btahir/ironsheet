@@ -44,5 +44,5 @@ if (quiet("git", ["diff", "--cached", "--quiet"]) === 0) {
   process.exit(0);
 }
 
-run("npm", ["run", "verify"]);
+run("npm", ["run", "ci"]);
 run("git", ["commit", "-m", message]);

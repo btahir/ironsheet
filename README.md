@@ -42,7 +42,7 @@ This repository currently implements the first vertical slice:
 
 ## Commands
 
-Run the full quality gate:
+Run the fast quality gate:
 
 ```bash
 npm run verify
@@ -182,5 +182,7 @@ Use the safe commit loop:
 ```bash
 npm run commit:safe -- "feat: add workbook capability"
 ```
+
+This runs the CI-equivalent local gate before committing.
 
 `IRONSHEET_SPEC.md` is local planning material and is intentionally ignored.
