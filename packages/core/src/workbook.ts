@@ -1,4 +1,4 @@
-import { type CellRange, parseCellRange } from "./address.ts";
+import { type CellRange, parseCellAddress, parseCellRange } from "./address.ts";
 import { retargetWorkbookChartFormulas, type ChartFormulaRetarget } from "./chart.ts";
 import {
   parseWorksheetComments,
@@ -389,6 +389,8 @@ export class Workbook {
   }
 
   async renderTemplate(patch: WorkbookTemplatePatch): Promise<WorkbookTemplateRenderResult> {
+    await this.preflightTemplatePatch(patch);
+
     let cells = 0;
     let images = 0;
     let names = 0;
@@ -1295,6 +1297,52 @@ export class Workbook {
       ...(definedName.hidden === undefined ? {} : { hidden: definedName.hidden }),
       ...(definedName.localSheetId === undefined ? {} : { localSheetId: definedName.localSheetId })
     };
+  }
+
+  private async preflightTemplatePatch(patch: WorkbookTemplatePatch): Promise<void> {
+    for (const cell of patch.cells ?? []) {
+      this.sheet(cell.sheetName);
+      parseCellAddress(cell.address);
+    }
+
+    for (const range of patch.ranges ?? []) {
+      this.sheet(range.sheetName);
+      parseCellAddress(range.startAddress);
+    }
+
+    for (const name of patch.names ?? []) {
+      const range = await this.resolveNamedRange(name.name, {
+        ...(name.sheetName === undefined ? {} : { sheetName: name.sheetName })
+      });
+      if (name.allowOutsideRange !== true) {
+        assertValuesFitNamedRange(range, name.values);
+      }
+    }
+
+    if ((patch.tables ?? []).length > 0) {
+      const tables = new Set(
+        (await this.tables()).flatMap((table) => [table.name, table.displayName])
+      );
+      for (const table of patch.tables ?? []) {
+        if (!tables.has(table.tableName)) {
+          throw new WorkbookError(`Unknown table ${table.tableName}`);
+        }
+      }
+    }
+
+    if ((patch.images ?? []).length > 0) {
+      const images = new Set(
+        (await this.images())
+          .map((image) => image.imagePartName)
+          .filter((partName): partName is string => partName !== undefined)
+      );
+      for (const image of patch.images ?? []) {
+        const imagePartName = normalizePartName(image.imagePartName);
+        if (!images.has(imagePartName)) {
+          throw new WorkbookError(`Unknown workbook image part ${imagePartName}`);
+        }
+      }
+    }
   }
 
   async formulas(): Promise<WorkbookFormula[]> {

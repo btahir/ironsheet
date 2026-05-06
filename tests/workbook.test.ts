@@ -247,6 +247,31 @@ test("renders template patches across cells ranges tables and images", async () 
   assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
+test("template rendering preflights all targets before mutation", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeDrawing: true, includeTable: true })
+  );
+  const beforeCell = await workbook.readCell("Sheet1", "D1");
+  const beforeTable = await workbook.tables();
+  const beforeImage = await workbook.pkg.readPart("xl/media/image1.png");
+
+  await assert.rejects(
+    () =>
+      workbook.renderTemplate({
+        cells: [{ sheetName: "Sheet1", address: "D1", value: "Should not write" }],
+        tables: [{ tableName: "MissingTable", rows: [["North", 10]] }],
+        images: [{ imagePartName: "xl/media/image1.png", data: new Uint8Array([1, 2, 3]) }]
+      }),
+    /Unknown table MissingTable/
+  );
+
+  assert.deepEqual(await workbook.readCell("Sheet1", "D1"), beforeCell);
+  assert.deepEqual(await workbook.tables(), beforeTable);
+  assert.deepEqual(Array.from(await workbook.pkg.readPart("xl/media/image1.png")), [
+    ...beforeImage
+  ]);
+});
+
 test("lists workbook merged cells", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook({ includeMerge: true }));
 
