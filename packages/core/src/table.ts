@@ -6,12 +6,13 @@ import {
 } from "./formula.ts";
 import type { OoxmlPackage } from "./opc.ts";
 import { resolveRelationshipTarget } from "./opc.ts";
-import { patchCell, replaceRowsInRange, type CellInput } from "./worksheet.ts";
+import { patchCell, removeCellsInRange, replaceRowsInRange, type CellInput } from "./worksheet.ts";
 import {
   decodeXml,
   escapeXmlAttribute,
   escapeXmlText,
   findElementCloseStart,
+  findElementEnd,
   findFirstStartTag,
   findStartTags,
   type XmlTag
@@ -216,6 +217,96 @@ export async function renameWorkbookTableColumn(
   };
 }
 
+export async function appendWorkbookTableColumn(
+  pkg: OoxmlPackage,
+  tableName: string,
+  columnName: string,
+  values: CellInput[] = []
+): Promise<WorkbookTable> {
+  validateTableColumnName(columnName);
+
+  const table = await findWorkbookTable(pkg, tableName);
+  assertTableColumnNameAvailable(table, columnName);
+
+  const range = parseTableRange(table.ref);
+  const column = range.end.column + 1;
+  const newRef = tableRef(range.start.column, range.start.row, column, range.end.row);
+  const bodyStartRow = range.start.row + 1;
+  const bodyEndRow = range.end.row - table.totalsRowCount;
+
+  let worksheetXml = await pkg.readText(table.worksheetPartName);
+  for (let row = range.start.row; row <= range.end.row; row += 1) {
+    const value =
+      row === range.start.row
+        ? columnName
+        : row > bodyEndRow
+          ? null
+          : (values[row - bodyStartRow] ?? null);
+    worksheetXml = patchCell(worksheetXml, formatCellAddress(column, row), value).xml;
+  }
+  pkg.setText(table.worksheetPartName, worksheetXml);
+
+  const tableXml = await pkg.readText(table.partName);
+  const nextColumn = {
+    id: String(nextTableColumnId(table.columns)),
+    name: columnName
+  };
+  pkg.setText(table.partName, appendTableColumnXml(updateTableRef(tableXml, newRef), nextColumn));
+
+  return {
+    ...table,
+    ref: newRef,
+    columns: [...table.columns, nextColumn]
+  };
+}
+
+export async function removeRightmostWorkbookTableColumn(
+  pkg: OoxmlPackage,
+  tableName: string,
+  columnName: string
+): Promise<WorkbookTable> {
+  const table = await findWorkbookTable(pkg, tableName);
+  const columnIndex = table.columns.findIndex(
+    (column) => column.name?.toLowerCase() === columnName.toLowerCase()
+  );
+  if (columnIndex === -1) {
+    throw new WorkbookError(`Unknown column ${columnName} in table ${table.displayName}`);
+  }
+  if (table.columns.length <= 1) {
+    throw new WorkbookError(`Cannot remove the only column from table ${table.displayName}`);
+  }
+  if (columnIndex !== table.columns.length - 1) {
+    throw new WorkbookError("Only the rightmost table column can be removed safely");
+  }
+
+  const range = parseTableRange(table.ref);
+  const column = range.start.column + columnIndex;
+  const newRef = tableRef(range.start.column, range.start.row, column - 1, range.end.row);
+  const worksheetXml = await pkg.readText(table.worksheetPartName);
+  pkg.setText(
+    table.worksheetPartName,
+    removeCellsInRange(worksheetXml, {
+      startRow: range.start.row,
+      endRow: range.end.row,
+      startColumn: column,
+      endColumn: column
+    }).xml
+  );
+
+  const existingColumnName = table.columns[columnIndex]?.name ?? columnName;
+  const tableXml = await pkg.readText(table.partName);
+  pkg.setText(
+    table.partName,
+    updateTableRef(removeTableColumnXml(tableXml, existingColumnName), newRef)
+  );
+
+  return {
+    ...table,
+    ref: newRef,
+    columns: table.columns.slice(0, -1)
+  };
+}
+
 function parseTableRange(ref: string): {
   start: { row: number; column: number };
   end: { row: number; column: number };
@@ -232,6 +323,15 @@ function parseTableRange(ref: string): {
     start: { row: parsedStart.row, column: parsedStart.column },
     end: { row: parsedEnd.row, column: parsedEnd.column }
   };
+}
+
+function tableRef(
+  startColumn: number,
+  startRow: number,
+  endColumn: number,
+  endRow: number
+): string {
+  return `${numberToColumnLabel(startColumn)}${startRow}:${numberToColumnLabel(endColumn)}${endRow}`;
 }
 
 function parseTotalsRowCount(attributes: Record<string, string>): number {
@@ -307,6 +407,68 @@ function updateTableColumnName(xml: string, columnName: string, nextName: string
   return `${xml.slice(0, column.start)}${upsertAttributes(column.raw, {
     name: nextName
   })}${xml.slice(column.end)}`;
+}
+
+function appendTableColumnXml(
+  xml: string,
+  column: Required<Pick<WorkbookTableColumn, "id" | "name">>
+): string {
+  const tableColumns = findFirstStartTag(xml, "tableColumns");
+  if (tableColumns === undefined) {
+    throw new WorkbookError("Table XML is missing tableColumns");
+  }
+
+  const count = findStartTags(
+    xml.slice(tableColumns.end, findElementCloseStart(xml, tableColumns)),
+    "tableColumn"
+  ).length;
+  const close = findElementCloseStart(xml, tableColumns);
+  const tableColumnXml = `<tableColumn id="${escapeXmlAttribute(column.id)}" name="${escapeXmlAttribute(column.name)}"/>`;
+  const withColumn = `${xml.slice(0, close)}${tableColumnXml}${xml.slice(close)}`;
+  return `${withColumn.slice(0, tableColumns.start)}${upsertAttributes(tableColumns.raw, {
+    count: String(count + 1)
+  })}${withColumn.slice(tableColumns.end)}`;
+}
+
+function removeTableColumnXml(xml: string, columnName: string): string {
+  const tableColumns = findFirstStartTag(xml, "tableColumns");
+  if (tableColumns === undefined) {
+    throw new WorkbookError("Table XML is missing tableColumns");
+  }
+
+  const column = findStartTags(xml, "tableColumn").find(
+    (candidate) => candidate.attributes.name?.toLowerCase() === columnName.toLowerCase()
+  );
+  if (column === undefined) {
+    throw new WorkbookError(`Table XML is missing column ${columnName}`);
+  }
+
+  const nextXml = `${xml.slice(0, column.start)}${xml.slice(findElementEnd(xml, column))}`;
+  const currentCount = Number.parseInt(tableColumns.attributes.count ?? "1", 10);
+  const count = Math.max(0, (Number.isInteger(currentCount) ? currentCount : 1) - 1);
+  return `${nextXml.slice(0, tableColumns.start)}${upsertAttributes(tableColumns.raw, {
+    count: String(count)
+  })}${nextXml.slice(tableColumns.end)}`;
+}
+
+function assertTableColumnNameAvailable(table: WorkbookTable, columnName: string): void {
+  const duplicate = table.columns.find(
+    (column) => column.name?.toLowerCase() === columnName.toLowerCase()
+  );
+  if (duplicate !== undefined) {
+    throw new WorkbookError(
+      `Column name ${columnName} is already used by table ${table.displayName}`
+    );
+  }
+}
+
+function nextTableColumnId(columns: WorkbookTableColumn[]): number {
+  return (
+    Math.max(
+      0,
+      ...columns.map((column) => Number.parseInt(column.id ?? "", 10)).filter(Number.isInteger)
+    ) + 1
+  );
 }
 
 async function rewriteTableFormulaReferences(

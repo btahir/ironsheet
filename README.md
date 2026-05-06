@@ -17,6 +17,7 @@ This repository currently implements the first vertical slice:
 - Defined-name inspection.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
+- Safe table column append and guarded rightmost-column removal.
 - Style metadata inspection with cell format counts.
 - Deduped cell style creation with custom number formats and style application.
 - Cell, batch-cell, and range read/write APIs.
@@ -114,6 +115,13 @@ Replace basic table rows:
 
 ```bash
 npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["New",10],["Growth",20]]'
+```
+
+Append or remove a table column:
+
+```bash
+npm run cli -- append-table-column input.xlsx output.xlsx RevenueTable Margin '[0.5,0.7]'
+npm run cli -- remove-table-column input.xlsx output.xlsx RevenueTable Margin
 ```
 
 Rename a table or table column and retarget structured references:

@@ -150,6 +150,18 @@ export async function replaceWorkbookTableRows(
   await writeWorkbook(workbook, outputPath);
 }
 
+export async function appendWorkbookTableColumn(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  columnName: string,
+  values: CellInput[] = []
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.appendTableColumn(tableName, columnName, values);
+  await writeWorkbook(workbook, outputPath);
+}
+
 export async function renameWorkbookTable(
   inputPath: string,
   outputPath: string,
@@ -158,6 +170,17 @@ export async function renameWorkbookTable(
 ): Promise<void> {
   const workbook = await readWorkbook(inputPath);
   await workbook.renameTable(tableName, nextName);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function removeRightmostWorkbookTableColumn(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  columnName: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.removeRightmostTableColumn(tableName, columnName);
   await writeWorkbook(workbook, outputPath);
 }
 

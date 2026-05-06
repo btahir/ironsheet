@@ -215,6 +215,49 @@ export function applyCellStyle(xml: string, address: string, styleId: string): P
   };
 }
 
+export function removeCellsInRange(
+  xml: string,
+  range: { startRow: number; endRow: number; startColumn: number; endColumn: number }
+): PatchCellResult {
+  let nextXml = xml;
+  const cells = findStartTags(xml, "c")
+    .map((tag) => {
+      const address = tag.attributes.r;
+      if (address === undefined) {
+        return undefined;
+      }
+
+      const parsed = parseCellAddress(address);
+      if (
+        parsed.row < range.startRow ||
+        parsed.row > range.endRow ||
+        parsed.column < range.startColumn ||
+        parsed.column > range.endColumn
+      ) {
+        return undefined;
+      }
+
+      return {
+        start: tag.start,
+        end: tag.selfClosing ? tag.end : findElementEnd(xml, tag),
+        address: parsed.address
+      };
+    })
+    .filter((cell): cell is { start: number; end: number; address: string } => cell !== undefined)
+    .sort((left, right) => right.start - left.start);
+
+  for (const cell of cells) {
+    nextXml = `${nextXml.slice(0, cell.start)}${nextXml.slice(cell.end)}`;
+  }
+
+  const affectedRef = `${formatCellAddress(range.startColumn, range.startRow)}:${formatCellAddress(range.endColumn, range.endRow)}`;
+  return {
+    xml: recalculateDimension(nextXml),
+    formulaChanged: false,
+    affectedRanges: [parseCellRange(affectedRef)]
+  };
+}
+
 export function appendRows(
   xml: string,
   rows: CellInput[][],

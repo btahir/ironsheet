@@ -31,8 +31,10 @@ export {
   type WorkbookStyles
 } from "./styles.ts";
 export {
+  appendWorkbookTableColumn,
   findWorkbookTable,
   listWorkbookTables,
+  removeRightmostWorkbookTableColumn,
   renameWorkbookTableColumn,
   renameWorkbookTable,
   replaceTableRows,
@@ -64,6 +66,7 @@ export {
   patchRange,
   readCell,
   readRange,
+  removeCellsInRange,
   type ReadCellResult,
   type ReadRangeResult,
   streamRowsXml,

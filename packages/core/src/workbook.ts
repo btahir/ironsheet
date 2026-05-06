@@ -21,7 +21,9 @@ import {
   type WorkbookStyles
 } from "./styles.ts";
 import {
+  appendWorkbookTableColumn,
   listWorkbookTables,
+  removeRightmostWorkbookTableColumn,
   renameWorkbookTableColumn,
   renameWorkbookTable,
   replaceTableRows,
@@ -315,6 +317,32 @@ export class Workbook {
     nextName: string
   ): Promise<WorkbookTable> {
     const table = await renameWorkbookTableColumn(this.pkg, tableName, columnName, nextName);
+    await this.forceRecalculateOnOpen();
+    await this.recordMutationImpactDiagnostics({
+      operation: "table",
+      sheetPartName: table.worksheetPartName
+    });
+
+    return table;
+  }
+
+  async appendTableColumn(
+    tableName: string,
+    columnName: string,
+    values: CellInput[] = []
+  ): Promise<WorkbookTable> {
+    const table = await appendWorkbookTableColumn(this.pkg, tableName, columnName, values);
+    await this.forceRecalculateOnOpen();
+    await this.recordMutationImpactDiagnostics({
+      operation: "table",
+      sheetPartName: table.worksheetPartName
+    });
+
+    return table;
+  }
+
+  async removeRightmostTableColumn(tableName: string, columnName: string): Promise<WorkbookTable> {
+    const table = await removeRightmostWorkbookTableColumn(this.pkg, tableName, columnName);
     await this.forceRecalculateOnOpen();
     await this.recordMutationImpactDiagnostics({
       operation: "table",

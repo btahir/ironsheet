@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "../../core/src/index.ts";
 import {
   appendWorkbookRows,
+  appendWorkbookTableColumn,
   inspectWorkbookStyles,
   listWorkbookFormulas,
   listWorkbookTables,
@@ -12,6 +13,7 @@ import {
   readWorkbook,
   readWorkbookCell,
   readWorkbookRange,
+  removeRightmostWorkbookTableColumn,
   renameWorkbookTable,
   renameWorkbookTableColumn,
   replaceWorkbookTableRows,
@@ -23,6 +25,7 @@ import type { CellInput, WorkbookCellStyleInput } from "../../core/src/index.ts"
 type Command =
   | "inspect"
   | "append-rows"
+  | "append-table-column"
   | "formulas"
   | "patch"
   | "patch-range"
@@ -30,6 +33,7 @@ type Command =
   | "read-range"
   | "rename-table-column"
   | "rename-table"
+  | "remove-table-column"
   | "replace-table"
   | "style-cell"
   | "styles"
@@ -50,8 +54,10 @@ function usage(): never {
   npm run cli -- style-cell <input.xlsx> <output.xlsx> <sheet> <cell> <jsonStyle>
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
+  npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
   npm run cli -- rename-table <input.xlsx> <output.xlsx> <table> <newName>
   npm run cli -- rename-table-column <input.xlsx> <output.xlsx> <table> <column> <newName>
+  npm run cli -- remove-table-column <input.xlsx> <output.xlsx> <table> <rightmostColumn>
   npm run cli -- replace-table <input.xlsx> <output.xlsx> <table> <jsonRows>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
@@ -142,6 +148,23 @@ async function appendRowsCommand(
   console.log(`appended rows to ${sheetName} -> ${outputPath}`);
 }
 
+async function appendTableColumn(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  columnName: string,
+  rawValues: string | undefined
+): Promise<void> {
+  await appendWorkbookTableColumn(
+    inputPath,
+    outputPath,
+    tableName,
+    columnName,
+    rawValues === undefined ? [] : parseRowValues(rawValues)
+  );
+  console.log(`appended ${tableName}[${columnName}] -> ${outputPath}`);
+}
+
 async function replaceTable(
   inputPath: string,
   outputPath: string,
@@ -173,6 +196,16 @@ async function renameTableColumn(
   console.log(`renamed ${tableName}[${columnName}] to ${nextName} -> ${outputPath}`);
 }
 
+async function removeTableColumn(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  columnName: string
+): Promise<void> {
+  await removeRightmostWorkbookTableColumn(inputPath, outputPath, tableName, columnName);
+  console.log(`removed ${tableName}[${columnName}] -> ${outputPath}`);
+}
+
 function parseCliValue(value: string): CellInput {
   if (value.startsWith("=")) {
     return { formula: value };
@@ -200,6 +233,15 @@ function parseRows(rawRows: string): CellInput[][] {
   }
 
   return parsed.map((row) => row.map((cell) => parseJsonCell(cell as unknown)));
+}
+
+function parseRowValues(rawValues: string): CellInput[] {
+  const parsed: unknown = JSON.parse(rawValues);
+  if (!Array.isArray(parsed)) {
+    throw new Error("jsonValues must be an array");
+  }
+
+  return parsed.map((cell) => parseJsonCell(cell as unknown));
 }
 
 function parseStyle(rawStyle: string): WorkbookCellStyleInput {
@@ -331,6 +373,17 @@ try {
       usage();
     }
     await appendRowsCommand(inputPath, outputPath, sheetName, rawRows);
+  } else if (command === "append-table-column") {
+    const [inputPath, outputPath, tableName, columnName, rawValues] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      tableName === undefined ||
+      columnName === undefined
+    ) {
+      usage();
+    }
+    await appendTableColumn(inputPath, outputPath, tableName, columnName, rawValues);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (
@@ -365,6 +418,17 @@ try {
       usage();
     }
     await renameTableColumn(inputPath, outputPath, tableName, columnName, nextName);
+  } else if (command === "remove-table-column") {
+    const [inputPath, outputPath, tableName, columnName] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      tableName === undefined ||
+      columnName === undefined
+    ) {
+      usage();
+    }
+    await removeTableColumn(inputPath, outputPath, tableName, columnName);
   } else {
     usage();
   }

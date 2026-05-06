@@ -253,6 +253,56 @@ test("renaming table columns rejects duplicate and empty names", async () => {
   );
 });
 
+test("appends and removes rightmost table columns", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeTable: true }));
+
+  const appended = await workbook.appendTableColumn("RevenueTable", "Margin", [0.5]);
+
+  assert.equal(appended.ref, "A1:C2");
+  assert.deepEqual(appended.columns, [
+    { id: "1", name: "Name" },
+    { id: "2", name: "Amount" },
+    { id: "3", name: "Margin" }
+  ]);
+  assert.deepEqual(await workbook.readRange("Sheet1", "A1:C2"), {
+    range: "A1:C2",
+    cells: [
+      [
+        { address: "A1", value: "Name" },
+        { address: "B1", value: "Amount" },
+        { address: "C1", value: "Margin" }
+      ],
+      [
+        { address: "A2", value: "Old" },
+        { address: "B2", value: 1 },
+        { address: "C2", value: 0.5 }
+      ]
+    ]
+  });
+  assert.match(await workbook.pkg.readText("xl/tables/table1.xml"), /ref="A1:C2"/);
+  assert.match(await workbook.pkg.readText("xl/tables/table1.xml"), /<tableColumns count="3">/);
+
+  const removed = await workbook.removeRightmostTableColumn("RevenueTable", "Margin");
+
+  assert.equal(removed.ref, "A1:B2");
+  assert.deepEqual(removed.columns, [
+    { id: "1", name: "Name" },
+    { id: "2", name: "Amount" }
+  ]);
+  assert.deepEqual(await workbook.readCell("Sheet1", "C1"), undefined);
+  assert.deepEqual(await workbook.readCell("Sheet1", "C2"), undefined);
+  assert.equal((await workbook.validate()).summary.errors, 0);
+});
+
+test("removing table columns only allows the rightmost column", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeTable: true }));
+
+  await assert.rejects(
+    () => workbook.removeRightmostTableColumn("RevenueTable", "Name"),
+    /rightmost/
+  );
+});
+
 test("reads workbook formula inventory with parsed dependencies", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
