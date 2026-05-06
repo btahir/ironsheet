@@ -1,6 +1,10 @@
 import { parseCellAddress, parseCellRange } from "./address.ts";
 import { parseDefinedNames } from "./defined-names.ts";
-import { parseFormulaSheetReferences } from "./formula.ts";
+import {
+  formulaReferenceWithinExcelBounds,
+  parseFormulaReferences,
+  parseFormulaSheetReferences
+} from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { findElementCloseStart, findElementEnd, findFirstStartTag, findStartTags } from "./xml.ts";
 
@@ -588,6 +592,18 @@ async function validateWorksheetFormulas(
             message: `Formula references missing sheet ${reference.sheetName}`,
             part,
             target: reference.sheetName
+          });
+        }
+      }
+
+      for (const reference of parseFormulaReferences(formulaText)) {
+        if (!formulaReferenceWithinExcelBounds(reference)) {
+          issues.push({
+            severity: "error",
+            code: "FORMULA_REFERENCE_OUT_OF_BOUNDS",
+            message: `Formula references ${reference.ref}, which is outside the Excel worksheet grid`,
+            part,
+            target: reference.ref
           });
         }
       }

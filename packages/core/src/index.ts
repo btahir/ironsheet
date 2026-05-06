@@ -4,7 +4,17 @@ export { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts"
 export type { Diagnostic, DiagnosticSeverity } from "./diagnostics.ts";
 export { diffZipPackages, type PackageDiff, type PackageEntryDiff } from "./diff.ts";
 export { IronsheetError, PackageError, WorkbookError, WorksheetError, ZipError } from "./errors.ts";
-export { parseFormulaSheetReferences, type FormulaSheetReference } from "./formula.ts";
+export {
+  excelMaxColumn,
+  excelMaxRow,
+  formulaReferenceWithinExcelBounds,
+  parseFormulaReferences,
+  parseFormulaSheetReferences,
+  type FormulaCellReference,
+  type FormulaRangeReference,
+  type FormulaReference,
+  type FormulaSheetReference
+} from "./formula.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
 export { parseSharedStrings } from "./shared-strings.ts";
 export { findWorkbookTable, replaceTableRows, type WorkbookTable } from "./table.ts";

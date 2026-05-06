@@ -301,6 +301,26 @@ test("validation reports formulas that reference missing sheets", async () => {
   assert.equal(report.issues[0]?.target, "Missing");
 });
 
+test("validation reports formulas with references outside the Excel grid", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c>',
+      '<c r="A1" s="1"><f>XFE1+A1048577</f><v>1</v></c>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 2);
+  assert.equal(
+    report.issues.every((issue) => issue.code === "FORMULA_REFERENCE_OUT_OF_BOUNDS"),
+    true
+  );
+});
+
 test("validation reports defined names with invalid local sheet ids", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
   const workbookXml = await pkg.readText("xl/workbook.xml");
