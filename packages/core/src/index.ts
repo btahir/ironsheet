@@ -56,11 +56,14 @@ export {
 } from "./worksheet.ts";
 export {
   type XmlTag,
+  type XmlChunkTransform,
   type XmlToken,
   findElementCloseStart,
   findElementEnd,
   findFirstStartTag,
   findStartTags,
+  tokenizeXmlChunks,
+  transformXmlChunks,
   tokenizeXml
 } from "./xml.ts";
 export {

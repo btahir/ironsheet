@@ -26,6 +26,10 @@ export type XmlToken =
   | { kind: "processingInstruction"; start: number; end: number; raw: string }
   | { kind: "declaration"; start: number; end: number; raw: string };
 
+export type XmlChunkTransform = (
+  token: XmlToken
+) => string | undefined | Promise<string | undefined>;
+
 export function* tokenizeXml(xml: string, options: { start?: number } = {}): Generator<XmlToken> {
   let offset = options.start ?? 0;
 
@@ -114,6 +118,75 @@ export function* tokenizeXml(xml: string, options: { start?: number } = {}): Gen
   }
 }
 
+export async function* tokenizeXmlChunks(
+  chunks: Iterable<string> | AsyncIterable<string>
+): AsyncGenerator<XmlToken> {
+  let buffer = "";
+  let bufferStart = 0;
+
+  function consume(length: number): void {
+    buffer = buffer.slice(length);
+    bufferStart += length;
+  }
+
+  function* drain(done: boolean): Generator<XmlToken> {
+    while (buffer.length > 0) {
+      const tagStart = buffer.indexOf("<");
+      if (tagStart === -1) {
+        yield {
+          kind: "text",
+          start: bufferStart,
+          end: bufferStart + buffer.length,
+          text: buffer
+        };
+        consume(buffer.length);
+        return;
+      }
+
+      if (tagStart > 0) {
+        yield {
+          kind: "text",
+          start: bufferStart,
+          end: bufferStart + tagStart,
+          text: buffer.slice(0, tagStart)
+        };
+        consume(tagStart);
+        continue;
+      }
+
+      const parsed = parseBufferedToken(buffer, bufferStart, done);
+      if (parsed === undefined) {
+        return;
+      }
+
+      consume(parsed.consumed);
+      if (parsed.token !== undefined) {
+        yield parsed.token;
+      }
+    }
+  }
+
+  for await (const chunk of chunks) {
+    if (chunk.length === 0) {
+      continue;
+    }
+
+    buffer += chunk;
+    yield* drain(false);
+  }
+
+  yield* drain(true);
+}
+
+export async function* transformXmlChunks(
+  chunks: Iterable<string> | AsyncIterable<string>,
+  transform: XmlChunkTransform
+): AsyncGenerator<string> {
+  for await (const token of tokenizeXmlChunks(chunks)) {
+    yield (await transform(token)) ?? tokenRawText(token);
+  }
+}
+
 export function findStartTags(xml: string, localName: string): XmlTag[] {
   const tags: XmlTag[] = [];
 
@@ -170,6 +243,177 @@ function findElementCloseTag(xml: string, tag: XmlTag): { start: number; end: nu
   }
 
   throw new PackageError(`Element ${tag.name} is missing a closing tag`);
+}
+
+function parseBufferedToken(
+  source: string,
+  absoluteStart: number,
+  done: boolean
+): { token: XmlToken | undefined; consumed: number } | undefined {
+  if (source.startsWith("<?")) {
+    const end = findBufferedDelimitedEnd(
+      source,
+      "?>",
+      absoluteStart,
+      "processing instruction",
+      done
+    );
+    if (end === undefined) {
+      return undefined;
+    }
+
+    return {
+      consumed: end,
+      token: {
+        kind: "processingInstruction",
+        start: absoluteStart,
+        end: absoluteStart + end,
+        raw: source.slice(0, end)
+      }
+    };
+  }
+
+  if (source.startsWith("<!--")) {
+    const end = findBufferedDelimitedEnd(source, "-->", absoluteStart, "comment", done);
+    if (end === undefined) {
+      return undefined;
+    }
+
+    return {
+      consumed: end,
+      token: {
+        kind: "comment",
+        start: absoluteStart,
+        end: absoluteStart + end,
+        raw: source.slice(0, end),
+        text: source.slice("<!--".length, end - "-->".length)
+      }
+    };
+  }
+
+  if (source.startsWith("<![CDATA[")) {
+    const end = findBufferedDelimitedEnd(source, "]]>", absoluteStart, "CDATA section", done);
+    if (end === undefined) {
+      return undefined;
+    }
+
+    return {
+      consumed: end,
+      token: {
+        kind: "cdata",
+        start: absoluteStart,
+        end: absoluteStart + end,
+        raw: source.slice(0, end),
+        text: source.slice("<![CDATA[".length, end - "]]>".length)
+      }
+    };
+  }
+
+  const tagEnd = findBufferedTagEnd(source, absoluteStart, done);
+  if (tagEnd === undefined) {
+    return undefined;
+  }
+
+  const raw = source.slice(0, tagEnd);
+  if (raw.startsWith("</")) {
+    const name = parseEndTagName(raw);
+    return {
+      consumed: tagEnd,
+      token:
+        name === undefined
+          ? undefined
+          : {
+              kind: "end",
+              name,
+              localName: toLocalName(name),
+              start: absoluteStart,
+              end: absoluteStart + tagEnd,
+              raw
+            }
+    };
+  }
+
+  if (raw.startsWith("<!")) {
+    return {
+      consumed: tagEnd,
+      token: {
+        kind: "declaration",
+        start: absoluteStart,
+        end: absoluteStart + tagEnd,
+        raw
+      }
+    };
+  }
+
+  const tag = parseStartTag(raw, absoluteStart, absoluteStart + tagEnd);
+  return {
+    consumed: tagEnd,
+    token: tag === undefined ? undefined : { kind: "start", tag }
+  };
+}
+
+function findBufferedDelimitedEnd(
+  source: string,
+  delimiter: string,
+  absoluteStart: number,
+  description: string,
+  done: boolean
+): number | undefined {
+  const end = source.indexOf(delimiter, delimiter.length);
+  if (end === -1) {
+    if (done) {
+      throw new PackageError(`Unterminated XML ${description} at byte ${absoluteStart}`);
+    }
+
+    return undefined;
+  }
+
+  return end + delimiter.length;
+}
+
+function findBufferedTagEnd(
+  source: string,
+  absoluteStart: number,
+  done: boolean
+): number | undefined {
+  let quote: string | undefined;
+
+  for (let offset = 1; offset < source.length; offset += 1) {
+    const char = source[offset];
+
+    if (quote !== undefined) {
+      if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+
+    if (char === ">") {
+      return offset + 1;
+    }
+  }
+
+  if (done) {
+    throw new PackageError(`Unterminated XML tag at byte ${absoluteStart}`);
+  }
+
+  return undefined;
+}
+
+function tokenRawText(token: XmlToken): string {
+  switch (token.kind) {
+    case "text":
+      return token.text;
+    case "start":
+      return token.tag.raw;
+    default:
+      return token.raw;
+  }
 }
 
 export function parseStartTag(raw: string, start = 0, end = raw.length): XmlTag | undefined {

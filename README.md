@@ -25,7 +25,7 @@ This repository currently implements the first vertical slice:
 - Feature inspection for macros, shared strings, formula cells, external relationships, tables, drawings, charts, media, merges, hyperlinks, validation, conditional formatting, hidden sheets, comments, pivots, and defined names.
 - Preservation fixtures for macros, merge cells, hyperlinks, validations, conditional formatting, drawings, charts, media, hidden sheets, and styled table rows.
 - Namespace-prefix preservation for workbook recalculation edits, worksheet cell/row insertion, append rows, and table row replacement.
-- Streaming XML tokenizer powering the local XML helpers.
+- Streaming XML tokenizer and chunk transform primitives powering local XML helpers and future large-worksheet transforms.
 - Semantic validation for package relationship targets, duplicate relationship IDs, orphan relationship parts, orphan content type overrides, local worksheet/drawing relationship IDs, workbook sheet metadata, content types, worksheet dimensions, merge/validation/conditional-format/hyperlink refs, style indexes, shared string references/counts, worksheet/defined-name/chart formula references, formula bounds, formula table references, shared formula groups, table refs, table part counts, table metadata, table column structure, stale calc chains, and defined-name scope integrity.
 - Node adapter using `node:zlib`.
 - CLI inspection, read, patch, range patch, table replacement, and package diff commands.

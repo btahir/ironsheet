@@ -5,7 +5,9 @@ import {
   findFirstStartTag,
   findStartTags,
   PackageError,
-  tokenizeXml
+  tokenizeXml,
+  tokenizeXmlChunks,
+  transformXmlChunks
 } from "../packages/core/src/index.ts";
 
 test("XML scanner ignores tags inside comments and CDATA", () => {
@@ -57,8 +59,56 @@ test("XML tokenizer emits structural tokens without parsing ignored markup", () 
   assert.equal(tokens[4]?.kind === "cdata" ? tokens[4].text : undefined, "<item/>");
 });
 
+test("XML chunk tokenizer emits tokens split across chunk boundaries", async () => {
+  const tokens = [];
+  for await (const token of tokenizeXmlChunks([
+    "<?xml",
+    ' version="1.0"?><ro',
+    'ot><item a="1 > 0"/>te',
+    "xt<![CDATA[<item/>]]><!-- <item/> --></root>"
+  ])) {
+    tokens.push(token);
+  }
+
+  assert.deepEqual(
+    tokens.map((token) => token.kind),
+    ["processingInstruction", "start", "start", "text", "text", "cdata", "comment", "end"]
+  );
+  assert.equal(tokens[1]?.kind, "start");
+  assert.equal(tokens[1]?.kind === "start" ? tokens[1].tag.start : undefined, 21);
+  assert.equal(tokens[2]?.kind === "start" ? tokens[2].tag.attributes.a : undefined, "1 > 0");
+  assert.equal(
+    tokens
+      .filter((token) => token.kind === "text")
+      .map((token) => token.text)
+      .join(""),
+    "text"
+  );
+  assert.equal(tokens[5]?.kind === "cdata" ? tokens[5].text : undefined, "<item/>");
+});
+
+test("XML chunk transform passes through untouched tokens and replaces selected tokens", async () => {
+  const chunks: string[] = [];
+  for await (const chunk of transformXmlChunks(
+    ["<root><v>old</v><!-- keep --><v>later</v></root>"],
+    (token) => (token.kind === "text" && token.text === "old" ? "new" : undefined)
+  )) {
+    chunks.push(chunk);
+  }
+
+  assert.equal(chunks.join(""), "<root><v>new</v><!-- keep --><v>later</v></root>");
+});
+
 test("XML tokenizer reports unterminated quoted attributes", () => {
   assert.throws(() => [...tokenizeXml('<root name="nope></root>')], PackageError);
+});
+
+test("XML chunk tokenizer reports unterminated structures at final chunk", async () => {
+  await assert.rejects(async () => {
+    for await (const _token of tokenizeXmlChunks(["<root><!-- nope"])) {
+      // drain stream
+    }
+  }, PackageError);
 });
 
 test("XML element close matching handles nested same-name elements", () => {
