@@ -18,6 +18,7 @@ This repository currently implements the first vertical slice:
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Cell, batch-cell, and range read/write APIs.
 - Append-row API for template-backed exports.
+- Chunked worksheet row XML reader for future large-sheet transforms.
 - Chunked row XML streaming primitive for large worksheet writer work.
 - Basic table row replacement with table ref, autoFilter, style, totals-row preservation, formula recalculation, and worksheet dimension updates.
 - Formula writes, formula removal, totals-row formula movement, and dependent value edits with namespace-aware `calcPr` recalculation metadata and stale calc-chain removal.

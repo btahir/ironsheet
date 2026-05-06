@@ -52,7 +52,9 @@ export {
   readRange,
   type ReadCellResult,
   type ReadRangeResult,
-  streamRowsXml
+  streamRowsXml,
+  streamWorksheetRowsXml,
+  type WorksheetRowXml
 } from "./worksheet.ts";
 export {
   type XmlTag,

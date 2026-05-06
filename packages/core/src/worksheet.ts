@@ -13,7 +13,8 @@ import {
   findElementCloseStart,
   findElementEnd,
   findFirstStartTag,
-  findStartTags
+  findStartTags,
+  streamXmlElements
 } from "./xml.ts";
 
 export type CellPrimitive = string | number | boolean | Date | null;
@@ -65,6 +66,14 @@ type RowElement = {
 type RowTemplate = {
   attributes: Record<string, string>;
   stylesByColumn: Map<number, string>;
+};
+
+export type WorksheetRowXml = {
+  attributes: Record<string, string>;
+  raw: string;
+  rowNumber?: number;
+  start: number;
+  end: number;
 };
 
 export function readCell(
@@ -356,6 +365,21 @@ export async function* streamRowsXml(
   for await (const row of rows) {
     yield createRowsXml([row], { startColumn, startRow: rowNumber });
     rowNumber += 1;
+  }
+}
+
+export async function* streamWorksheetRowsXml(
+  chunks: Iterable<string> | AsyncIterable<string>
+): AsyncGenerator<WorksheetRowXml> {
+  for await (const row of streamXmlElements(chunks, "row")) {
+    const rowNumber = Number.parseInt(row.tag.attributes.r ?? "", 10);
+    yield {
+      attributes: row.tag.attributes,
+      raw: row.raw,
+      ...(Number.isInteger(rowNumber) ? { rowNumber } : {}),
+      start: row.start,
+      end: row.end
+    };
   }
 }
 
