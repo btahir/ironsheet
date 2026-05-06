@@ -27,6 +27,8 @@ test("inspects workbook sheets from OPC relationships", async () => {
     dataValidations: 0,
     definedNames: 0,
     drawings: 0,
+    externalRelationships: 0,
+    formulaCells: 0,
     hiddenSheets: 0,
     hyperlinks: 0,
     macros: 0,
@@ -79,6 +81,8 @@ test("inspect reports workbook feature signals", async () => {
     dataValidations: 1,
     definedNames: 2,
     drawings: 1,
+    externalRelationships: 1,
+    formulaCells: 0,
     hiddenSheets: 1,
     hyperlinks: 1,
     macros: 1,
@@ -88,6 +92,14 @@ test("inspect reports workbook feature signals", async () => {
     sharedStrings: 1,
     tables: 1
   });
+});
+
+test("inspect counts worksheet formula cells", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeTable: true, includeTableTotals: true })
+  );
+
+  assert.equal((await workbook.inspect()).features.formulaCells, 1);
 });
 
 test("reads workbook defined names", async () => {

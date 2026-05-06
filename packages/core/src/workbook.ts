@@ -59,6 +59,8 @@ export type WorkbookFeatureSummary = {
   dataValidations: number;
   definedNames: number;
   drawings: number;
+  externalRelationships: number;
+  formulaCells: number;
   hiddenSheets: number;
   hyperlinks: number;
   macros: number;
@@ -482,6 +484,7 @@ async function summarizeFeatures(
     parts.filter((part) => /^xl\/worksheets\/.+\.xml$/.test(part)).map((part) => pkg.readText(part))
   );
   const workbookXml = await pkg.readText(workbookPart);
+  const inspection = await pkg.inspect();
 
   return {
     calcChains: countParts(parts, /^xl\/calcChain\.xml$/),
@@ -492,6 +495,13 @@ async function summarizeFeatures(
     dataValidations: countXmlStartTags(worksheetXml, "dataValidation"),
     definedNames: countXmlStartTags([workbookXml], "definedName"),
     drawings: countParts(parts, /^xl\/drawings\/drawing\d+\.xml$/),
+    externalRelationships: Object.values(inspection.relationships).reduce(
+      (count, relationships) =>
+        count +
+        relationships.filter((relationship) => relationship.targetMode === "External").length,
+      0
+    ),
+    formulaCells: countXmlStartTags(worksheetXml, "f"),
     hiddenSheets: findStartTags(workbookXml, "sheet").filter((tag) =>
       ["hidden", "veryHidden"].includes(tag.attributes.state ?? "")
     ).length,
