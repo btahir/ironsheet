@@ -321,6 +321,24 @@ test("validation reports formulas with references outside the Excel grid", async
   );
 });
 
+test("validation reports formulas that reference missing tables", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<c r="A2" t="inlineStr"><is><t>Old</t></is></c>',
+      '<c r="A2"><f>SUM(MissingTable[Amount],RevenueTable[Amount])</f><v>1</v></c>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "FORMULA_TABLE_MISSING");
+  assert.equal(report.issues[0]?.target, "MissingTable");
+});
+
 test("validation reports defined names with invalid local sheet ids", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
   const workbookXml = await pkg.readText("xl/workbook.xml");

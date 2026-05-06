@@ -25,6 +25,11 @@ export type FormulaRangeReference = {
 
 export type FormulaReference = FormulaCellReference | FormulaRangeReference;
 
+export type FormulaStructuredReference = {
+  tableName: string;
+  raw: string;
+};
+
 export function parseFormulaSheetReferences(formula: string): FormulaSheetReference[] {
   const references = new Set<string>();
   const scrubbed = stripDoubleQuotedStrings(formula);
@@ -40,6 +45,46 @@ export function parseFormulaSheetReferences(formula: string): FormulaSheetRefere
   }
 
   return [...references].map((sheetName) => ({ sheetName }));
+}
+
+export function parseFormulaStructuredReferences(formula: string): FormulaStructuredReference[] {
+  const references = new Map<string, FormulaStructuredReference>();
+  const scrubbed = stripDoubleQuotedStrings(formula);
+  let offset = 0;
+
+  while (offset < scrubbed.length) {
+    const bracket = scrubbed.indexOf("[", offset);
+    if (bracket === -1) {
+      break;
+    }
+
+    const tableStart = findTableNameStart(scrubbed, bracket);
+    if (tableStart === undefined) {
+      offset = bracket + 1;
+      continue;
+    }
+
+    if (!isReferenceBoundaryBefore(scrubbed, tableStart)) {
+      offset = bracket + 1;
+      continue;
+    }
+
+    const tableName = scrubbed.slice(tableStart, bracket);
+    const end = findStructuredReferenceEnd(scrubbed, bracket);
+    if (end === undefined) {
+      offset = bracket + 1;
+      continue;
+    }
+
+    const raw = formula.slice(tableStart, end);
+    if (!references.has(raw)) {
+      references.set(raw, { tableName, raw });
+    }
+
+    offset = end;
+  }
+
+  return [...references.values()];
 }
 
 export function parseFormulaReferences(formula: string): FormulaReference[] {
@@ -113,6 +158,37 @@ export function formulaReferenceWithinExcelBounds(reference: FormulaReference): 
     (reference.kind === "cell" ||
       (reference.end.column <= excelMaxColumn && reference.end.row <= excelMaxRow))
   );
+}
+
+function findTableNameStart(source: string, bracket: number): number | undefined {
+  let offset = bracket - 1;
+  while (offset >= 0 && /[A-Za-z0-9_.]/.test(source[offset] ?? "")) {
+    offset -= 1;
+  }
+
+  const start = offset + 1;
+  if (start === bracket || !/^[A-Za-z_]/.test(source[start] ?? "")) {
+    return undefined;
+  }
+
+  return start;
+}
+
+function findStructuredReferenceEnd(source: string, bracket: number): number | undefined {
+  let depth = 0;
+  for (let offset = bracket; offset < source.length; offset += 1) {
+    const char = source[offset];
+    if (char === "[") {
+      depth += 1;
+    } else if (char === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        return offset + 1;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function stripDoubleQuotedStrings(formula: string): string {

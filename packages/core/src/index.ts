@@ -10,10 +10,12 @@ export {
   formulaReferenceWithinExcelBounds,
   parseFormulaReferences,
   parseFormulaSheetReferences,
+  parseFormulaStructuredReferences,
   type FormulaCellReference,
   type FormulaRangeReference,
   type FormulaReference,
-  type FormulaSheetReference
+  type FormulaSheetReference,
+  type FormulaStructuredReference
 } from "./formula.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
 export { parseSharedStrings } from "./shared-strings.ts";

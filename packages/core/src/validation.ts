@@ -3,7 +3,8 @@ import { parseDefinedNames } from "./defined-names.ts";
 import {
   formulaReferenceWithinExcelBounds,
   parseFormulaReferences,
-  parseFormulaSheetReferences
+  parseFormulaSheetReferences,
+  parseFormulaStructuredReferences
 } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { findElementCloseStart, findElementEnd, findFirstStartTag, findStartTags } from "./xml.ts";
@@ -576,6 +577,7 @@ async function validateWorksheetFormulas(
   }
 
   const sheetNames = workbookSheetNames(await pkg.readText("xl/workbook.xml"));
+  const tableNames = await workbookTableNames(pkg, parts);
   for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
     const xml = await pkg.readText(part);
     for (const formula of findStartTags(xml, "f")) {
@@ -604,6 +606,18 @@ async function validateWorksheetFormulas(
             message: `Formula references ${reference.ref}, which is outside the Excel worksheet grid`,
             part,
             target: reference.ref
+          });
+        }
+      }
+
+      for (const reference of parseFormulaStructuredReferences(formulaText)) {
+        if (!tableNames.has(reference.tableName)) {
+          issues.push({
+            severity: "warning",
+            code: "FORMULA_TABLE_MISSING",
+            message: `Formula references missing table ${reference.tableName}`,
+            part,
+            target: reference.tableName
           });
         }
       }
@@ -638,6 +652,20 @@ function workbookSheetNames(workbookXml: string): Set<string> {
       .map((tag) => tag.attributes.name)
       .filter((name): name is string => name !== undefined)
   );
+}
+
+async function workbookTableNames(pkg: OoxmlPackage, parts: string[]): Promise<Set<string>> {
+  const tableNames = new Set<string>();
+  for (const part of parts.filter((name) => /^xl\/tables\/.+\.xml$/.test(name))) {
+    const table = findFirstStartTag(await pkg.readText(part), "table");
+    for (const name of [table?.attributes.name, table?.attributes.displayName]) {
+      if (name !== undefined) {
+        tableNames.add(name);
+      }
+    }
+  }
+
+  return tableNames;
 }
 
 function sourcePartFromRelationshipPart(part: string): string | undefined {

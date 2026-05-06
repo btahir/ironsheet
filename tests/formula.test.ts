@@ -3,7 +3,8 @@ import test from "node:test";
 import {
   formulaReferenceWithinExcelBounds,
   parseFormulaReferences,
-  parseFormulaSheetReferences
+  parseFormulaSheetReferences,
+  parseFormulaStructuredReferences
 } from "../packages/core/src/index.ts";
 
 test("formula sheet reference parser handles quoted and unquoted sheet names", () => {
@@ -95,5 +96,24 @@ test("formula reference bounds checker uses Excel worksheet limits", () => {
   assert.equal(
     outOfBoundsRow === undefined ? true : formulaReferenceWithinExcelBounds(outOfBoundsRow),
     false
+  );
+});
+
+test("formula structured reference parser extracts table references", () => {
+  assert.deepEqual(
+    parseFormulaStructuredReferences(
+      'SUM(RevenueTable[Amount],RevenueTable[[#Totals],[Amount]],"Missing[Nope]")'
+    ),
+    [
+      { tableName: "RevenueTable", raw: "RevenueTable[Amount]" },
+      { tableName: "RevenueTable", raw: "RevenueTable[[#Totals],[Amount]]" }
+    ]
+  );
+});
+
+test("formula structured reference parser ignores bracketed external references", () => {
+  assert.deepEqual(
+    parseFormulaStructuredReferences("[Book1.xlsx]Sheet1!A1+Expense_Table[Amount]"),
+    [{ tableName: "Expense_Table", raw: "Expense_Table[Amount]" }]
   );
 });
