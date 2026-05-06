@@ -138,6 +138,59 @@ test("validation reports worksheet dimensions that exclude cells", async () => {
   assert.equal(report.issues[0]?.target, "B2");
 });
 
+test("validation reports invalid worksheet range attributes", async () => {
+  const pkg = await openPackage(
+    await createMinimalWorkbook({
+      includeConditionalFormatting: true,
+      includeDataValidation: true,
+      includeHyperlink: true,
+      includeMerge: true
+    })
+  );
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml
+      .replace('<mergeCells count="1">', '<mergeCells count="2">')
+      .replace('<mergeCell ref="A1:B1"/>', '<mergeCell ref="XFE1:XFE2"/>')
+      .replace('sqref="B2:B10"', 'sqref="BAD XFE1"')
+      .replace('sqref="A1:A10"', 'sqref="A1048577"')
+      .replace(
+        '<hyperlink ref="A1" r:id="rIdHyperlink1"/>',
+        '<hyperlink ref="1A" r:id="rIdHyperlink1"/>'
+      )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 5);
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "MERGE_CELL_COUNT_MISMATCH"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "MERGE_CELL_REF_OUT_OF_BOUNDS"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "DATA_VALIDATION_SQREF_INVALID"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "DATA_VALIDATION_SQREF_OUT_OF_BOUNDS"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "CONDITIONAL_FORMATTING_SQREF_OUT_OF_BOUNDS"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "HYPERLINK_REF_INVALID"),
+    true
+  );
+});
+
 test("validation reports worksheet cells that reference missing style indexes", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");

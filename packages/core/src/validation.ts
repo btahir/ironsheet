@@ -1,6 +1,8 @@
 import { parseCellAddress, parseCellRange } from "./address.ts";
 import { parseDefinedNames } from "./defined-names.ts";
 import {
+  excelMaxColumn,
+  excelMaxRow,
   formulaReferenceWithinExcelBounds,
   parseFormulaReferences,
   parseFormulaSheetReferences,
@@ -67,6 +69,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateWorksheetFormulas(pkg, issues, parts);
   await validateChartFormulas(pkg, issues, parts);
   await validateWorksheetDimensions(pkg, issues, parts);
+  await validateWorksheetRangeReferences(pkg, issues, parts);
   await validateStyleReferences(pkg, issues, parts);
   await validateSharedStringReferences(pkg, issues, parts);
   await validateTableParts(pkg, issues, parts);
@@ -914,6 +917,96 @@ function rangeContainsAddress(range: ReturnType<typeof parseCellRange>, address:
   );
 }
 
+function validateDeclaredCount(options: {
+  issues: ValidationIssue[];
+  actual: number;
+  code: string;
+  container: XmlTag | undefined;
+  label: string;
+  part: string;
+}): void {
+  const declaredCount = Number.parseInt(options.container?.attributes.count ?? "", 10);
+  if (Number.isInteger(declaredCount) && declaredCount !== options.actual) {
+    options.issues.push({
+      severity: "warning",
+      code: options.code,
+      message: `Worksheet declares ${declaredCount} ${options.label}(s) but contains ${options.actual}`,
+      part: options.part
+    });
+  }
+}
+
+function validateRangeListAttribute(options: {
+  issues: ValidationIssue[];
+  part: string;
+  ref: string | undefined;
+  missingCode: string;
+  invalidCode: string;
+  outOfBoundsCode: string;
+}): void {
+  if (options.ref === undefined || options.ref.trim().length === 0) {
+    options.issues.push({
+      severity: "error",
+      code: options.missingCode,
+      message: "Range list attribute is missing",
+      part: options.part
+    });
+    return;
+  }
+
+  for (const ref of options.ref.trim().split(/\s+/)) {
+    validateRangeAttribute({ ...options, ref });
+  }
+}
+
+function validateRangeAttribute(options: {
+  issues: ValidationIssue[];
+  part: string;
+  ref: string | undefined;
+  missingCode: string;
+  invalidCode: string;
+  outOfBoundsCode: string;
+}): void {
+  if (options.ref === undefined || options.ref.trim().length === 0) {
+    options.issues.push({
+      severity: "error",
+      code: options.missingCode,
+      message: "Range attribute is missing",
+      part: options.part
+    });
+    return;
+  }
+
+  const ref = options.ref.replaceAll("$", "");
+  let range: ReturnType<typeof parseCellRange>;
+  try {
+    range = parseCellRange(ref);
+  } catch (_error) {
+    options.issues.push({
+      severity: "error",
+      code: options.invalidCode,
+      message: `Invalid range reference ${options.ref}`,
+      part: options.part,
+      target: options.ref
+    });
+    return;
+  }
+
+  if (!rangeWithinExcelBounds(range)) {
+    options.issues.push({
+      severity: "error",
+      code: options.outOfBoundsCode,
+      message: `Range reference ${options.ref} is outside the Excel worksheet grid`,
+      part: options.part,
+      target: options.ref
+    });
+  }
+}
+
+function rangeWithinExcelBounds(range: ReturnType<typeof parseCellRange>): boolean {
+  return range.end.column <= excelMaxColumn && range.end.row <= excelMaxRow;
+}
+
 function sourcePartFromRelationshipPart(part: string): string | undefined {
   if (part === "_rels/.rels") {
     return "/";
@@ -972,6 +1065,80 @@ async function validateWorksheetDimensions(
           target: parsed.address
         });
       }
+    }
+  }
+}
+
+async function validateWorksheetRangeReferences(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+
+    const mergeCells = findStartTags(xml, "mergeCell");
+    const mergeCellsContainer = findFirstStartTag(xml, "mergeCells");
+    validateDeclaredCount({
+      issues,
+      actual: mergeCells.length,
+      code: "MERGE_CELL_COUNT_MISMATCH",
+      container: mergeCellsContainer,
+      label: "merge cell",
+      part
+    });
+    for (const mergeCell of mergeCells) {
+      validateRangeAttribute({
+        issues,
+        part,
+        ref: mergeCell.attributes.ref,
+        missingCode: "MERGE_CELL_REF_MISSING",
+        invalidCode: "MERGE_CELL_REF_INVALID",
+        outOfBoundsCode: "MERGE_CELL_REF_OUT_OF_BOUNDS"
+      });
+    }
+
+    const dataValidations = findStartTags(xml, "dataValidation");
+    const dataValidationsContainer = findFirstStartTag(xml, "dataValidations");
+    validateDeclaredCount({
+      issues,
+      actual: dataValidations.length,
+      code: "DATA_VALIDATION_COUNT_MISMATCH",
+      container: dataValidationsContainer,
+      label: "data validation",
+      part
+    });
+    for (const dataValidation of dataValidations) {
+      validateRangeListAttribute({
+        issues,
+        part,
+        ref: dataValidation.attributes.sqref,
+        missingCode: "DATA_VALIDATION_SQREF_MISSING",
+        invalidCode: "DATA_VALIDATION_SQREF_INVALID",
+        outOfBoundsCode: "DATA_VALIDATION_SQREF_OUT_OF_BOUNDS"
+      });
+    }
+
+    for (const conditionalFormatting of findStartTags(xml, "conditionalFormatting")) {
+      validateRangeListAttribute({
+        issues,
+        part,
+        ref: conditionalFormatting.attributes.sqref,
+        missingCode: "CONDITIONAL_FORMATTING_SQREF_MISSING",
+        invalidCode: "CONDITIONAL_FORMATTING_SQREF_INVALID",
+        outOfBoundsCode: "CONDITIONAL_FORMATTING_SQREF_OUT_OF_BOUNDS"
+      });
+    }
+
+    for (const hyperlink of findStartTags(xml, "hyperlink")) {
+      validateRangeAttribute({
+        issues,
+        part,
+        ref: hyperlink.attributes.ref,
+        missingCode: "HYPERLINK_REF_MISSING",
+        invalidCode: "HYPERLINK_REF_INVALID",
+        outOfBoundsCode: "HYPERLINK_REF_OUT_OF_BOUNDS"
+      });
     }
   }
 }
