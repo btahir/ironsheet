@@ -86,12 +86,14 @@ export {
   appendWorkbookTableColumn,
   findWorkbookTable,
   listWorkbookTables,
+  planWorkbookTableRowReplacement,
   removeRightmostWorkbookTableColumn,
   renameWorkbookTableColumn,
   renameWorkbookTable,
   replaceTableRows,
   type WorkbookTable,
-  type WorkbookTableColumn
+  type WorkbookTableColumn,
+  type WorkbookTableRowReplacementPlan
 } from "./table.ts";
 export {
   validateWorkbookPackage,
@@ -117,6 +119,7 @@ export {
   type WorkbookTemplateNamedRangePatch,
   type WorkbookTemplateManifest,
   type WorkbookTemplatePatch,
+  type WorkbookTemplatePreflightResult,
   type WorkbookTemplateRangePatch,
   type WorkbookTemplateRenderResult,
   type WorkbookTemplateTablePatch

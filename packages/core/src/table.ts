@@ -35,6 +35,19 @@ export type WorkbookTableColumn = {
   totalsRowFunction?: string;
 };
 
+export type WorkbookTableRowReplacementPlan = {
+  bodyRange: {
+    endColumn: number;
+    endRow: number;
+    startColumn: number;
+    startRow: number;
+  };
+  currentRef: string;
+  nextRef: string;
+  rowCount: number;
+  table: WorkbookTable;
+};
+
 export async function listWorkbookTables(pkg: OoxmlPackage): Promise<WorkbookTable[]> {
   const tables: WorkbookTable[] = [];
 
@@ -85,6 +98,28 @@ export async function replaceTableRows(
   tableName: string,
   rows: CellInput[][]
 ): Promise<WorkbookTable> {
+  const plan = await planWorkbookTableRowReplacement(pkg, tableName, rows);
+  const { bodyRange, nextRef, table } = plan;
+  const worksheetXml = await pkg.readText(table.worksheetPartName);
+  pkg.setText(
+    table.worksheetPartName,
+    replaceRowsInRange(worksheetXml, bodyRange, rows, { trailingRows: table.totalsRowCount })
+  );
+
+  const tableXml = await pkg.readText(table.partName);
+  pkg.setText(table.partName, updateTableRef(tableXml, nextRef));
+
+  return {
+    ...table,
+    ref: nextRef
+  };
+}
+
+export async function planWorkbookTableRowReplacement(
+  pkg: OoxmlPackage,
+  tableName: string,
+  rows: CellInput[][]
+): Promise<WorkbookTableRowReplacementPlan> {
   const table = await findWorkbookTable(pkg, tableName);
   const range = parseTableRange(table.ref);
   const bodyStartRow = range.start.row + 1;
@@ -94,27 +129,18 @@ export async function replaceTableRows(
 
   const worksheetXml = await pkg.readText(table.worksheetPartName);
   await assertTableRowsCanResize(pkg, table, worksheetXml, newRef);
-  pkg.setText(
-    table.worksheetPartName,
-    replaceRowsInRange(
-      worksheetXml,
-      {
-        startRow: bodyStartRow,
-        endRow: bodyEndRow,
-        startColumn: range.start.column,
-        endColumn: range.end.column
-      },
-      rows,
-      { trailingRows: table.totalsRowCount }
-    )
-  );
-
-  const tableXml = await pkg.readText(table.partName);
-  pkg.setText(table.partName, updateTableRef(tableXml, newRef));
 
   return {
-    ...table,
-    ref: newRef
+    bodyRange: {
+      startRow: bodyStartRow,
+      endRow: bodyEndRow,
+      startColumn: range.start.column,
+      endColumn: range.end.column
+    },
+    currentRef: table.ref,
+    nextRef: newRef,
+    rowCount: rows.length,
+    table
   };
 }
 

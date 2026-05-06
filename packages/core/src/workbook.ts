@@ -71,6 +71,7 @@ import {
 import {
   appendWorkbookTableColumn,
   listWorkbookTables,
+  planWorkbookTableRowReplacement,
   removeRightmostWorkbookTableColumn,
   renameWorkbookTableColumn,
   renameWorkbookTable,
@@ -305,6 +306,56 @@ export type WorkbookTemplateRenderResult = {
     tables: number;
   };
   diagnostics: Diagnostic[];
+};
+
+export type WorkbookTemplatePreflightResult = {
+  counts: {
+    cells: number;
+    images: number;
+    names: number;
+    ranges: number;
+    tables: number;
+  };
+  diagnostics: Diagnostic[];
+  targets: {
+    cells: Array<{
+      address: string;
+      sheetName: string;
+      sheetPartName: string;
+    }>;
+    images: Array<{
+      drawingPartName: string;
+      imagePartName: string;
+      sheetName: string;
+      sheetPartName: string;
+      target: string;
+    }>;
+    names: Array<{
+      allowOutsideRange: boolean;
+      name: string;
+      ref: string;
+      sheetName: string;
+      sheetPartName: string;
+      valuesHeight: number;
+      valuesWidth: number;
+    }>;
+    ranges: Array<{
+      sheetName: string;
+      sheetPartName: string;
+      startAddress: string;
+      valuesHeight: number;
+      valuesWidth: number;
+    }>;
+    tables: Array<{
+      currentRef: string;
+      displayName: string;
+      nextRef: string;
+      partName: string;
+      rowCount: number;
+      tableName: string;
+      worksheetPartName: string;
+    }>;
+  };
 };
 
 export class Workbook {
@@ -1449,15 +1500,36 @@ export class Workbook {
     };
   }
 
-  private async preflightTemplatePatch(patch: WorkbookTemplatePatch): Promise<void> {
+  async preflightTemplatePatch(
+    patch: WorkbookTemplatePatch
+  ): Promise<WorkbookTemplatePreflightResult> {
+    const cells: WorkbookTemplatePreflightResult["targets"]["cells"] = [];
+    const images: WorkbookTemplatePreflightResult["targets"]["images"] = [];
+    const names: WorkbookTemplatePreflightResult["targets"]["names"] = [];
+    const ranges: WorkbookTemplatePreflightResult["targets"]["ranges"] = [];
+    const tables: WorkbookTemplatePreflightResult["targets"]["tables"] = [];
+
     for (const cell of patch.cells ?? []) {
-      this.sheet(cell.sheetName);
-      parseCellAddress(cell.address);
+      const sheet = this.sheet(cell.sheetName);
+      const address = parseCellAddress(cell.address).address;
+      cells.push({
+        address,
+        sheetName: sheet.name,
+        sheetPartName: sheet.partName
+      });
     }
 
     for (const range of patch.ranges ?? []) {
-      this.sheet(range.sheetName);
-      parseCellAddress(range.startAddress);
+      const sheet = this.sheet(range.sheetName);
+      const startAddress = parseCellAddress(range.startAddress).address;
+      const size = valuesSize(range.values);
+      ranges.push({
+        sheetName: sheet.name,
+        sheetPartName: sheet.partName,
+        startAddress,
+        valuesHeight: size.height,
+        valuesWidth: size.width
+      });
     }
 
     for (const name of patch.names ?? []) {
@@ -1467,32 +1539,73 @@ export class Workbook {
       if (name.allowOutsideRange !== true) {
         assertValuesFitNamedRange(range, name.values);
       }
+
+      const size = valuesSize(name.values);
+      names.push({
+        allowOutsideRange: name.allowOutsideRange === true,
+        name: range.name,
+        ref: range.ref,
+        sheetName: range.sheetName,
+        sheetPartName: range.sheetPartName,
+        valuesHeight: size.height,
+        valuesWidth: size.width
+      });
     }
 
-    if ((patch.tables ?? []).length > 0) {
-      const tables = new Set(
-        (await this.tables()).flatMap((table) => [table.name, table.displayName])
-      );
-      for (const table of patch.tables ?? []) {
-        if (!tables.has(table.tableName)) {
-          throw new WorkbookError(`Unknown table ${table.tableName}`);
-        }
-      }
+    for (const table of patch.tables ?? []) {
+      const plan = await planWorkbookTableRowReplacement(this.pkg, table.tableName, table.rows);
+      tables.push({
+        currentRef: plan.currentRef,
+        displayName: plan.table.displayName,
+        nextRef: plan.nextRef,
+        partName: plan.table.partName,
+        rowCount: plan.rowCount,
+        tableName: plan.table.name,
+        worksheetPartName: plan.table.worksheetPartName
+      });
     }
 
     if ((patch.images ?? []).length > 0) {
-      const images = new Set(
+      const workbookImages = new Map(
         (await this.images())
-          .map((image) => image.imagePartName)
-          .filter((partName): partName is string => partName !== undefined)
+          .filter((image) => image.imagePartName !== undefined)
+          .map((image) => [image.imagePartName as string, image])
       );
       for (const image of patch.images ?? []) {
         const imagePartName = normalizePartName(image.imagePartName);
-        if (!images.has(imagePartName)) {
+        const workbookImage = workbookImages.get(imagePartName);
+        if (workbookImage === undefined) {
           throw new WorkbookError(`Unknown workbook image part ${imagePartName}`);
         }
+
+        assertImageBytesMatchPartName(imagePartName, image.data);
+        images.push({
+          drawingPartName: workbookImage.drawingPartName,
+          imagePartName,
+          sheetName: workbookImage.sheetName,
+          sheetPartName: workbookImage.sheetPartName,
+          target: workbookImage.target
+        });
       }
     }
+
+    return {
+      counts: {
+        cells: cells.length,
+        images: images.length,
+        names: names.length,
+        ranges: ranges.length,
+        tables: tables.length
+      },
+      diagnostics: this.diagnostics(),
+      targets: {
+        cells,
+        images,
+        names,
+        ranges,
+        tables
+      }
+    };
   }
 
   async formulas(): Promise<WorkbookFormula[]> {
@@ -2009,6 +2122,13 @@ function pivotCacheHint(source: WorkbookPivotCacheSource): string {
   }
 
   return ` (${hints.join("; ")})`;
+}
+
+function valuesSize(values: CellInput[][]): { height: number; width: number } {
+  return {
+    height: values.length,
+    width: values.reduce((max, row) => Math.max(max, row.length), 0)
+  };
 }
 
 function assertValuesFitNamedRange(range: WorkbookNamedRange, values: CellInput[][]): void {

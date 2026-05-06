@@ -74,6 +74,7 @@ npm run cli -- template-manifest template.xlsx
 Render a template with validation, diagnostics, and a package diff before writing:
 
 ```bash
+npm run cli -- preflight-template template.xlsx @patch.json
 npm run cli -- render-template-safe template.xlsx output.xlsx @patch.json
 ```
 
@@ -145,7 +146,7 @@ Core workbook capabilities:
 - Existing image replacement plus new image insertion with one-cell and two-cell anchors.
 - Safe-by-default CLI mutation reports with validation, diagnostics, and content-vs-repack package diffs.
 - Style inspection and deduped cell format creation.
-- Template manifest and template render APIs.
+- Template manifest, public template preflight, and template render APIs.
 - Semantic validation for relationships, dimensions, hyperlinks, merged cells, styles, shared strings, formulas, tables, pivots, charts, calc chains, defined names, and content types.
 - Compatibility corpus with generated XLSX/XLSM/dashboard/pivot/large-sheet fixtures plus optional Numbers, LibreOffice, Open XML SDK, and Excel checks.
 

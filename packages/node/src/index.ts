@@ -174,6 +174,14 @@ export async function renderWorkbookTemplate(
   return result;
 }
 
+export async function preflightWorkbookTemplate(
+  inputPath: string,
+  patch: WorkbookTemplatePatch
+): Promise<Awaited<ReturnType<Workbook["preflightTemplatePatch"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.preflightTemplatePatch(patch);
+}
+
 export type WorkbookSafeTemplateRenderReport = WorkbookSafeWriteReport & {
   render: Awaited<ReturnType<Workbook["renderTemplate"]>>;
 };

@@ -154,6 +154,27 @@ test("CLI render-template-safe reports validation and writes output", async () =
   }
 });
 
+test("CLI preflight-template reports resolved patch targets", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    const patchPath = resolve(directory, "patch.json");
+    await writeFile(inputPath, await createMinimalWorkbook({ includeDefinedName: true }));
+    await writeFile(patchPath, '{"names":[{"name":"RevenueRange","values":[["North",10]]}]}');
+
+    const result = runCli(["preflight-template", inputPath, `@${patchPath}`]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"counts"/);
+    assert.match(result.stdout, /"names": 1/);
+    assert.match(result.stdout, /"RevenueRange"/);
+    assert.match(result.stdout, /"A1:B2"/);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test("CLI render-template accepts image files in JSON patches", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
 

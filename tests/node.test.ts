@@ -8,6 +8,7 @@ import {
   insertWorkbookImageFile,
   mutateWorkbookFile,
   openWorkbook,
+  preflightWorkbookTemplate,
   renderWorkbookTemplateSafely
 } from "../packages/node/src/index.ts";
 import { createMinimalWorkbook } from "./helpers/minimal-xlsx.ts";
@@ -64,6 +65,24 @@ test("safe mutation refuses to write packages with validation errors", async () 
     assert.equal(report.wrote, false);
     assert.equal(report.validation.summary.errors > 0, true);
     await assert.rejects(() => access(outputPath, constants.F_OK));
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test("node adapter preflights template patches without writing output", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-node-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    await writeFile(inputPath, await createMinimalWorkbook({ includeDefinedName: true }));
+
+    const result = await preflightWorkbookTemplate(inputPath, {
+      names: [{ name: "RevenueRange", values: [["North", 10]] }]
+    });
+
+    assert.deepEqual(result.counts, { cells: 0, images: 0, names: 1, ranges: 0, tables: 0 });
+    assert.equal(result.targets.names[0]?.ref, "A1:B2");
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

@@ -17,6 +17,7 @@ import {
   listWorkbookNamedRanges,
   listWorkbookTables,
   mutateWorkbookFile,
+  preflightWorkbookTemplate,
   readWorkbook,
   readWorkbookCell,
   readWorkbookNamedRange,
@@ -61,6 +62,7 @@ type Command =
   | "merge-cells"
   | "merged-cells"
   | "named-ranges"
+  | "preflight-template"
   | "patch-range"
   | "patch-named-range"
   | "read-cell"
@@ -119,6 +121,7 @@ function usage(): never {
   npm run cli -- delete-auto-filter <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- replace-image <input.xlsx> <output.xlsx> <imagePartName> <imageFile>
   npm run cli -- insert-image <input.xlsx> <output.xlsx> <sheet> <imageFile> [jsonOptions]
+  npm run cli -- preflight-template <input.xlsx> <jsonPatch|@patch.json>
   npm run cli -- render-template <input.xlsx> <output.xlsx> <jsonPatch|@patch.json>
   npm run cli -- render-template-safe <input.xlsx> <output.xlsx> <jsonPatch|@patch.json>
   npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
@@ -617,6 +620,11 @@ async function renderTemplate(
     outputPath,
     await parseTemplatePatch(rawPatch)
   );
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function preflightTemplate(inputPath: string, rawPatch: string): Promise<void> {
+  const result = await preflightWorkbookTemplate(inputPath, await parseTemplatePatch(rawPatch));
   console.log(JSON.stringify(result, null, 2));
 }
 
@@ -1516,6 +1524,12 @@ try {
       usage();
     }
     await insertImage(inputPath, outputPath, sheetName, imagePath, rawOptions);
+  } else if (command === "preflight-template") {
+    const [inputPath, rawPatch] = args;
+    if (inputPath === undefined || rawPatch === undefined) {
+      usage();
+    }
+    await preflightTemplate(inputPath, rawPatch);
   } else if (command === "render-template") {
     const [inputPath, outputPath, rawPatch] = args;
     if (inputPath === undefined || outputPath === undefined || rawPatch === undefined) {

@@ -358,6 +358,46 @@ test("renders template patches across cells ranges tables and images", async () 
   assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
+test("preflights template patches with resolved targets before mutation", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({
+      includeDefinedName: true,
+      includeDrawing: true,
+      includeTable: true
+    })
+  );
+  const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7]);
+
+  const result = await workbook.preflightTemplatePatch({
+    cells: [{ sheetName: "Sheet1", address: "d1", value: "Ready" }],
+    ranges: [{ sheetName: "Sheet1", startAddress: "E1", values: [[1, 2, 3]] }],
+    names: [{ name: "RevenueRange", values: [["North", 10]] }],
+    tables: [
+      {
+        tableName: "RevenueTable",
+        rows: [
+          ["North", 10],
+          ["South", 20]
+        ]
+      }
+    ],
+    images: [{ imagePartName: "/xl/media/image1.png", data: replacement }]
+  });
+
+  assert.deepEqual(result.counts, { cells: 1, images: 1, names: 1, ranges: 1, tables: 1 });
+  assert.deepEqual(result.targets.cells[0], {
+    address: "D1",
+    sheetName: "Sheet1",
+    sheetPartName: "xl/worksheets/sheet1.xml"
+  });
+  assert.equal(result.targets.names[0]?.ref, "A1:B2");
+  assert.equal(result.targets.ranges[0]?.valuesWidth, 3);
+  assert.equal(result.targets.tables[0]?.currentRef, "A1:B2");
+  assert.equal(result.targets.tables[0]?.nextRef, "A1:B3");
+  assert.equal(result.targets.images[0]?.imagePartName, "xl/media/image1.png");
+  assert.equal(await workbook.readCell("Sheet1", "D1"), undefined);
+});
+
 test("template rendering preflights all targets before mutation", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeDrawing: true, includeTable: true })
@@ -381,6 +421,21 @@ test("template rendering preflights all targets before mutation", async () => {
   assert.deepEqual(Array.from(await workbook.pkg.readPart("xl/media/image1.png")), [
     ...beforeImage
   ]);
+});
+
+test("template rendering rejects invalid image bytes before mutation", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDrawing: true }));
+
+  await assert.rejects(
+    () =>
+      workbook.renderTemplate({
+        cells: [{ sheetName: "Sheet1", address: "D1", value: "Should not write" }],
+        images: [{ imagePartName: "xl/media/image1.png", data: new Uint8Array([1, 2, 3]) }]
+      }),
+    /expects PNG bytes/
+  );
+
+  assert.equal(await workbook.readCell("Sheet1", "D1"), undefined);
 });
 
 test("lists workbook merged cells", async () => {
