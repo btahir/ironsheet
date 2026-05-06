@@ -1,7 +1,7 @@
 import { parseCellAddress, parseCellRange } from "./address.ts";
 import { parseDefinedNames } from "./defined-names.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
-import { findElementEnd, findFirstStartTag, findStartTags } from "./xml.ts";
+import { findElementCloseStart, findElementEnd, findFirstStartTag, findStartTags } from "./xml.ts";
 
 const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
@@ -46,6 +46,8 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateDrawingRelationshipIds(pkg, issues, parts);
   await validateDefinedNames(pkg, issues);
   await validateWorksheetDimensions(pkg, issues, parts);
+  await validateStyleReferences(pkg, issues, parts);
+  await validateSharedStringReferences(pkg, issues, parts);
   await validateTableParts(pkg, issues, parts);
   await validateCalcChain(pkg, issues, parts);
 
@@ -646,6 +648,171 @@ async function validateWorksheetDimensions(
           target: parsed.address
         });
       }
+    }
+  }
+}
+
+async function validateStyleReferences(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  const styleIds = new Set<number>();
+  for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    for (const cell of findStartTags(xml, "c")) {
+      const styleId = cell.attributes.s;
+      if (styleId === undefined) {
+        continue;
+      }
+
+      const parsed = Number.parseInt(styleId, 10);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        issues.push({
+          severity: "error",
+          code: "CELL_STYLE_INDEX_INVALID",
+          message: `Cell ${cell.attributes.r ?? ""} has invalid style index ${styleId}`,
+          part,
+          ...(cell.attributes.r === undefined ? {} : { target: cell.attributes.r })
+        });
+        continue;
+      }
+
+      styleIds.add(parsed);
+    }
+  }
+
+  if (styleIds.size === 0) {
+    return;
+  }
+
+  if (!pkg.hasPart("xl/styles.xml")) {
+    issues.push({
+      severity: "error",
+      code: "STYLES_PART_MISSING",
+      message: "Worksheet cells reference styles, but xl/styles.xml is missing"
+    });
+    return;
+  }
+
+  const stylesXml = await pkg.readText("xl/styles.xml");
+  const cellXfs = findFirstStartTag(stylesXml, "cellXfs");
+  if (cellXfs === undefined) {
+    issues.push({
+      severity: "error",
+      code: "STYLE_CELLXFS_MISSING",
+      message: "Styles part is missing cellXfs",
+      part: "xl/styles.xml"
+    });
+    return;
+  }
+
+  const actualCellXfs = findStartTags(
+    stylesXml.slice(cellXfs.end, findElementCloseStart(stylesXml, cellXfs)),
+    "xf"
+  ).length;
+  const declaredCount = Number.parseInt(cellXfs.attributes.count ?? "", 10);
+  if (Number.isInteger(declaredCount) && declaredCount !== actualCellXfs) {
+    issues.push({
+      severity: "warning",
+      code: "STYLE_CELLXFS_COUNT_MISMATCH",
+      message: `Styles declare ${declaredCount} cellXfs but contain ${actualCellXfs}`,
+      part: "xl/styles.xml"
+    });
+  }
+
+  for (const styleId of styleIds) {
+    if (styleId >= actualCellXfs) {
+      issues.push({
+        severity: "error",
+        code: "CELL_STYLE_INDEX_MISSING",
+        message: `Worksheet cell references missing style index ${styleId}`,
+        part: "xl/styles.xml",
+        target: String(styleId)
+      });
+    }
+  }
+}
+
+async function validateSharedStringReferences(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  const references: Array<{ part: string; address: string | undefined; index: number }> = [];
+  for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    for (const cell of findStartTags(xml, "c")) {
+      if (cell.attributes.t !== "s") {
+        continue;
+      }
+
+      const cellXml = xml.slice(cell.start, findElementEnd(xml, cell));
+      const value = findFirstStartTag(cellXml, "v");
+      const index =
+        value === undefined
+          ? Number.NaN
+          : Number.parseInt(cellXml.slice(value.end, findElementCloseStart(cellXml, value)), 10);
+      references.push({ part, address: cell.attributes.r, index });
+    }
+  }
+
+  if (references.length === 0) {
+    return;
+  }
+
+  if (!pkg.hasPart("xl/sharedStrings.xml")) {
+    issues.push({
+      severity: "error",
+      code: "SHARED_STRINGS_PART_MISSING",
+      message: "Worksheet cells reference shared strings, but xl/sharedStrings.xml is missing"
+    });
+    return;
+  }
+
+  const sharedStringsXml = await pkg.readText("xl/sharedStrings.xml");
+  const sst = findFirstStartTag(sharedStringsXml, "sst");
+  const sharedStringCount = findStartTags(sharedStringsXml, "si").length;
+  const declaredUniqueCount = Number.parseInt(sst?.attributes.uniqueCount ?? "", 10);
+  if (Number.isInteger(declaredUniqueCount) && declaredUniqueCount !== sharedStringCount) {
+    issues.push({
+      severity: "warning",
+      code: "SHARED_STRINGS_UNIQUE_COUNT_MISMATCH",
+      message: `Shared strings declare ${declaredUniqueCount} unique string(s) but contain ${sharedStringCount}`,
+      part: "xl/sharedStrings.xml"
+    });
+  }
+
+  const declaredCount = Number.parseInt(sst?.attributes.count ?? "", 10);
+  if (Number.isInteger(declaredCount) && declaredCount < references.length) {
+    issues.push({
+      severity: "warning",
+      code: "SHARED_STRINGS_COUNT_UNDER_REPORTS_USAGE",
+      message: `Shared strings declare ${declaredCount} use(s) but worksheets reference ${references.length}`,
+      part: "xl/sharedStrings.xml"
+    });
+  }
+
+  for (const reference of references) {
+    if (!Number.isInteger(reference.index) || reference.index < 0) {
+      issues.push({
+        severity: "error",
+        code: "SHARED_STRING_INDEX_INVALID",
+        message: `Cell ${reference.address ?? ""} has an invalid shared string index`,
+        part: reference.part,
+        ...(reference.address === undefined ? {} : { target: reference.address })
+      });
+      continue;
+    }
+
+    if (reference.index >= sharedStringCount) {
+      issues.push({
+        severity: "error",
+        code: "SHARED_STRING_INDEX_MISSING",
+        message: `Cell ${reference.address ?? ""} references missing shared string index ${reference.index}`,
+        part: reference.part,
+        ...(reference.address === undefined ? {} : { target: reference.address })
+      });
     }
   }
 }

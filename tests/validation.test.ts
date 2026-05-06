@@ -138,6 +138,62 @@ test("validation reports worksheet dimensions that exclude cells", async () => {
   assert.equal(report.issues[0]?.target, "B2");
 });
 
+test("validation reports worksheet cells that reference missing style indexes", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText("xl/worksheets/sheet1.xml", worksheetXml.replace('s="1"', 's="99"'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "CELL_STYLE_INDEX_MISSING");
+  assert.equal(report.issues[0]?.target, "99");
+});
+
+test("validation reports style count mismatches", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const stylesXml = await pkg.readText("xl/styles.xml");
+  pkg.setText("xl/styles.xml", stylesXml.replace('<cellXfs count="5">', '<cellXfs count="4">'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "STYLE_CELLXFS_COUNT_MISMATCH");
+});
+
+test("validation reports missing shared string indexes", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ useSharedStrings: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText("xl/worksheets/sheet1.xml", worksheetXml.replace("<v>0</v>", "<v>9</v>"));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "SHARED_STRING_INDEX_MISSING");
+  assert.equal(report.issues[0]?.target, "A1");
+});
+
+test("validation reports shared string count mismatches", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ useSharedStrings: true }));
+  const sharedStringsXml = await pkg.readText("xl/sharedStrings.xml");
+  pkg.setText(
+    "xl/sharedStrings.xml",
+    sharedStringsXml.replace('count="1" uniqueCount="1"', 'count="0" uniqueCount="2"')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 2);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "SHARED_STRINGS_UNIQUE_COUNT_MISMATCH"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "SHARED_STRINGS_COUNT_UNDER_REPORTS_USAGE"),
+    true
+  );
+});
+
 test("validation reports worksheet drawing relationship id gaps", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeDrawing: true }));
   const xml = await pkg.readText("xl/worksheets/sheet1.xml");
