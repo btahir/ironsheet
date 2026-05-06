@@ -24,6 +24,7 @@ This repository currently implements the first vertical slice:
 - Append-row API for template-backed exports.
 - Chunked worksheet row XML reader for future large-sheet transforms.
 - Chunked row XML streaming primitive for large worksheet writer work.
+- Streamed worksheet row replacement for large-sheet transforms that should not materialize full worksheet XML.
 - Basic table row replacement with table ref, autoFilter, style, totals-row preservation, formula recalculation, and worksheet dimension updates.
 - Formula writes, formula removal, totals-row formula movement, and dependent value edits with namespace-aware `calcPr` recalculation metadata and stale calc-chain removal.
 - Formula inventory plus sheet, cell/range, bounds, shared-formula metadata, and structured table-reference parsing for validation and future retargeting work.

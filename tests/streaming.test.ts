@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { streamRowsXml, streamWorksheetRowsXml } from "../packages/core/src/index.ts";
+import {
+  streamReplaceWorksheetRowsXml,
+  streamRowsXml,
+  streamWorksheetRowsXml
+} from "../packages/core/src/index.ts";
 
 test("streams row XML one row at a time from async data", async () => {
   async function* rows(): AsyncGenerator<Array<string | number | boolean>> {
@@ -58,5 +62,33 @@ test("streams existing worksheet rows from chunked worksheet XML", async () => {
         rowNumber: 2
       }
     ]
+  );
+});
+
+test("streams worksheet XML with selected row replacements", async () => {
+  const chunks: string[] = [];
+  for await (const chunk of streamReplaceWorksheetRowsXml(
+    [
+      '<worksheet><sheetData><row r="1"><c r="A1"><v>1',
+      '</v></c></row><row r="2"><c r="A2"><v>2</v></c></row>',
+      '<row r="3"/></sheetData></worksheet>'
+    ],
+    [
+      {
+        rowNumber: 2,
+        xml: '<row r="2"><c r="A2"><v>42</v></c></row>'
+      },
+      {
+        rowNumber: 3,
+        xml: '<row r="3"><c r="A3"><v>99</v></c></row>'
+      }
+    ]
+  )) {
+    chunks.push(chunk);
+  }
+
+  assert.equal(
+    chunks.join(""),
+    '<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2"><v>42</v></c></row><row r="3"><c r="A3"><v>99</v></c></row></sheetData></worksheet>'
   );
 });

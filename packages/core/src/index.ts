@@ -80,7 +80,9 @@ export {
   type ReadCellResult,
   type ReadRangeResult,
   streamRowsXml,
+  streamReplaceWorksheetRowsXml,
   streamWorksheetRowsXml,
+  type WorksheetRowReplacement,
   type WorksheetRowXml
 } from "./worksheet.ts";
 export {
@@ -95,7 +97,8 @@ export {
   streamXmlElements,
   tokenizeXmlChunks,
   transformXmlChunks,
-  tokenizeXml
+  tokenizeXml,
+  xmlTokenRawText
 } from "./xml.ts";
 export {
   type CompressionAdapter,

@@ -190,7 +190,7 @@ export async function* transformXmlChunks(
   transform: XmlChunkTransform
 ): AsyncGenerator<string> {
   for await (const token of tokenizeXmlChunks(chunks)) {
-    yield (await transform(token)) ?? tokenRawText(token);
+    yield (await transform(token)) ?? xmlTokenRawText(token);
   }
 }
 
@@ -230,7 +230,7 @@ export async function* streamXmlElements(
       continue;
     }
 
-    collecting.raw += tokenRawText(token);
+    collecting.raw += xmlTokenRawText(token);
 
     if (token.kind === "start" && token.tag.localName === localName && !token.tag.selfClosing) {
       collecting.depth += 1;
@@ -474,7 +474,7 @@ function findBufferedTagEnd(
   return undefined;
 }
 
-function tokenRawText(token: XmlToken): string {
+export function xmlTokenRawText(token: XmlToken): string {
   switch (token.kind) {
     case "text":
       return token.text;

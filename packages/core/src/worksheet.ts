@@ -14,7 +14,9 @@ import {
   findElementEnd,
   findFirstStartTag,
   findStartTags,
-  streamXmlElements
+  streamXmlElements,
+  tokenizeXmlChunks,
+  xmlTokenRawText
 } from "./xml.ts";
 
 export type CellPrimitive = string | number | boolean | Date | null;
@@ -74,6 +76,11 @@ export type WorksheetRowXml = {
   rowNumber?: number;
   start: number;
   end: number;
+};
+
+export type WorksheetRowReplacement = {
+  rowNumber: number;
+  xml: string;
 };
 
 export function readCell(
@@ -446,6 +453,44 @@ export async function* streamWorksheetRowsXml(
       start: row.start,
       end: row.end
     };
+  }
+}
+
+export async function* streamReplaceWorksheetRowsXml(
+  chunks: Iterable<string> | AsyncIterable<string>,
+  replacements: Iterable<WorksheetRowReplacement>
+): AsyncGenerator<string> {
+  const replacementsByRow = new Map(
+    [...replacements].map((replacement) => [replacement.rowNumber, replacement.xml])
+  );
+  let skippingRowDepth = 0;
+
+  for await (const token of tokenizeXmlChunks(chunks)) {
+    if (skippingRowDepth > 0) {
+      if (token.kind === "start" && token.tag.localName === "row" && !token.tag.selfClosing) {
+        skippingRowDepth += 1;
+      } else if (token.kind === "end" && token.localName === "row") {
+        skippingRowDepth -= 1;
+      }
+      continue;
+    }
+
+    if (token.kind !== "start" || token.tag.localName !== "row") {
+      yield xmlTokenRawText(token);
+      continue;
+    }
+
+    const rowNumber = Number.parseInt(token.tag.attributes.r ?? "", 10);
+    const replacement = Number.isInteger(rowNumber) ? replacementsByRow.get(rowNumber) : undefined;
+    if (replacement === undefined) {
+      yield xmlTokenRawText(token);
+      continue;
+    }
+
+    yield replacement;
+    if (!token.tag.selfClosing) {
+      skippingRowDepth = 1;
+    }
   }
 }
 
