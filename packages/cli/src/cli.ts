@@ -99,7 +99,12 @@ async function styles(path: string): Promise<void> {
 }
 
 async function validate(path: string): Promise<void> {
-  console.log(JSON.stringify(await validateWorkbookFile(path), null, 2));
+  const report = await validateWorkbookFile(path);
+  console.log(JSON.stringify(report, null, 2));
+
+  if (report.summary.errors > 0) {
+    process.exitCode = 1;
+  }
 }
 
 async function readCellCommand(path: string, sheetName: string, address: string): Promise<void> {
