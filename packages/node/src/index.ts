@@ -179,6 +179,14 @@ export async function listWorkbookAutoFilters(
   return workbook.autoFilters(sheetName);
 }
 
+export async function listWorkbookImages(
+  inputPath: string,
+  sheetName?: string
+): Promise<Awaited<ReturnType<Workbook["images"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.images(sheetName);
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {
@@ -306,6 +314,26 @@ export async function deleteWorkbookAutoFilter(
   const deleted = await workbook.deleteAutoFilter(sheetName);
   await writeWorkbook(workbook, outputPath);
   return deleted;
+}
+
+export async function replaceWorkbookImage(
+  inputPath: string,
+  outputPath: string,
+  imagePartName: string,
+  data: Uint8Array
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.replaceImage(imagePartName, data);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function replaceWorkbookImageFile(
+  inputPath: string,
+  outputPath: string,
+  imagePartName: string,
+  imagePath: string
+): Promise<void> {
+  await replaceWorkbookImage(inputPath, outputPath, imagePartName, await nodeReadFile(imagePath));
 }
 
 export async function setWorkbookHyperlink(

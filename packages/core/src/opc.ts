@@ -21,7 +21,8 @@ export type Relationship = {
 export type PackagePart = {
   name: string;
   entry?: ZipEntry;
-  dirtyText?: string;
+  dirtyData?: Uint8Array | undefined;
+  dirtyText?: string | undefined;
 };
 
 export type PackageInspectResult = {
@@ -58,6 +59,10 @@ export class OoxmlPackage {
 
   async readPart(partName: string): Promise<Uint8Array> {
     const part = this.requirePart(partName);
+    if (part.dirtyData !== undefined) {
+      return part.dirtyData;
+    }
+
     if (part.dirtyText !== undefined) {
       return textEncoder.encode(part.dirtyText);
     }
@@ -81,7 +86,20 @@ export class OoxmlPackage {
       throw new PackageError(`Cannot set missing part ${normalized}`);
     }
 
+    part.dirtyData = undefined;
     part.dirtyText = text;
+  }
+
+  setPart(partName: string, data: Uint8Array): void {
+    const normalized = normalizePartName(partName);
+    const part = this.parts.get(normalized);
+
+    if (part === undefined) {
+      throw new PackageError(`Cannot set missing part ${normalized}`);
+    }
+
+    part.dirtyText = undefined;
+    part.dirtyData = data;
   }
 
   addTextPart(partName: string, text: string): void {
@@ -93,6 +111,18 @@ export class OoxmlPackage {
     this.parts.set(normalized, {
       name: normalized,
       dirtyText: text
+    });
+  }
+
+  addPart(partName: string, data: Uint8Array): void {
+    const normalized = normalizePartName(partName);
+    if (this.parts.has(normalized)) {
+      throw new PackageError(`Cannot add existing part ${normalized}`);
+    }
+
+    this.parts.set(normalized, {
+      name: normalized,
+      dirtyData: data
     });
   }
 
@@ -271,6 +301,21 @@ export class OoxmlPackage {
 
   async write(): Promise<Uint8Array> {
     const entries = [...this.parts.values()].map((part) => {
+      if (part.dirtyData !== undefined) {
+        return {
+          name: part.name,
+          data: part.dirtyData,
+          compressionMethod: 8 as const,
+          ...(part.entry === undefined
+            ? {}
+            : {
+                lastModDate: part.entry.lastModDate,
+                lastModTime: part.entry.lastModTime,
+                externalAttributes: part.entry.externalAttributes
+              })
+        };
+      }
+
       if (part.dirtyText === undefined) {
         if (part.entry === undefined) {
           throw new PackageError(`Part ${part.name} has no payload`);

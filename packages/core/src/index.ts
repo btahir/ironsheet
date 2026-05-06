@@ -31,6 +31,11 @@ export {
   type FormulaSheetReference,
   type FormulaStructuredReference
 } from "./formula.ts";
+export {
+  drawingRelationship,
+  imageRelationship,
+  type WorkbookImage
+} from "./images.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
 export {
   retargetPivotCacheSourceXml,

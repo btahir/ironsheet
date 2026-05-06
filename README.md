@@ -15,6 +15,7 @@ This repository currently implements the first vertical slice:
 - OPC relationship parsing and target resolution.
 - Workbook sheet discovery.
 - Worksheet autoFilter inventory plus set/delete helpers that preserve existing filter criteria XML.
+- Image inventory plus existing image replacement while preserving drawing anchors and relationships.
 - Defined-name inspection.
 - Classic worksheet comment inventory with author resolution through worksheet relationships.
 - Defined-name set/delete helpers for named ranges and scoped workbook names.
@@ -111,6 +112,12 @@ List workbook hyperlinks:
 npm run cli -- hyperlinks path/to/workbook.xlsx
 ```
 
+List workbook images:
+
+```bash
+npm run cli -- images path/to/workbook.xlsx
+```
+
 List workbook merged cells:
 
 ```bash
@@ -205,6 +212,12 @@ Set or delete a worksheet auto filter:
 ```bash
 npm run cli -- set-auto-filter input.xlsx output.xlsx Sheet1 '{"ref":"A1:C10"}'
 npm run cli -- delete-auto-filter input.xlsx output.xlsx Sheet1
+```
+
+Replace an existing image part:
+
+```bash
+npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
 ```
 
 Set or delete a conditional format:

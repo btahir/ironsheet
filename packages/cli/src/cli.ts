@@ -18,6 +18,7 @@ import {
   listWorkbookDataValidations,
   listWorkbookFormulas,
   listWorkbookHyperlinks,
+  listWorkbookImages,
   listWorkbookMergedCells,
   listWorkbookTables,
   mergeWorkbookCells,
@@ -30,6 +31,7 @@ import {
   renameWorkbookSheet,
   renameWorkbookTable,
   renameWorkbookTableColumn,
+  replaceWorkbookImageFile,
   replaceWorkbookTableRows,
   retargetWorkbookChartFormulasFile,
   retargetWorkbookPivotCacheSourcesFile,
@@ -70,6 +72,7 @@ type Command =
   | "formulas"
   | "hide-sheet"
   | "hyperlinks"
+  | "images"
   | "patch"
   | "merge-cells"
   | "merged-cells"
@@ -80,6 +83,7 @@ type Command =
   | "rename-table-column"
   | "rename-table"
   | "remove-table-column"
+  | "replace-image"
   | "replace-table"
   | "retarget-chart"
   | "retarget-pivot"
@@ -106,6 +110,7 @@ function usage(): never {
   npm run cli -- conditional-formats <workbook.xlsx> [sheet]
   npm run cli -- data-validations <workbook.xlsx> [sheet]
   npm run cli -- hyperlinks <workbook.xlsx> [sheet]
+  npm run cli -- images <workbook.xlsx> [sheet]
   npm run cli -- merged-cells <workbook.xlsx> [sheet]
   npm run cli -- styles <workbook.xlsx>
   npm run cli -- validate <workbook.xlsx>
@@ -118,6 +123,7 @@ function usage(): never {
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
   npm run cli -- set-auto-filter <input.xlsx> <output.xlsx> <sheet> <jsonAutoFilter>
   npm run cli -- delete-auto-filter <input.xlsx> <output.xlsx> <sheet>
+  npm run cli -- replace-image <input.xlsx> <output.xlsx> <imagePartName> <imageFile>
   npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
   npm run cli -- delete-conditional-format <input.xlsx> <output.xlsx> <sheet> <sqref>
   npm run cli -- set-data-validation <input.xlsx> <output.xlsx> <sheet> <jsonValidation>
@@ -179,6 +185,10 @@ async function dataValidations(path: string, sheetName: string | undefined): Pro
 
 async function hyperlinks(path: string, sheetName: string | undefined): Promise<void> {
   console.log(JSON.stringify(await listWorkbookHyperlinks(path, sheetName), null, 2));
+}
+
+async function images(path: string, sheetName: string | undefined): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookImages(path, sheetName), null, 2));
 }
 
 async function mergedCells(path: string, sheetName: string | undefined): Promise<void> {
@@ -429,6 +439,16 @@ async function replaceTable(
 ): Promise<void> {
   await replaceWorkbookTableRows(inputPath, outputPath, tableName, parseRows(rawRows));
   console.log(`replaced ${tableName} rows -> ${outputPath}`);
+}
+
+async function replaceImage(
+  inputPath: string,
+  outputPath: string,
+  imagePartName: string,
+  imagePath: string
+): Promise<void> {
+  await replaceWorkbookImageFile(inputPath, outputPath, imagePartName, imagePath);
+  console.log(`replaced ${imagePartName} from ${imagePath} -> ${outputPath}`);
 }
 
 async function renameTable(
@@ -761,6 +781,12 @@ try {
       usage();
     }
     await hyperlinks(path, sheetName);
+  } else if (command === "images") {
+    const [path, sheetName] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await images(path, sheetName);
   } else if (command === "merged-cells") {
     const [path, sheetName] = args;
     if (path === undefined) {
@@ -990,6 +1016,17 @@ try {
       usage();
     }
     await deleteHyperlink(inputPath, outputPath, sheetName, ref);
+  } else if (command === "replace-image") {
+    const [inputPath, outputPath, imagePartName, imagePath] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      imagePartName === undefined ||
+      imagePath === undefined
+    ) {
+      usage();
+    }
+    await replaceImage(inputPath, outputPath, imagePartName, imagePath);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (

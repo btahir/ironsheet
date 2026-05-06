@@ -18,7 +18,13 @@ import {
   type FormulaSheetReference,
   type FormulaStructuredReference
 } from "./formula.ts";
-import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
+import { drawingRelationship, imageRelationship, type WorkbookImage } from "./images.ts";
+import {
+  normalizePartName,
+  type OoxmlPackage,
+  type Relationship,
+  resolveRelationshipTarget
+} from "./opc.ts";
 import { retargetWorkbookPivotCacheSources, type PivotCacheSourceRetarget } from "./pivot.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import {
@@ -457,6 +463,89 @@ export class Workbook {
     }
 
     return comments;
+  }
+
+  async images(sheetName?: string): Promise<WorkbookImage[]> {
+    const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
+    const images: WorkbookImage[] = [];
+
+    for (const sheet of sheets) {
+      const worksheetXml = await this.pkg.readText(sheet.partName);
+      const worksheetRelationships = new Map(
+        (await this.pkg.relationshipsFor(sheet.partName)).map((relationship) => [
+          relationship.id,
+          relationship
+        ])
+      );
+
+      for (const drawing of findStartTags(worksheetXml, "drawing")) {
+        const drawingRelationshipId = drawing.attributes["r:id"];
+        if (drawingRelationshipId === undefined) {
+          continue;
+        }
+
+        const worksheetRelationship = worksheetRelationships.get(drawingRelationshipId);
+        if (worksheetRelationship?.type !== drawingRelationship) {
+          continue;
+        }
+
+        const drawingPartName = resolveRelationshipTarget(
+          sheet.partName,
+          worksheetRelationship.target
+        );
+        if (!this.pkg.hasPart(drawingPartName)) {
+          continue;
+        }
+
+        const drawingXml = await this.pkg.readText(drawingPartName);
+        const drawingRelationships = new Map(
+          (await this.pkg.relationshipsFor(drawingPartName)).map((relationship) => [
+            relationship.id,
+            relationship
+          ])
+        );
+
+        for (const blip of findStartTags(drawingXml, "blip")) {
+          const imageRelationshipId = blip.attributes["r:embed"] ?? blip.attributes["r:link"];
+          if (imageRelationshipId === undefined) {
+            continue;
+          }
+
+          const image = drawingRelationships.get(imageRelationshipId);
+          if (image?.type !== imageRelationship) {
+            continue;
+          }
+
+          const imagePartName =
+            image.targetMode === "External"
+              ? undefined
+              : resolveRelationshipTarget(drawingPartName, image.target);
+          images.push({
+            sheetName: sheet.name,
+            sheetPartName: sheet.partName,
+            drawingPartName,
+            drawingRelationshipId,
+            imageRelationshipId,
+            target: image.target,
+            ...(imagePartName === undefined ? {} : { imagePartName }),
+            ...(image.targetMode === undefined ? {} : { targetMode: image.targetMode })
+          });
+        }
+      }
+    }
+
+    return images;
+  }
+
+  async replaceImage(imagePartName: string, data: Uint8Array): Promise<WorkbookImage> {
+    const normalized = normalizePartName(imagePartName);
+    const image = (await this.images()).find((candidate) => candidate.imagePartName === normalized);
+    if (image === undefined) {
+      throw new WorkbookError(`Unknown workbook image part ${normalized}`);
+    }
+
+    this.pkg.setPart(normalized, data);
+    return image;
   }
 
   async setDataValidation(

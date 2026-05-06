@@ -150,6 +150,34 @@ test("lists workbook auto filters", async () => {
   ]);
 });
 
+test("lists workbook images and replaces existing image bytes", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDrawing: true }));
+  const image = {
+    sheetName: "Sheet1",
+    sheetPartName: "xl/worksheets/sheet1.xml",
+    drawingPartName: "xl/drawings/drawing1.xml",
+    drawingRelationshipId: "rIdDrawing1",
+    imageRelationshipId: "rIdImage1",
+    target: "../media/image1.png",
+    imagePartName: "xl/media/image1.png"
+  };
+
+  assert.deepEqual(await workbook.images(), [image]);
+
+  const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+  assert.deepEqual(await workbook.replaceImage("xl/media/image1.png", replacement), image);
+  assert.deepEqual(Array.from(await workbook.pkg.readPart("xl/media/image1.png")), [
+    ...replacement
+  ]);
+
+  const reopened = await openWorkbook(await workbook.write());
+  assert.deepEqual(Array.from(await reopened.pkg.readPart("xl/media/image1.png")), [
+    ...replacement
+  ]);
+  assert.deepEqual(await reopened.images(), [image]);
+  assert.deepEqual((await reopened.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
 test("lists workbook merged cells", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook({ includeMerge: true }));
 
