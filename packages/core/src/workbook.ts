@@ -187,6 +187,45 @@ export type WorkbookAutoFilter = WorksheetAutoFilter & {
   sheetPartName: string;
 };
 
+export type WorkbookTemplateCellPatch = {
+  sheetName: string;
+  address: string;
+  value: CellInput;
+};
+
+export type WorkbookTemplateRangePatch = {
+  sheetName: string;
+  startAddress: string;
+  values: CellInput[][];
+};
+
+export type WorkbookTemplateTablePatch = {
+  tableName: string;
+  rows: CellInput[][];
+};
+
+export type WorkbookTemplateImagePatch = {
+  imagePartName: string;
+  data: Uint8Array;
+};
+
+export type WorkbookTemplatePatch = {
+  cells?: WorkbookTemplateCellPatch[];
+  images?: WorkbookTemplateImagePatch[];
+  ranges?: WorkbookTemplateRangePatch[];
+  tables?: WorkbookTemplateTablePatch[];
+};
+
+export type WorkbookTemplateRenderResult = {
+  applied: {
+    cells: number;
+    images: number;
+    ranges: number;
+    tables: number;
+  };
+  diagnostics: Diagnostic[];
+};
+
 export class Workbook {
   private sharedStringsCache: string[] | undefined;
   private readonly diagnosticJournal: Diagnostic[] = [];
@@ -309,6 +348,43 @@ export class Workbook {
       sheetPartName: sheet.partName,
       affectedRanges: result.affectedRanges
     });
+  }
+
+  async renderTemplate(patch: WorkbookTemplatePatch): Promise<WorkbookTemplateRenderResult> {
+    let cells = 0;
+    let images = 0;
+    let ranges = 0;
+    let tables = 0;
+
+    for (const table of patch.tables ?? []) {
+      await this.replaceTableRows(table.tableName, table.rows);
+      tables += 1;
+    }
+
+    for (const cell of patch.cells ?? []) {
+      await this.patchCell(cell.sheetName, cell.address, cell.value);
+      cells += 1;
+    }
+
+    for (const range of patch.ranges ?? []) {
+      await this.patchRange(range.sheetName, range.startAddress, range.values);
+      ranges += 1;
+    }
+
+    for (const image of patch.images ?? []) {
+      await this.replaceImage(image.imagePartName, image.data);
+      images += 1;
+    }
+
+    return {
+      applied: {
+        cells,
+        images,
+        ranges,
+        tables
+      },
+      diagnostics: this.diagnostics()
+    };
   }
 
   async readCell(sheetName: string, address: string): Promise<ReadCellResult | undefined> {

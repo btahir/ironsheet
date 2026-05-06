@@ -178,6 +178,54 @@ test("lists workbook images and replaces existing image bytes", async () => {
   assert.deepEqual((await reopened.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
+test("renders template patches across cells ranges tables and images", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeDrawing: true, includeTable: true })
+  );
+  const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 8, 7, 6]);
+
+  const result = await workbook.renderTemplate({
+    cells: [{ sheetName: "Sheet1", address: "D1", value: "Rendered" }],
+    ranges: [
+      {
+        sheetName: "Sheet1",
+        startAddress: "E1",
+        values: [
+          [1, 2],
+          [3, 4]
+        ]
+      }
+    ],
+    tables: [
+      {
+        tableName: "RevenueTable",
+        rows: [
+          ["North", 10],
+          ["South", 20]
+        ]
+      }
+    ],
+    images: [{ imagePartName: "xl/media/image1.png", data: replacement }]
+  });
+
+  assert.deepEqual(result.applied, { cells: 1, images: 1, ranges: 1, tables: 1 });
+  assert.equal((await workbook.readCell("Sheet1", "D1"))?.value, "Rendered");
+  assert.deepEqual(
+    (await workbook.readRange("Sheet1", "E1:F2")).cells.map((row) =>
+      row.map((cell) => cell?.value)
+    ),
+    [
+      [1, 2],
+      [3, 4]
+    ]
+  );
+  assert.equal((await workbook.tables())[0]?.ref, "A1:B3");
+  assert.deepEqual(Array.from(await workbook.pkg.readPart("xl/media/image1.png")), [
+    ...replacement
+  ]);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
 test("lists workbook merged cells", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook({ includeMerge: true }));
 

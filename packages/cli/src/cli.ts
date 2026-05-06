@@ -33,6 +33,7 @@ import {
   renameWorkbookTableColumn,
   replaceWorkbookImageFile,
   replaceWorkbookTableRows,
+  renderWorkbookTemplate,
   retargetWorkbookChartFormulasFile,
   retargetWorkbookPivotCacheSourcesFile,
   setWorkbookAutoFilter,
@@ -51,6 +52,7 @@ import type {
   PivotCacheSourceRetarget,
   WorkbookCellStyleInput,
   WorkbookSheetState,
+  WorkbookTemplatePatch,
   WorksheetAutoFilter,
   WorksheetConditionalFormat,
   WorksheetDataValidation
@@ -85,6 +87,7 @@ type Command =
   | "remove-table-column"
   | "replace-image"
   | "replace-table"
+  | "render-template"
   | "retarget-chart"
   | "retarget-pivot"
   | "set-auto-filter"
@@ -124,6 +127,7 @@ function usage(): never {
   npm run cli -- set-auto-filter <input.xlsx> <output.xlsx> <sheet> <jsonAutoFilter>
   npm run cli -- delete-auto-filter <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- replace-image <input.xlsx> <output.xlsx> <imagePartName> <imageFile>
+  npm run cli -- render-template <input.xlsx> <output.xlsx> <jsonPatch>
   npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
   npm run cli -- delete-conditional-format <input.xlsx> <output.xlsx> <sheet> <sqref>
   npm run cli -- set-data-validation <input.xlsx> <output.xlsx> <sheet> <jsonValidation>
@@ -451,6 +455,15 @@ async function replaceImage(
   console.log(`replaced ${imagePartName} from ${imagePath} -> ${outputPath}`);
 }
 
+async function renderTemplate(
+  inputPath: string,
+  outputPath: string,
+  rawPatch: string
+): Promise<void> {
+  const result = await renderWorkbookTemplate(inputPath, outputPath, parseTemplatePatch(rawPatch));
+  console.log(JSON.stringify(result, null, 2));
+}
+
 async function renameTable(
   inputPath: string,
   outputPath: string,
@@ -556,7 +569,15 @@ function parseRows(rawRows: string): CellInput[][] {
     throw new Error("jsonRows must be an array of row arrays");
   }
 
-  return parsed.map((row) => row.map((cell) => parseJsonCell(cell as unknown)));
+  return parseJsonRows(parsed);
+}
+
+function parseJsonRows(rows: unknown[]): CellInput[][] {
+  if (!rows.every((row) => Array.isArray(row))) {
+    throw new Error("rows must be an array of row arrays");
+  }
+
+  return rows.map((row) => row.map((cell) => parseJsonCell(cell as unknown)));
 }
 
 function parseRowValues(rawValues: string): CellInput[] {
@@ -588,6 +609,114 @@ function parseAutoFilter(rawAutoFilter: string): WorksheetAutoFilter {
   }
 
   return parsed as WorksheetAutoFilter;
+}
+
+function parseTemplatePatch(rawPatch: string): WorkbookTemplatePatch {
+  const parsed: unknown = JSON.parse(rawPatch);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("jsonPatch must be an object");
+  }
+
+  const patch = parsed as Record<string, unknown>;
+  return {
+    ...parseTemplateCells(patch.cells),
+    ...parseTemplateRanges(patch.ranges),
+    ...parseTemplateTables(patch.tables)
+  };
+}
+
+function parseTemplateCells(cells: unknown): Pick<WorkbookTemplatePatch, "cells"> {
+  if (cells === undefined) {
+    return {};
+  }
+
+  if (!Array.isArray(cells)) {
+    throw new Error("jsonPatch.cells must be an array");
+  }
+
+  return {
+    cells: cells.map((cell) => {
+      if (typeof cell !== "object" || cell === null || Array.isArray(cell)) {
+        throw new Error("jsonPatch.cells entries must be objects");
+      }
+
+      const candidate = cell as Record<string, unknown>;
+      if (
+        typeof candidate.sheetName !== "string" ||
+        typeof candidate.address !== "string" ||
+        !("value" in candidate)
+      ) {
+        throw new Error("jsonPatch.cells entries need sheetName, address, and value");
+      }
+
+      return {
+        sheetName: candidate.sheetName,
+        address: candidate.address,
+        value: parseJsonCell(candidate.value)
+      };
+    })
+  };
+}
+
+function parseTemplateRanges(ranges: unknown): Pick<WorkbookTemplatePatch, "ranges"> {
+  if (ranges === undefined) {
+    return {};
+  }
+
+  if (!Array.isArray(ranges)) {
+    throw new Error("jsonPatch.ranges must be an array");
+  }
+
+  return {
+    ranges: ranges.map((range) => {
+      if (typeof range !== "object" || range === null || Array.isArray(range)) {
+        throw new Error("jsonPatch.ranges entries must be objects");
+      }
+
+      const candidate = range as Record<string, unknown>;
+      if (
+        typeof candidate.sheetName !== "string" ||
+        typeof candidate.startAddress !== "string" ||
+        !Array.isArray(candidate.values)
+      ) {
+        throw new Error("jsonPatch.ranges entries need sheetName, startAddress, and values");
+      }
+
+      return {
+        sheetName: candidate.sheetName,
+        startAddress: candidate.startAddress,
+        values: parseJsonRows(candidate.values)
+      };
+    })
+  };
+}
+
+function parseTemplateTables(tables: unknown): Pick<WorkbookTemplatePatch, "tables"> {
+  if (tables === undefined) {
+    return {};
+  }
+
+  if (!Array.isArray(tables)) {
+    throw new Error("jsonPatch.tables must be an array");
+  }
+
+  return {
+    tables: tables.map((table) => {
+      if (typeof table !== "object" || table === null || Array.isArray(table)) {
+        throw new Error("jsonPatch.tables entries must be objects");
+      }
+
+      const candidate = table as Record<string, unknown>;
+      if (typeof candidate.tableName !== "string" || !Array.isArray(candidate.rows)) {
+        throw new Error("jsonPatch.tables entries need tableName and rows");
+      }
+
+      return {
+        tableName: candidate.tableName,
+        rows: parseJsonRows(candidate.rows)
+      };
+    })
+  };
 }
 
 function parseConditionalFormat(rawConditionalFormat: string): WorksheetConditionalFormat {
@@ -1027,6 +1156,12 @@ try {
       usage();
     }
     await replaceImage(inputPath, outputPath, imagePartName, imagePath);
+  } else if (command === "render-template") {
+    const [inputPath, outputPath, rawPatch] = args;
+    if (inputPath === undefined || outputPath === undefined || rawPatch === undefined) {
+      usage();
+    }
+    await renderTemplate(inputPath, outputPath, rawPatch);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (

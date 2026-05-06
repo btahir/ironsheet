@@ -24,6 +24,7 @@ This repository currently implements the first vertical slice:
 - Hyperlink inventory plus external hyperlink set/delete with worksheet relationship management.
 - Merged-cell inventory plus guarded merge/unmerge helpers with overlap validation.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
+- Template render API for applying cell, range, table, and existing-image patches in one typed operation.
 - Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
 - Safe sheet visibility changes with hidden and veryHidden state support.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
@@ -218,6 +219,12 @@ Replace an existing image part:
 
 ```bash
 npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
+```
+
+Render a template with cells, ranges, and tables in one JSON patch:
+
+```bash
+npm run cli -- render-template input.xlsx output.xlsx '{"cells":[{"sheetName":"Sheet1","address":"D1","value":"Rendered"}],"ranges":[{"sheetName":"Sheet1","startAddress":"E1","values":[[1,2],[3,4]]}],"tables":[{"tableName":"RevenueTable","rows":[["North",10],["South",20]]}]}'
 ```
 
 Set or delete a conditional format:

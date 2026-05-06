@@ -10,6 +10,7 @@ import {
   type PivotCacheSourceRetarget,
   type WorkbookCellStyleInput,
   type WorkbookSheetState,
+  type WorkbookTemplatePatch,
   type WorksheetAutoFilter,
   type WorksheetConditionalFormat,
   type WorksheetDataValidation
@@ -97,6 +98,17 @@ export async function appendWorkbookRows(
   const workbook = await readWorkbook(inputPath);
   await workbook.appendRows(sheetName, rows);
   await writeWorkbook(workbook, outputPath);
+}
+
+export async function renderWorkbookTemplate(
+  inputPath: string,
+  outputPath: string,
+  patch: WorkbookTemplatePatch
+): Promise<Awaited<ReturnType<Workbook["renderTemplate"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  const result = await workbook.renderTemplate(patch);
+  await writeWorkbook(workbook, outputPath);
+  return result;
 }
 
 export async function readWorkbookCell(

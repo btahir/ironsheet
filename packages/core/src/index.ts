@@ -79,7 +79,13 @@ export {
   type WorkbookInspectResult,
   type WorkbookMergedCell,
   type WorkbookSheet,
-  type WorkbookSheetState
+  type WorkbookSheetState,
+  type WorkbookTemplateCellPatch,
+  type WorkbookTemplateImagePatch,
+  type WorkbookTemplatePatch,
+  type WorkbookTemplateRangePatch,
+  type WorkbookTemplateRenderResult,
+  type WorkbookTemplateTablePatch
 } from "./workbook.ts";
 export {
   type CellInput,
