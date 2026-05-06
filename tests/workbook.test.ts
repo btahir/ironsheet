@@ -303,6 +303,46 @@ test("removing table columns only allows the rightmost column", async () => {
   );
 });
 
+test("retargets chart formulas exactly", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDrawing: true }));
+  const chartXml = await pkg.readText("xl/charts/chart1.xml");
+  pkg.setText(
+    "xl/charts/chart1.xml",
+    chartXml.replace(
+      "<c:chart>",
+      "<c:chart><c:plotArea><c:ser><c:val><c:numRef><c:f>Sheet1!$A$1:$B$2</c:f></c:numRef></c:val></c:ser></c:plotArea>"
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  assert.equal(
+    await workbook.retargetChartFormulas([{ from: "Sheet1!$A$1:$B$2", to: "Sheet1!$A$1:$C$2" }]),
+    1
+  );
+  assert.match(await pkg.readText("xl/charts/chart1.xml"), /Sheet1!\$A\$1:\$C\$2/);
+  assert.equal((await workbook.validate()).summary.errors, 0);
+});
+
+test("retargets pivot cache worksheet sources", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includePivotTable: true }));
+  const workbook = await Workbook.fromPackage(pkg);
+
+  assert.equal(
+    await workbook.retargetPivotCacheSources([
+      {
+        from: { sheet: "Sheet1", ref: "A1:B2" },
+        to: { sheet: "Sheet1", ref: "A1:C2" }
+      }
+    ]),
+    1
+  );
+  assert.match(
+    await pkg.readText("xl/pivotCache/pivotCacheDefinition1.xml"),
+    /worksheetSource ref="A1:C2" sheet="Sheet1"/
+  );
+  assert.equal((await workbook.validate()).summary.errors, 0);
+});
+
 test("reads workbook formula inventory with parsed dependencies", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");

@@ -6,6 +6,8 @@ import {
   type CompressionAdapter,
   type CellInput,
   type CellPatch,
+  type ChartFormulaRetarget,
+  type PivotCacheSourceRetarget,
   type WorkbookCellStyleInput
 } from "../../core/src/index.ts";
 
@@ -193,5 +195,25 @@ export async function renameWorkbookTableColumn(
 ): Promise<void> {
   const workbook = await readWorkbook(inputPath);
   await workbook.renameTableColumn(tableName, columnName, nextName);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function retargetWorkbookChartFormulasFile(
+  inputPath: string,
+  outputPath: string,
+  retargets: ChartFormulaRetarget[]
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.retargetChartFormulas(retargets);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function retargetWorkbookPivotCacheSourcesFile(
+  inputPath: string,
+  outputPath: string,
+  retargets: PivotCacheSourceRetarget[]
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.retargetPivotCacheSources(retargets);
   await writeWorkbook(workbook, outputPath);
 }

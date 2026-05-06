@@ -1,4 +1,5 @@
 import { type CellRange, parseCellRange } from "./address.ts";
+import { retargetWorkbookChartFormulas, type ChartFormulaRetarget } from "./chart.ts";
 import type { Diagnostic } from "./diagnostics.ts";
 import { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 import { PackageError, WorkbookError } from "./errors.ts";
@@ -11,6 +12,7 @@ import {
   type FormulaStructuredReference
 } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
+import { retargetWorkbookPivotCacheSources, type PivotCacheSourceRetarget } from "./pivot.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import {
   ensureWorkbookCellFormat,
@@ -350,6 +352,14 @@ export class Workbook {
     });
 
     return table;
+  }
+
+  retargetChartFormulas(retargets: ChartFormulaRetarget[]): Promise<number> {
+    return retargetWorkbookChartFormulas(this.pkg, retargets);
+  }
+
+  retargetPivotCacheSources(retargets: PivotCacheSourceRetarget[]): Promise<number> {
+    return retargetWorkbookPivotCacheSources(this.pkg, retargets);
   }
 
   tables(): Promise<WorkbookTable[]> {

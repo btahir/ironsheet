@@ -1,5 +1,10 @@
 export { formatCellAddress, parseCellAddress, parseCellRange } from "./address.ts";
 export type { CellRange } from "./address.ts";
+export {
+  retargetChartFormulaXml,
+  retargetWorkbookChartFormulas,
+  type ChartFormulaRetarget
+} from "./chart.ts";
 export { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 export type { Diagnostic, DiagnosticSeverity } from "./diagnostics.ts";
 export { diffZipPackages, type PackageDiff, type PackageEntryDiff } from "./diff.ts";
@@ -20,6 +25,11 @@ export {
   type FormulaStructuredReference
 } from "./formula.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
+export {
+  retargetPivotCacheSourceXml,
+  retargetWorkbookPivotCacheSources,
+  type PivotCacheSourceRetarget
+} from "./pivot.ts";
 export { parseSharedStrings } from "./shared-strings.ts";
 export {
   ensureWorkbookCellFormat,

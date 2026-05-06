@@ -28,6 +28,7 @@ This repository currently implements the first vertical slice:
 - Formula writes, formula removal, totals-row formula movement, and dependent value edits with namespace-aware `calcPr` recalculation metadata and stale calc-chain removal.
 - Formula inventory plus sheet, cell/range, bounds, shared-formula metadata, and structured table-reference parsing for validation and future retargeting work.
 - Feature inspection for macros, shared strings, formula cells, external relationships, tables, drawings, charts, media, merges, hyperlinks, validation, conditional formatting, hidden sheets, comments, pivots, and defined names.
+- Exact chart formula retargeting and pivot cache worksheet-source retargeting.
 - Preservation fixtures for macros, merge cells, hyperlinks, validations, conditional formatting, drawings, charts, media, hidden sheets, and styled table rows.
 - Namespace-prefix preservation for workbook recalculation edits, worksheet cell/row insertion, append rows, and table row replacement.
 - Streaming XML tokenizer, chunk transform primitives, and streamed element extraction powering local XML helpers and future large-worksheet transforms.
@@ -129,6 +130,13 @@ Rename a table or table column and retarget structured references:
 ```bash
 npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
 npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
+```
+
+Retarget chart formulas or pivot cache sources:
+
+```bash
+npm run cli -- retarget-chart input.xlsx output.xlsx '[{"from":"Sheet1!$A$1:$B$2","to":"Sheet1!$A$1:$C$2"}]'
+npm run cli -- retarget-pivot input.xlsx output.xlsx '[{"from":{"sheet":"Sheet1","ref":"A1:B2"},"to":{"sheet":"Sheet1","ref":"A1:C2"}}]'
 ```
 
 Diff two workbook packages:

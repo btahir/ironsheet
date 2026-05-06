@@ -17,10 +17,17 @@ import {
   renameWorkbookTable,
   renameWorkbookTableColumn,
   replaceWorkbookTableRows,
+  retargetWorkbookChartFormulasFile,
+  retargetWorkbookPivotCacheSourcesFile,
   styleWorkbookCell,
   validateWorkbookFile
 } from "../../node/src/index.ts";
-import type { CellInput, WorkbookCellStyleInput } from "../../core/src/index.ts";
+import type {
+  CellInput,
+  ChartFormulaRetarget,
+  PivotCacheSourceRetarget,
+  WorkbookCellStyleInput
+} from "../../core/src/index.ts";
 
 type Command =
   | "inspect"
@@ -35,6 +42,8 @@ type Command =
   | "rename-table"
   | "remove-table-column"
   | "replace-table"
+  | "retarget-chart"
+  | "retarget-pivot"
   | "style-cell"
   | "styles"
   | "tables"
@@ -59,6 +68,8 @@ function usage(): never {
   npm run cli -- rename-table-column <input.xlsx> <output.xlsx> <table> <column> <newName>
   npm run cli -- remove-table-column <input.xlsx> <output.xlsx> <table> <rightmostColumn>
   npm run cli -- replace-table <input.xlsx> <output.xlsx> <table> <jsonRows>
+  npm run cli -- retarget-chart <input.xlsx> <output.xlsx> <jsonRetargets>
+  npm run cli -- retarget-pivot <input.xlsx> <output.xlsx> <jsonRetargets>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
 value examples:
@@ -206,6 +217,28 @@ async function removeTableColumn(
   console.log(`removed ${tableName}[${columnName}] -> ${outputPath}`);
 }
 
+async function retargetChart(
+  inputPath: string,
+  outputPath: string,
+  rawRetargets: string
+): Promise<void> {
+  await retargetWorkbookChartFormulasFile(inputPath, outputPath, parseChartRetargets(rawRetargets));
+  console.log(`retargeted chart formulas -> ${outputPath}`);
+}
+
+async function retargetPivot(
+  inputPath: string,
+  outputPath: string,
+  rawRetargets: string
+): Promise<void> {
+  await retargetWorkbookPivotCacheSourcesFile(
+    inputPath,
+    outputPath,
+    parsePivotRetargets(rawRetargets)
+  );
+  console.log(`retargeted pivot cache sources -> ${outputPath}`);
+}
+
 function parseCliValue(value: string): CellInput {
   if (value.startsWith("=")) {
     return { formula: value };
@@ -251,6 +284,35 @@ function parseStyle(rawStyle: string): WorkbookCellStyleInput {
   }
 
   return parsed as WorkbookCellStyleInput;
+}
+
+function parseChartRetargets(rawRetargets: string): ChartFormulaRetarget[] {
+  const parsed: unknown = JSON.parse(rawRetargets);
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every(
+      (retarget) =>
+        typeof retarget === "object" &&
+        retarget !== null &&
+        "from" in retarget &&
+        typeof retarget.from === "string" &&
+        "to" in retarget &&
+        typeof retarget.to === "string"
+    )
+  ) {
+    throw new Error("jsonRetargets must be an array of { from, to } objects");
+  }
+
+  return parsed as ChartFormulaRetarget[];
+}
+
+function parsePivotRetargets(rawRetargets: string): PivotCacheSourceRetarget[] {
+  const parsed: unknown = JSON.parse(rawRetargets);
+  if (!Array.isArray(parsed)) {
+    throw new Error("jsonRetargets must be an array");
+  }
+
+  return parsed as PivotCacheSourceRetarget[];
 }
 
 function parseJsonCell(value: unknown): CellInput {
@@ -429,6 +491,18 @@ try {
       usage();
     }
     await removeTableColumn(inputPath, outputPath, tableName, columnName);
+  } else if (command === "retarget-chart") {
+    const [inputPath, outputPath, rawRetargets] = args;
+    if (inputPath === undefined || outputPath === undefined || rawRetargets === undefined) {
+      usage();
+    }
+    await retargetChart(inputPath, outputPath, rawRetargets);
+  } else if (command === "retarget-pivot") {
+    const [inputPath, outputPath, rawRetargets] = args;
+    if (inputPath === undefined || outputPath === undefined || rawRetargets === undefined) {
+      usage();
+    }
+    await retargetPivot(inputPath, outputPath, rawRetargets);
   } else {
     usage();
   }
