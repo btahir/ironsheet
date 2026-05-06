@@ -141,6 +141,30 @@ export async function validateWorkbookFile(
   return workbook.validate();
 }
 
+export async function setWorkbookDefinedName(
+  inputPath: string,
+  outputPath: string,
+  name: string,
+  text: string,
+  options: Parameters<Workbook["setDefinedName"]>[2] = {}
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.setDefinedName(name, text, options);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function deleteWorkbookDefinedName(
+  inputPath: string,
+  outputPath: string,
+  name: string,
+  options: Parameters<Workbook["deleteDefinedName"]>[1] = {}
+): Promise<boolean> {
+  const workbook = await readWorkbook(inputPath);
+  const deleted = await workbook.deleteDefinedName(name, options);
+  await writeWorkbook(workbook, outputPath);
+  return deleted;
+}
+
 export async function replaceWorkbookTableRows(
   inputPath: string,
   outputPath: string,

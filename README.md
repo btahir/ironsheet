@@ -15,6 +15,7 @@ This repository currently implements the first vertical slice:
 - OPC relationship parsing and target resolution.
 - Workbook sheet discovery.
 - Defined-name inspection.
+- Defined-name set/delete helpers for named ranges and scoped workbook names.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
@@ -140,6 +141,13 @@ Rename a sheet, table, or table column and retarget references:
 npm run cli -- rename-sheet input.xlsx output.xlsx Sheet1 "Revenue 2026"
 npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
 npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
+```
+
+Set or delete a defined name:
+
+```bash
+npm run cli -- set-defined-name input.xlsx output.xlsx ReportRange 'Sheet1!$A$1:$B$10'
+npm run cli -- delete-defined-name input.xlsx output.xlsx ReportRange
 ```
 
 Retarget chart formulas or pivot cache sources:

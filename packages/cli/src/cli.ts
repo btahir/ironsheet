@@ -5,6 +5,7 @@ import { diffZipPackages } from "@ironsheet/core";
 import {
   appendWorkbookRows,
   appendWorkbookTableColumn,
+  deleteWorkbookDefinedName,
   inspectWorkbookStyles,
   listWorkbookFormulas,
   listWorkbookTables,
@@ -20,6 +21,7 @@ import {
   replaceWorkbookTableRows,
   retargetWorkbookChartFormulasFile,
   retargetWorkbookPivotCacheSourcesFile,
+  setWorkbookDefinedName,
   styleWorkbookCell,
   validateWorkbookFile
 } from "@ironsheet/node";
@@ -34,6 +36,7 @@ type Command =
   | "inspect"
   | "append-rows"
   | "append-table-column"
+  | "delete-defined-name"
   | "formulas"
   | "patch"
   | "patch-range"
@@ -46,6 +49,7 @@ type Command =
   | "replace-table"
   | "retarget-chart"
   | "retarget-pivot"
+  | "set-defined-name"
   | "style-cell"
   | "styles"
   | "tables"
@@ -66,6 +70,8 @@ function usage(): never {
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
+  npm run cli -- set-defined-name <input.xlsx> <output.xlsx> <name> <formula> [jsonOptions]
+  npm run cli -- delete-defined-name <input.xlsx> <output.xlsx> <name> [jsonOptions]
   npm run cli -- rename-sheet <input.xlsx> <output.xlsx> <sheet> <newName>
   npm run cli -- rename-table <input.xlsx> <output.xlsx> <table> <newName>
   npm run cli -- rename-table-column <input.xlsx> <output.xlsx> <table> <column> <newName>
@@ -182,6 +188,38 @@ async function appendTableColumn(
     rawValues === undefined ? [] : parseRowValues(rawValues)
   );
   console.log(`appended ${tableName}[${columnName}] -> ${outputPath}`);
+}
+
+async function setDefinedName(
+  inputPath: string,
+  outputPath: string,
+  name: string,
+  text: string,
+  rawOptions: string | undefined
+): Promise<void> {
+  await setWorkbookDefinedName(
+    inputPath,
+    outputPath,
+    name,
+    text,
+    parseDefinedNameOptions(rawOptions)
+  );
+  console.log(`set defined name ${name} -> ${outputPath}`);
+}
+
+async function deleteDefinedName(
+  inputPath: string,
+  outputPath: string,
+  name: string,
+  rawOptions: string | undefined
+): Promise<void> {
+  const deleted = await deleteWorkbookDefinedName(
+    inputPath,
+    outputPath,
+    name,
+    parseDefinedNameDeleteOptions(rawOptions)
+  );
+  console.log(`${deleted ? "deleted" : "did not find"} defined name ${name} -> ${outputPath}`);
 }
 
 async function replaceTable(
@@ -302,6 +340,33 @@ function parseStyle(rawStyle: string): WorkbookCellStyleInput {
   }
 
   return parsed as WorkbookCellStyleInput;
+}
+
+function parseDefinedNameOptions(rawOptions: string | undefined): {
+  comment?: string;
+  hidden?: boolean;
+  sheetName?: string;
+} {
+  if (rawOptions === undefined) {
+    return {};
+  }
+
+  const parsed: unknown = JSON.parse(rawOptions);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("jsonOptions must be an object");
+  }
+
+  const options = parsed as Record<string, unknown>;
+  return {
+    ...(typeof options.comment === "string" ? { comment: options.comment } : {}),
+    ...(typeof options.hidden === "boolean" ? { hidden: options.hidden } : {}),
+    ...(typeof options.sheetName === "string" ? { sheetName: options.sheetName } : {})
+  };
+}
+
+function parseDefinedNameDeleteOptions(rawOptions: string | undefined): { sheetName?: string } {
+  const options = parseDefinedNameOptions(rawOptions);
+  return options.sheetName === undefined ? {} : { sheetName: options.sheetName };
 }
 
 function parseChartRetargets(rawRetargets: string): ChartFormulaRetarget[] {
@@ -464,6 +529,23 @@ try {
       usage();
     }
     await appendTableColumn(inputPath, outputPath, tableName, columnName, rawValues);
+  } else if (command === "set-defined-name") {
+    const [inputPath, outputPath, name, text, rawOptions] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      name === undefined ||
+      text === undefined
+    ) {
+      usage();
+    }
+    await setDefinedName(inputPath, outputPath, name, text, rawOptions);
+  } else if (command === "delete-defined-name") {
+    const [inputPath, outputPath, name, rawOptions] = args;
+    if (inputPath === undefined || outputPath === undefined || name === undefined) {
+      usage();
+    }
+    await deleteDefinedName(inputPath, outputPath, name, rawOptions);
   } else if (command === "replace-table") {
     const [inputPath, outputPath, tableName, rawRows] = args;
     if (

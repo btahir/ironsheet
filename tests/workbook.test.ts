@@ -472,6 +472,49 @@ test("reads workbook defined names", async () => {
   ]);
 });
 
+test("sets, replaces, and deletes workbook defined names", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await workbook.setDefinedName("ReportRange", "Sheet1!$A$1:$B$10", {
+    comment: "Export range",
+    hidden: true
+  });
+  await workbook.setDefinedName("ScopedRange", "Sheet1!$A$1", { sheetName: "Sheet1" });
+  await workbook.setDefinedName("ReportRange", "Sheet1!$A$1:$C$10");
+
+  assert.deepEqual(await workbook.definedNames(), [
+    {
+      name: "ReportRange",
+      text: "Sheet1!$A$1:$C$10"
+    },
+    {
+      name: "ScopedRange",
+      text: "Sheet1!$A$1",
+      localSheetId: "0"
+    }
+  ]);
+  assert.equal(await workbook.deleteDefinedName("ScopedRange", { sheetName: "Sheet1" }), true);
+  assert.equal(await workbook.deleteDefinedName("MissingName"), false);
+  assert.deepEqual(await workbook.definedNames(), [
+    {
+      name: "ReportRange",
+      text: "Sheet1!$A$1:$C$10"
+    }
+  ]);
+  assert.match(await workbook.pkg.readText("xl/workbook.xml"), /forceFullCalc="1"/);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
+test("defined name mutation rejects invalid names and unknown sheet scopes", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await assert.rejects(() => workbook.setDefinedName("A1", "Sheet1!$A$1"), /cell reference/);
+  await assert.rejects(
+    () => workbook.setDefinedName("ScopedRange", "Sheet1!$A$1", { sheetName: "Missing" }),
+    /Unknown worksheet/
+  );
+});
+
 test("reads workbook style metadata", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook());
 

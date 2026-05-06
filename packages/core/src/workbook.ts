@@ -51,6 +51,7 @@ import {
 import {
   decodeXml,
   escapeXmlAttribute,
+  escapeXmlText,
   findElementCloseStart,
   findElementEnd,
   findFirstStartTag,
@@ -430,6 +431,47 @@ export class Workbook {
     return parseDefinedNames(await this.pkg.readText(this.workbookPart));
   }
 
+  async setDefinedName(
+    name: string,
+    text: string,
+    options: { comment?: string; hidden?: boolean; sheetName?: string } = {}
+  ): Promise<WorkbookDefinedName> {
+    validateDefinedName(name);
+
+    const localSheetId =
+      options.sheetName === undefined ? undefined : this.localSheetIdForSheet(options.sheetName);
+    const definedName: WorkbookDefinedName = {
+      name,
+      text,
+      ...(options.comment === undefined ? {} : { comment: options.comment }),
+      ...(options.hidden === undefined ? {} : { hidden: options.hidden }),
+      ...(localSheetId === undefined ? {} : { localSheetId })
+    };
+
+    this.pkg.setText(
+      this.workbookPart,
+      setDefinedNameXml(await this.pkg.readText(this.workbookPart), definedName)
+    );
+    await this.forceRecalculateOnOpen();
+    return definedName;
+  }
+
+  async deleteDefinedName(name: string, options: { sheetName?: string } = {}): Promise<boolean> {
+    const localSheetId =
+      options.sheetName === undefined ? undefined : this.localSheetIdForSheet(options.sheetName);
+    const result = deleteDefinedNameXml(await this.pkg.readText(this.workbookPart), {
+      name,
+      ...(localSheetId === undefined ? {} : { localSheetId })
+    });
+    if (!result.deleted) {
+      return false;
+    }
+
+    this.pkg.setText(this.workbookPart, result.xml);
+    await this.forceRecalculateOnOpen();
+    return true;
+  }
+
   async styles(): Promise<WorkbookStyles> {
     if (!this.pkg.hasPart("xl/styles.xml")) {
       return {
@@ -470,6 +512,15 @@ export class Workbook {
     }
 
     return style;
+  }
+
+  private localSheetIdForSheet(sheetName: string): string {
+    const index = this.sheets().findIndex((sheet) => sheet.name === sheetName);
+    if (index === -1) {
+      throw new WorkbookError(`Unknown worksheet ${sheetName}`);
+    }
+
+    return String(index);
   }
 
   async formulas(): Promise<WorkbookFormula[]> {
@@ -801,6 +852,106 @@ function validateSheetName(name: string): void {
   if (name.startsWith("'") || name.endsWith("'")) {
     throw new WorkbookError("Sheet name cannot start or end with an apostrophe");
   }
+}
+
+function validateDefinedName(name: string): void {
+  if (!/^[A-Za-z_\\][A-Za-z0-9_.\\]*$/.test(name)) {
+    throw new WorkbookError(`Invalid defined name ${name}`);
+  }
+
+  if (/^[A-Za-z]{1,3}[1-9][0-9]{0,6}$/.test(name)) {
+    throw new WorkbookError(`Defined name ${name} cannot look like a cell reference`);
+  }
+}
+
+function setDefinedNameXml(workbookXml: string, definedName: WorkbookDefinedName): string {
+  const definedNameXml = buildDefinedNameXml(workbookXml, definedName);
+  const existing = findMatchingDefinedName(workbookXml, definedName);
+  if (existing !== undefined) {
+    return `${workbookXml.slice(0, existing.start)}${definedNameXml}${workbookXml.slice(findElementEnd(workbookXml, existing))}`;
+  }
+
+  const definedNames = findFirstStartTag(workbookXml, "definedNames");
+  if (definedNames !== undefined) {
+    const close = findElementCloseStart(workbookXml, definedNames);
+    return `${workbookXml.slice(0, close)}${definedNameXml}${workbookXml.slice(close)}`;
+  }
+
+  const workbook = findFirstStartTag(workbookXml, "workbook");
+  if (workbook === undefined) {
+    throw new WorkbookError("workbook.xml is missing workbook tag");
+  }
+
+  const prefix = xmlPrefix(workbook.name);
+  const definedNamesTag = qualifiedName(prefix, "definedNames");
+  const calcPr = findFirstStartTag(workbookXml, "calcPr");
+  const insertOffset = calcPr?.start ?? findElementCloseStart(workbookXml, workbook);
+  return `${workbookXml.slice(0, insertOffset)}<${definedNamesTag}>${definedNameXml}</${definedNamesTag}>${workbookXml.slice(insertOffset)}`;
+}
+
+function deleteDefinedNameXml(
+  workbookXml: string,
+  target: { localSheetId?: string; name: string }
+): { deleted: boolean; xml: string } {
+  const existing = findMatchingDefinedName(workbookXml, target);
+  if (existing === undefined) {
+    return { deleted: false, xml: workbookXml };
+  }
+
+  const nextXml = `${workbookXml.slice(0, existing.start)}${workbookXml.slice(findElementEnd(workbookXml, existing))}`;
+  const definedNames = findFirstStartTag(nextXml, "definedNames");
+  if (definedNames === undefined) {
+    return { deleted: true, xml: nextXml };
+  }
+
+  const body = nextXml.slice(definedNames.end, findElementCloseStart(nextXml, definedNames));
+  if (findStartTags(body, "definedName").length > 0) {
+    return { deleted: true, xml: nextXml };
+  }
+
+  return {
+    deleted: true,
+    xml: `${nextXml.slice(0, definedNames.start)}${nextXml.slice(findElementEnd(nextXml, definedNames))}`
+  };
+}
+
+function buildDefinedNameXml(workbookXml: string, definedName: WorkbookDefinedName): string {
+  const tagName = qualifiedName(workbookPrefix(workbookXml), "definedName");
+  const attributes = [
+    `name="${escapeXmlAttribute(definedName.name)}"`,
+    definedName.comment === undefined
+      ? undefined
+      : `comment="${escapeXmlAttribute(definedName.comment)}"`,
+    definedName.hidden === undefined ? undefined : `hidden="${definedName.hidden ? "1" : "0"}"`,
+    definedName.localSheetId === undefined
+      ? undefined
+      : `localSheetId="${escapeXmlAttribute(definedName.localSheetId)}"`
+  ]
+    .filter((attribute): attribute is string => attribute !== undefined)
+    .join(" ");
+
+  return `<${tagName} ${attributes}>${escapeXmlText(definedName.text)}</${tagName}>`;
+}
+
+function findMatchingDefinedName(
+  workbookXml: string,
+  target: { localSheetId?: string; name: string }
+) {
+  return findStartTags(workbookXml, "definedName").find((definedName) => {
+    return (
+      definedName.attributes.name?.toLowerCase() === target.name.toLowerCase() &&
+      definedName.attributes.localSheetId === target.localSheetId
+    );
+  });
+}
+
+function workbookPrefix(workbookXml: string): string | undefined {
+  const workbook = findFirstStartTag(workbookXml, "workbook");
+  if (workbook === undefined) {
+    throw new WorkbookError("workbook.xml is missing workbook tag");
+  }
+
+  return xmlPrefix(workbook.name);
 }
 
 async function resolveWorkbookPart(pkg: OoxmlPackage): Promise<string> {
