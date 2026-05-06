@@ -138,6 +138,57 @@ test("validation reports worksheet dimensions that exclude cells", async () => {
   assert.equal(report.issues[0]?.target, "B2");
 });
 
+test("validation reports invalid worksheet dimensions and cell refs without throwing", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="BAD"/>
+  <sheetData>
+    <row r="1"><c r="1A"><v>42</v></c></row>
+  </sheetData>
+</worksheet>`
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 2);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "WORKSHEET_DIMENSION_REF_INVALID"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "WORKSHEET_CELL_REF_INVALID"),
+    true
+  );
+});
+
+test("validation reports out-of-bounds worksheet dimensions and cell refs", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:XFE1"/>
+  <sheetData>
+    <row r="1"><c r="XFE1"><v>42</v></c></row>
+  </sheetData>
+</worksheet>`
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(
+    report.issues.some((issue) => issue.code === "WORKSHEET_DIMENSION_REF_OUT_OF_BOUNDS"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "WORKSHEET_CELL_REF_OUT_OF_BOUNDS"),
+    true
+  );
+});
+
 test("validation reports invalid worksheet range attributes", async () => {
   const pkg = await openPackage(
     await createMinimalWorkbook({

@@ -2,12 +2,12 @@
   "name": "@ironsheet/core",
   "version": "0.0.0",
   "type": "module",
-  "description": "Runtime-neutral OOXML workbook engine for Ironsheet.",
+  "description": "Lossless TypeScript OOXML workbook engine for editing real XLSX and XLSM files.",
+  "license": "UNLICENSED",
+  "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "typescript", "workbook"],
   "exports": {
     ".": "./src/index.ts"
   },
-  "sideEffects": false,
-  "engines": {
-    "node": ">=18"
-  }
+  "files": ["src"],
+  "sideEffects": false
 }

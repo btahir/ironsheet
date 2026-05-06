@@ -185,7 +185,7 @@ test("lists workbook images and replaces existing image bytes", async () => {
 
   assert.deepEqual(await workbook.images(), [image]);
 
-  const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+  const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
   assert.deepEqual(await workbook.replaceImage("xl/media/image1.png", replacement), image);
   assert.deepEqual(Array.from(await workbook.pkg.readPart("xl/media/image1.png")), [
     ...replacement
@@ -199,11 +199,20 @@ test("lists workbook images and replaces existing image bytes", async () => {
   assert.deepEqual((await reopened.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
+test("image replacement rejects bytes that do not match the existing part type", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDrawing: true }));
+
+  await assert.rejects(
+    workbook.replaceImage("xl/media/image1.png", new Uint8Array([0xff, 0xd8, 0xff, 0x00])),
+    /expects PNG bytes/
+  );
+});
+
 test("renders template patches across cells ranges tables and images", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeDrawing: true, includeTable: true })
   );
-  const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 8, 7, 6]);
+  const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9]);
 
   const result = await workbook.renderTemplate({
     cells: [{ sheetName: "Sheet1", address: "D1", value: "Rendered" }],
@@ -1685,6 +1694,38 @@ test("replaces basic table body rows and updates the table ref", async () => {
   assert.match(tableXml, /<autoFilter ref="A1:B3"\/>/);
 });
 
+test("table row replacement refuses to expand through occupied worksheet rows", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      "</sheetData>",
+      '<row r="3"><c r="A3" t="inlineStr"><is><t>Existing</t></is></c></row></sheetData>'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  await assert.rejects(
+    workbook.replaceTableRows("RevenueTable", [
+      ["New", 10],
+      ["Growth", 20]
+    ]),
+    /Cannot expand table RevenueTable through occupied worksheet row 3/
+  );
+});
+
+test("table column append refuses to overwrite adjacent table ranges", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeTable: true, includeSecondTable: true })
+  );
+
+  await assert.rejects(
+    workbook.appendTableColumn("RevenueTable", "Forecast", [1]),
+    /overlaps table ExpenseTable/
+  );
+});
+
 test("table row replacement preserves body styles and shrinks dimensions", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({
@@ -1787,4 +1828,34 @@ test("table formula writes invalidate stale calculation chains", async () => {
   const names = outputZip.entries.map((entry) => entry.name);
 
   assert.equal(names.includes("xl/calcChain.xml"), false);
+});
+
+test("table data writes conservatively invalidate stale calculation chains", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeCalcChain: true, includeTable: true })
+  );
+
+  await workbook.replaceTableRows("RevenueTable", [["Data", 5]]);
+  const outputZip = parseZip(await workbook.write());
+  const names = outputZip.entries.map((entry) => entry.name);
+
+  assert.equal(names.includes("xl/calcChain.xml"), false);
+});
+
+test("named range writes conservatively invalidate stale calculation chains", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeCalcChain: true, includeDefinedName: true })
+  );
+
+  await workbook.patchNamedRange("RevenueRange", [["North", 10]]);
+  const outputZip = parseZip(await workbook.write());
+  const names = outputZip.entries.map((entry) => entry.name);
+
+  assert.equal(names.includes("xl/calcChain.xml"), false);
+  assert.equal(
+    workbook
+      .diagnostics()
+      .some((diagnostic) => diagnostic.code === "FORMULA_NAMED_RANGE_RECALCULATED"),
+    true
+  );
 });

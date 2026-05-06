@@ -358,7 +358,7 @@ export class OoxmlPackage {
       throw new PackageError(`Missing package part ${normalized}`);
     }
 
-    if (part.entry === undefined && part.dirtyText === undefined) {
+    if (part.entry === undefined && part.dirtyText === undefined && part.dirtyData === undefined) {
       throw new PackageError(`Missing package part data ${normalized}`);
     }
 

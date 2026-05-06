@@ -2,61 +2,191 @@
 
 Move fast and break no spreadsheets.
 
-Ironsheet is the lossless TypeScript engine for editing real XLSX and XLSM files without breaking formulas, styles, charts, pivots, macros, or layout.
+Ironsheet is a preservation-first TypeScript engine for editing real XLSX and XLSM workbooks without rewriting the parts you did not touch. It is built for report templates, finance models, dashboards, macro-enabled workbooks, and other Excel files where styles, formulas, charts, pivots, drawings, relationships, and layout matter.
 
-## Current MVP Slice
+Use Ironsheet when you need to modify an existing workbook and prove what changed.
 
-This repository currently implements the first vertical slice:
+## Why Ironsheet
 
-- ZIP central-directory parsing and writing.
-- CRC32.
-- Raw compressed payload preservation for untouched entries.
-- Duplicate and unsafe ZIP entry path rejection on read and write.
-- OPC relationship parsing and target resolution.
-- Workbook sheet discovery.
-- Worksheet autoFilter inventory plus set/delete helpers that preserve existing filter criteria XML.
-- Image inventory plus existing image replacement while preserving drawing anchors and relationships.
-- Defined-name inspection.
-- Classic worksheet comment inventory with author resolution through worksheet relationships.
-- Defined-name set/delete helpers for named ranges and scoped workbook names.
-- Conditional-formatting inventory plus set/delete helpers for worksheet-level rule blocks.
-- Data-validation inventory plus set/delete helpers with worksheet count maintenance.
-- Hyperlink inventory plus external hyperlink set/delete with worksheet relationship management.
-- Merged-cell inventory plus guarded merge/unmerge helpers with overlap validation.
-- Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
-- Named-range discovery plus guarded named-range read/write for template anchors.
-- Template render API for applying named-range, cell, range, table, and existing-image patches in one typed operation.
-- Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
-- Safe sheet visibility changes with hidden and veryHidden state support.
-- Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
-- Safe table column append and guarded rightmost-column removal.
-- Style metadata inspection with cell format counts.
-- Deduped cell style creation with custom number formats and style application.
-- Cell, batch-cell, and range read/write APIs.
-- Append-row API for template-backed exports.
-- Chunked worksheet row XML reader for future large-sheet transforms.
-- Chunked row XML streaming primitive for large worksheet writer work.
-- Streamed worksheet row replacement for large-sheet transforms that should not materialize full worksheet XML.
-- Basic table row replacement with table ref, autoFilter, style, totals-row preservation, formula recalculation, and worksheet dimension updates.
-- Formula writes, formula removal, totals-row formula movement, and dependent value edits with namespace-aware `calcPr` recalculation metadata and stale calc-chain removal.
-- Formula inventory plus sheet, cell/range, bounds, shared-formula metadata, and structured table-reference parsing for validation and future retargeting work.
-- Feature inspection for macros, shared strings, formula cells, external relationships, tables, drawings, charts, media, merges, hyperlinks, validation, conditional formatting, hidden sheets, comments, pivots, and defined names.
-- Template manifest API/CLI for discovering patchable named ranges, tables, images, validation state, and workbook feature signals in one call.
-- Exact chart formula retargeting and pivot cache worksheet-source retargeting.
-- Preservation fixtures for macros, merge cells, hyperlinks, validations, conditional formatting, drawings, charts, media, hidden sheets, and styled table rows.
-- Namespace-prefix preservation for workbook recalculation edits, worksheet cell/row insertion, append rows, and table row replacement.
-- Streaming XML tokenizer, chunk transform primitives, and streamed element extraction powering local XML helpers and future large-worksheet transforms.
-- Semantic validation for package relationship targets, duplicate relationship IDs, orphan relationship parts, orphan content type overrides, local worksheet/drawing relationship IDs, workbook sheet metadata, content types, worksheet dimensions, merge/validation/conditional-format/hyperlink refs, style indexes and cell format limits, shared string references/counts, worksheet/defined-name/chart formula references, formula bounds, formula table references, shared formula groups, table refs, table part counts, table metadata, table column structure, pivot table/cache source sanity, stale calc chains, and defined-name scope integrity.
-- Node adapter using `node:zlib`.
-- Safe Node mutation helpers that validate, diff, and only write successful workbook mutations.
-- CLI inspection, read, patch, range patch, table replacement/rename, and package diff commands.
-- Compatibility harness with ZIP integrity, Ironsheet semantic validation, and optional app-level checks.
-- Runtime guard that automatically scans every core source file for Node-only imports and runtime dependencies.
-- Workspace package manifests for core, node, compat, and CLI packages plus CI wiring.
+Most spreadsheet libraries are optimized for creating workbook-shaped files from JavaScript objects. Ironsheet is optimized for guarded workbook mutation:
 
-## Commands
+- **Lossless package editing**: untouched ZIP entries are preserved as raw compressed payloads.
+- **Template anchors**: patch named ranges, tables, cells, ranges, and existing images in one operation.
+- **Safety reports**: validate OOXML invariants, emit diagnostics, and classify package entries as changed, repacked, added, removed, or unchanged before writing.
+- **XLSM-aware preservation**: macro parts are kept byte-for-byte unless explicitly touched.
+- **Narrow failure modes**: unsupported workbook structures should produce targeted errors or warnings, not silent rewrites.
 
-Run the fast quality gate:
+That makes Ironsheet a better fit for “fill this Excel-authored template” than broad workbook builders.
+
+## Quickstart
+
+```bash
+npm install @ironsheet/node
+```
+
+```ts
+import { renderWorkbookTemplateSafely } from "@ironsheet/node";
+
+const report = await renderWorkbookTemplateSafely("template.xlsm", "output.xlsm", {
+  names: [
+    {
+      name: "RevenueRange",
+      values: [
+        ["Region", "Amount"],
+        ["North", 42000]
+      ]
+    }
+  ],
+  tables: [
+    {
+      tableName: "RevenueTable",
+      rows: [
+        ["North", 42000],
+        ["South", 31500]
+      ]
+    }
+  ],
+  images: [
+    {
+      imagePartName: "xl/media/image1.png",
+      data: await fetchLogoBytes()
+    }
+  ]
+});
+
+if (!report.wrote) {
+  throw new Error(`Workbook failed validation: ${report.validation.summary.errors} error(s)`);
+}
+
+console.log(report.diff.summary);
+```
+
+## CLI
+
+During repo development, run commands through `npm run cli -- ...`. Once installed as a package, the binary is `ironsheet`.
+
+Inspect a workbook before editing it:
+
+```bash
+npm run cli -- template-manifest template.xlsx
+```
+
+Render a template with validation, diagnostics, and a package diff before writing:
+
+```bash
+npm run cli -- render-template-safe template.xlsx output.xlsx @patch.json
+```
+
+Example `patch.json`:
+
+```json
+{
+  "names": [
+    {
+      "name": "RevenueRange",
+      "values": [
+        ["Region", "Amount"],
+        ["North", 42000]
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "tableName": "RevenueTable",
+      "rows": [
+        ["North", 42000],
+        ["South", 31500]
+      ]
+    }
+  ],
+  "images": [{ "imagePartName": "xl/media/image1.png", "path": "logo.png" }]
+}
+```
+
+Useful inspection commands:
+
+```bash
+npm run cli -- inspect workbook.xlsx
+npm run cli -- validate workbook.xlsx
+npm run cli -- diff before.xlsx after.xlsx
+npm run cli -- named-ranges workbook.xlsx
+npm run cli -- tables workbook.xlsx
+npm run cli -- images workbook.xlsx
+npm run cli -- formulas workbook.xlsx
+npm run cli -- styles workbook.xlsx
+```
+
+Targeted mutation commands:
+
+```bash
+npm run cli -- patch input.xlsx output.xlsx Sheet1 B2 "Hello"
+npm run cli -- patch-range input.xlsx output.xlsx Sheet1 B2 '[["Name","Amount"],["ACME",42]]'
+npm run cli -- patch-named-range input.xlsx output.xlsx RevenueRange '[["Name","Amount"],["ACME",42]]'
+npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["North",10],["South",20]]'
+npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
+npm run cli -- rename-sheet input.xlsx output.xlsx Sheet1 "Revenue 2026"
+npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
+npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
+```
+
+Mutating CLI commands use safe writes by default. They print JSON reports and exit nonzero without writing the output file when validation errors are found.
+
+## What Works Today
+
+Core workbook capabilities:
+
+- ZIP central-directory parse/write, CRC32, duplicate path rejection, unsafe path rejection, and raw compressed payload preservation.
+- OPC relationship parsing, target resolution, relationship mutation, and content type validation.
+- Sheet discovery, visibility edits, and safe sheet renaming with formula, defined-name, chart, and pivot-cache retargeting.
+- Cell, batch-cell, range, named-range, append-row, and table-row writes.
+- Table metadata, table row replacement, table rename, table-column rename, rightmost column removal, and append column.
+- Defined names, worksheet auto filters, data validations, conditional formats, hyperlinks, merged cells, comments, images, styles, formulas, charts, pivots, and macros inspection.
+- Existing image replacement while preserving drawing anchors and relationships.
+- Safe-by-default CLI mutation reports with validation, diagnostics, and content-vs-repack package diffs.
+- Style inspection and deduped cell format creation.
+- Template manifest and template render APIs.
+- Semantic validation for relationships, dimensions, hyperlinks, merged cells, styles, shared strings, formulas, tables, pivots, charts, calc chains, defined names, and content types.
+- Compatibility corpus with generated XLSX/XLSM/dashboard/pivot/large-sheet fixtures plus optional Numbers, LibreOffice, Open XML SDK, and Excel checks.
+
+Runtime split:
+
+- `@ironsheet/core`: runtime-neutral workbook engine and low-level OOXML primitives.
+- `@ironsheet/node`: Node file IO, compression adapter, and safe write helpers.
+- `@ironsheet/compat`: compatibility report and fixture manifest types.
+- `@ironsheet/cli`: command-line interface over the Node adapter.
+
+## Guardrails
+
+- Mutations preserve unknown XML by default.
+- Formula edits and dependent data edits mark workbooks for recalculation and remove stale calc-chain parts.
+- Named-range and table mutations conservatively force recalculation for defined-name and structured-reference formulas.
+- Template rendering preflights all targets before applying mutations.
+- Table expansion refuses occupied rows, and table column append refuses adjacent occupied cells or overlapping table ranges.
+- Existing image replacement validates bytes against the current media part type.
+- Invalid worksheet dimensions and cell refs are reported as validation issues instead of crashing validation.
+- Safe writes validate the final workbook and suppress output when validation errors are found.
+- Core runtime code has a guard against Node-only imports and runtime dependencies.
+
+## Known Gaps
+
+These are intentional product boundaries, not hidden claims:
+
+- ZIP64 read/write is not implemented yet.
+- New image insertion is not implemented; existing image replacement is supported.
+- Chart and pivot support focuses on preservation, validation, and targeted retargeting, not full chart/pivot authoring.
+- Some real-world Excel structures still need corpus fixtures before they should be considered release-ready.
+
+## Docs
+
+- [API guide](docs/api.md)
+- [Product research](docs/product-research.md)
+- [Compatibility testing](docs/testing/compatibility.md)
+
+## Development
+
+Use TypeScript for implementation, scripts, fixtures, and tests.
+
+Run the fast gate:
 
 ```bash
 npm run verify
@@ -68,277 +198,10 @@ Run the CI-equivalent local gate:
 npm run ci
 ```
 
-Inspect a workbook:
-
-```bash
-npm run cli -- inspect path/to/workbook.xlsx
-```
-
-List workbook tables:
-
-```bash
-npm run cli -- tables path/to/workbook.xlsx
-```
-
-List workbook formulas:
-
-```bash
-npm run cli -- formulas path/to/workbook.xlsx
-```
-
-List workbook auto filters:
-
-```bash
-npm run cli -- auto-filters path/to/workbook.xlsx
-```
-
-List workbook comments:
-
-```bash
-npm run cli -- comments path/to/workbook.xlsx
-```
-
-List workbook conditional formats:
-
-```bash
-npm run cli -- conditional-formats path/to/workbook.xlsx
-```
-
-List workbook data validations:
-
-```bash
-npm run cli -- data-validations path/to/workbook.xlsx
-```
-
-List workbook hyperlinks:
-
-```bash
-npm run cli -- hyperlinks path/to/workbook.xlsx
-```
-
-List workbook images:
-
-```bash
-npm run cli -- images path/to/workbook.xlsx
-```
-
-List workbook merged cells:
-
-```bash
-npm run cli -- merged-cells path/to/workbook.xlsx
-```
-
-List workbook named ranges:
-
-```bash
-npm run cli -- named-ranges path/to/workbook.xlsx
-```
-
-Inspect patchable workbook template anchors:
-
-```bash
-npm run cli -- template-manifest path/to/workbook.xlsx
-```
-
-Inspect workbook styles:
-
-```bash
-npm run cli -- styles path/to/workbook.xlsx
-```
-
-Validate package integrity and common workbook invariants:
-
-```bash
-npm run cli -- validate path/to/workbook.xlsx
-```
-
-Read a cell:
-
-```bash
-npm run cli -- read-cell path/to/workbook.xlsx Sheet1 A1
-```
-
-Read a range:
-
-```bash
-npm run cli -- read-range path/to/workbook.xlsx Sheet1 A1:C5
-```
-
-Read a named range:
-
-```bash
-npm run cli -- read-named-range path/to/workbook.xlsx RevenueRange
-```
-
-Patch a single cell:
-
-```bash
-npm run cli -- patch input.xlsx output.xlsx Sheet1 B2 "Hello from Ironsheet"
-```
-
-Apply a cell style:
-
-```bash
-npm run cli -- style-cell input.xlsx output.xlsx Sheet1 B2 '{"numberFormat":"$#,##0.00"}'
-```
-
-Patch a range:
-
-```bash
-npm run cli -- patch-range input.xlsx output.xlsx Sheet1 B2 '[["Name","Amount"],["ACME",42]]'
-```
-
-Patch a named range without hard-coding cell coordinates:
-
-```bash
-npm run cli -- patch-named-range input.xlsx output.xlsx RevenueRange '[["Name","Amount"],["ACME",42]]'
-```
-
-Append rows:
-
-```bash
-npm run cli -- append-rows input.xlsx output.xlsx Sheet1 '[["North",10],["South",20]]'
-```
-
-Replace basic table rows:
-
-```bash
-npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["New",10],["Growth",20]]'
-```
-
-Append or remove a table column:
-
-```bash
-npm run cli -- append-table-column input.xlsx output.xlsx RevenueTable Margin '[0.5,0.7]'
-npm run cli -- remove-table-column input.xlsx output.xlsx RevenueTable Margin
-```
-
-Rename a sheet, table, or table column and retarget references:
-
-```bash
-npm run cli -- rename-sheet input.xlsx output.xlsx Sheet1 "Revenue 2026"
-npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
-npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
-```
-
-Hide or show a sheet:
-
-```bash
-npm run cli -- hide-sheet input.xlsx output.xlsx Sheet1 veryHidden
-npm run cli -- show-sheet input.xlsx output.xlsx Sheet1
-```
-
-Set or delete a defined name:
-
-```bash
-npm run cli -- set-defined-name input.xlsx output.xlsx ReportRange 'Sheet1!$A$1:$B$10'
-npm run cli -- delete-defined-name input.xlsx output.xlsx ReportRange
-```
-
-Set or delete a worksheet auto filter:
-
-```bash
-npm run cli -- set-auto-filter input.xlsx output.xlsx Sheet1 '{"ref":"A1:C10"}'
-npm run cli -- delete-auto-filter input.xlsx output.xlsx Sheet1
-```
-
-Replace an existing image part:
-
-```bash
-npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
-```
-
-Render a template with cells, ranges, and tables in one JSON patch:
-
-```bash
-npm run cli -- render-template input.xlsx output.xlsx '{"names":[{"name":"RevenueRange","values":[["Name","Amount"],["ACME",42]]}],"cells":[{"sheetName":"Sheet1","address":"D1","value":"Rendered"}],"ranges":[{"sheetName":"Sheet1","startAddress":"E1","values":[[1,2],[3,4]]}],"tables":[{"tableName":"RevenueTable","rows":[["North",10],["South",20]]}]}'
-```
-
-Template patches can also be loaded from `@patch.json` and can replace existing workbook images:
-
-```json
-{
-  "images": [{ "imagePartName": "xl/media/image1.png", "path": "logo.png" }]
-}
-```
-
-Render with validation and a package diff before writing:
-
-```bash
-npm run cli -- render-template-safe input.xlsx output.xlsx @patch.json
-```
-
-Set or delete a conditional format:
-
-```bash
-npm run cli -- set-conditional-format input.xlsx output.xlsx Sheet1 '{"sqref":"C2:C10","rules":[{"type":"cellIs","priority":"1","operator":"greaterThan","formulas":["100"]}]}'
-npm run cli -- delete-conditional-format input.xlsx output.xlsx Sheet1 C2:C10
-```
-
-Set or delete a data validation:
-
-```bash
-npm run cli -- set-data-validation input.xlsx output.xlsx Sheet1 '{"sqref":"B2:B10","type":"whole","operator":"between","formula1":"0","formula2":"100"}'
-npm run cli -- delete-data-validation input.xlsx output.xlsx Sheet1 B2:B10
-```
-
-Set or delete an external hyperlink:
-
-```bash
-npm run cli -- set-hyperlink input.xlsx output.xlsx Sheet1 B2 https://example.com '{"display":"Example"}'
-npm run cli -- delete-hyperlink input.xlsx output.xlsx Sheet1 B2
-```
-
-Merge or unmerge cells:
-
-```bash
-npm run cli -- merge-cells input.xlsx output.xlsx Sheet1 A1:B1
-npm run cli -- unmerge-cells input.xlsx output.xlsx Sheet1 A1:B1
-```
-
-Retarget chart formulas or pivot cache sources:
-
-```bash
-npm run cli -- retarget-chart input.xlsx output.xlsx '[{"from":"Sheet1!$A$1:$B$2","to":"Sheet1!$A$1:$C$2"}]'
-npm run cli -- retarget-pivot input.xlsx output.xlsx '[{"from":{"sheet":"Sheet1","ref":"A1:B2"},"to":{"sheet":"Sheet1","ref":"A1:C2"}}]'
-```
-
-Diff two workbook packages:
-
-```bash
-npm run cli -- diff input.xlsx output.xlsx
-```
-
-Run compatibility checks:
-
-```bash
-npm run compat:check -- output.xlsx
-```
-
-Run the fixture corpus compatibility matrix:
-
-```bash
-npm run compat:corpus
-```
-
-This builds ignored generated smoke workbooks, then validates the active corpus fixtures.
-
-Open in Numbers for an interactive smoke check on macOS:
-
-```bash
-IRONSHEET_RUN_NUMBERS=1 npm run compat:check -- output.xlsx
-```
-
-## Development
-
-Use TypeScript for implementation, scripts, and tests.
-
 Use the safe commit loop:
 
 ```bash
 npm run commit:safe -- "feat: add workbook capability"
 ```
-
-This runs the CI-equivalent local gate before committing.
 
 `IRONSHEET_SPEC.md` is local planning material and is intentionally ignored.

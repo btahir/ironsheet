@@ -70,7 +70,6 @@ import {
   unmergeWorksheetCells,
   type CellInput,
   type CellPatch,
-  type FormulaValue,
   type ReadCellResult,
   type ReadRangeResult,
   type WorksheetAutoFilter,
@@ -500,6 +499,13 @@ export class Workbook {
     }
 
     await this.patchRange(range.sheetName, range.range.start.address, values);
+    await this.forceRecalculateOnOpen();
+    this.addDiagnostic({
+      severity: "info",
+      code: "FORMULA_NAMED_RANGE_RECALCULATED",
+      message: `Marked workbook for recalculation because named range ${range.name} was edited`,
+      part: range.sheetPartName
+    });
     return range;
   }
 
@@ -719,9 +725,22 @@ export class Workbook {
 
   async replaceImage(imagePartName: string, data: Uint8Array): Promise<WorkbookImage> {
     const normalized = normalizePartName(imagePartName);
-    const image = (await this.images()).find((candidate) => candidate.imagePartName === normalized);
+    const matches = (await this.images()).filter(
+      (candidate) => candidate.imagePartName === normalized
+    );
+    const image = matches[0];
     if (image === undefined) {
       throw new WorkbookError(`Unknown workbook image part ${normalized}`);
+    }
+
+    assertImageBytesMatchPartName(normalized, data);
+    if (matches.length > 1) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "IMAGE_PART_HAS_MULTIPLE_USES",
+        message: `Image part ${normalized} is referenced ${matches.length} times; replacement affects every use`,
+        part: normalized
+      });
     }
 
     this.pkg.setPart(normalized, data);
@@ -928,9 +947,7 @@ export class Workbook {
 
   async replaceTableRows(tableName: string, rows: CellInput[][]): Promise<WorkbookTable> {
     const table = await replaceTableRows(this.pkg, tableName, rows);
-    if (table.totalsRowCount > 0 || rows.some((row) => row.some(isFormulaValue))) {
-      await this.forceRecalculateOnOpen();
-    }
+    await this.forceRecalculateOnOpen();
 
     await this.recordMutationImpactDiagnostics({
       operation: "table",
@@ -1618,12 +1635,6 @@ export class Workbook {
   }
 }
 
-function isFormulaValue(value: CellInput): value is FormulaValue {
-  return (
-    typeof value === "object" && value !== null && !(value instanceof Date) && "formula" in value
-  );
-}
-
 function cellFormatFromStyleInput(style: WorkbookCellStyleInput): WorkbookCellFormat {
   return {
     ...(style.applyAlignment === undefined ? {} : { applyAlignment: style.applyAlignment }),
@@ -1708,6 +1719,84 @@ function rangesIntersect(left: CellRange, right: CellRange): boolean {
     left.start.row <= right.end.row &&
     left.end.row >= right.start.row
   );
+}
+
+function assertImageBytesMatchPartName(partName: string, data: Uint8Array): void {
+  const extension = partName.slice(partName.lastIndexOf(".") + 1).toLowerCase();
+  const expected = imageSignatureForExtension(extension);
+  if (expected === undefined || expected.matches(data)) {
+    return;
+  }
+
+  throw new WorkbookError(`Image part ${partName} expects ${expected.label} bytes`);
+}
+
+function imageSignatureForExtension(
+  extension: string
+): { label: string; matches: (data: Uint8Array) => boolean } | undefined {
+  if (extension === "png") {
+    return {
+      label: "PNG",
+      matches: (data) => startsWithBytes(data, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    };
+  }
+
+  if (extension === "jpg" || extension === "jpeg") {
+    return {
+      label: "JPEG",
+      matches: (data) => data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+    };
+  }
+
+  if (extension === "gif") {
+    return {
+      label: "GIF",
+      matches: (data) => startsWithAscii(data, "GIF87a") || startsWithAscii(data, "GIF89a")
+    };
+  }
+
+  if (extension === "bmp") {
+    return {
+      label: "BMP",
+      matches: (data) => startsWithAscii(data, "BM")
+    };
+  }
+
+  if (extension === "tif" || extension === "tiff") {
+    return {
+      label: "TIFF",
+      matches: (data) =>
+        startsWithBytes(data, [0x49, 0x49, 0x2a, 0x00]) ||
+        startsWithBytes(data, [0x4d, 0x4d, 0x00, 0x2a])
+    };
+  }
+
+  if (extension === "webp") {
+    return {
+      label: "WEBP",
+      matches: (data) => startsWithAscii(data, "RIFF") && startsWithAscii(data.subarray(8), "WEBP")
+    };
+  }
+
+  return undefined;
+}
+
+function startsWithAscii(data: Uint8Array, value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (data[index] !== value.charCodeAt(index)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function startsWithBytes(data: Uint8Array, bytes: number[]): boolean {
+  if (data.byteLength < bytes.length) {
+    return false;
+  }
+
+  return bytes.every((byte, index) => data[index] === byte);
 }
 
 function validateSheetName(name: string): void {

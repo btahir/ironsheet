@@ -1117,14 +1117,64 @@ async function validateWorksheetDimensions(
       continue;
     }
 
-    const range = parseCellRange(dimension.attributes.ref);
+    let range: ReturnType<typeof parseCellRange> | undefined;
+    try {
+      range = parseCellRange(dimension.attributes.ref);
+    } catch (_error) {
+      issues.push({
+        severity: "error",
+        code: "WORKSHEET_DIMENSION_REF_INVALID",
+        message: `Worksheet dimension ref ${dimension.attributes.ref} is invalid`,
+        part,
+        target: dimension.attributes.ref
+      });
+    }
+
+    if (range !== undefined && !cellRangeWithinExcelBounds(range)) {
+      issues.push({
+        severity: "error",
+        code: "WORKSHEET_DIMENSION_REF_OUT_OF_BOUNDS",
+        message: `Worksheet dimension ${range.ref} is outside the Excel worksheet grid`,
+        part,
+        target: range.ref
+      });
+    }
+
     for (const cell of findStartTags(xml, "c")) {
       const address = cell.attributes.r;
       if (address === undefined) {
         continue;
       }
 
-      const parsed = parseCellAddress(address);
+      let parsed: ReturnType<typeof parseCellAddress>;
+      try {
+        parsed = parseCellAddress(address);
+      } catch (_error) {
+        issues.push({
+          severity: "error",
+          code: "WORKSHEET_CELL_REF_INVALID",
+          message: `Worksheet cell ref ${address} is invalid`,
+          part,
+          target: address
+        });
+        continue;
+      }
+
+      if (parsed.column > excelMaxColumn || parsed.row > excelMaxRow) {
+        issues.push({
+          severity: "error",
+          code: "WORKSHEET_CELL_REF_OUT_OF_BOUNDS",
+          message: `Worksheet cell ${parsed.address} is outside the Excel worksheet grid`,
+          part,
+          target: parsed.address
+        });
+        continue;
+      }
+
+      if (range === undefined) {
+        continue;
+      }
+
       if (
         parsed.column < range.start.column ||
         parsed.column > range.end.column ||
@@ -1141,6 +1191,15 @@ async function validateWorksheetDimensions(
       }
     }
   }
+}
+
+function cellRangeWithinExcelBounds(range: ReturnType<typeof parseCellRange>): boolean {
+  return (
+    range.start.column <= excelMaxColumn &&
+    range.start.row <= excelMaxRow &&
+    range.end.column <= excelMaxColumn &&
+    range.end.row <= excelMaxRow
+  );
 }
 
 async function validateWorksheetRangeReferences(

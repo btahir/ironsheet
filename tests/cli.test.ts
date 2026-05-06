@@ -107,6 +107,30 @@ test("CLI patch-named-range updates a defined-name target", async () => {
   }
 });
 
+test("CLI rejects unsupported formula result JSON", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    const outputPath = resolve(directory, "output.xlsx");
+    await writeFile(inputPath, await createMinimalWorkbook());
+
+    const result = runCli([
+      "patch-range",
+      inputPath,
+      outputPath,
+      "Sheet1",
+      "A1",
+      '[[{"formula":"=SUM(1,2)","result":{"bad":true}}]]'
+    ]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Unsupported table cell value/);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test("CLI render-template-safe reports validation and writes output", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
 
@@ -137,7 +161,7 @@ test("CLI render-template accepts image files in JSON patches", async () => {
     const inputPath = resolve(directory, "input.xlsx");
     const outputPath = resolve(directory, "output.xlsx");
     const imagePath = resolve(directory, "logo.png");
-    const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 4, 3, 2, 1]);
+    const replacement = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4]);
     await writeFile(inputPath, await createMinimalWorkbook({ includeDrawing: true }));
     await writeFile(imagePath, replacement);
 

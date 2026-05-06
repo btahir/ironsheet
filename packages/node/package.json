@@ -2,13 +2,16 @@
   "name": "@ironsheet/node",
   "version": "0.0.0",
   "type": "module",
-  "description": "Node.js adapter for Ironsheet workbook IO.",
+  "description": "Node.js IO, compression, and safe-write adapter for Ironsheet workbooks.",
+  "license": "UNLICENSED",
+  "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "typescript", "node"],
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
     "@ironsheet/core": "0.0.0"
   },
+  "files": ["src"],
   "sideEffects": false,
   "engines": {
     "node": ">=18"

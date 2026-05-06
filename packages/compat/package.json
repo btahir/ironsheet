@@ -2,12 +2,12 @@
   "name": "@ironsheet/compat",
   "version": "0.0.0",
   "type": "module",
-  "description": "Compatibility report types and fixture manifest utilities for Ironsheet.",
+  "description": "Compatibility report types and fixture manifest utilities for Ironsheet workbook QA.",
+  "license": "UNLICENSED",
+  "keywords": ["xlsx", "xlsm", "excel", "ooxml", "compatibility", "testing"],
   "exports": {
     ".": "./src/index.ts"
   },
-  "sideEffects": false,
-  "engines": {
-    "node": ">=18"
-  }
+  "files": ["src"],
+  "sideEffects": false
 }

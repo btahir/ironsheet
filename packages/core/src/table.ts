@@ -93,6 +93,7 @@ export async function replaceTableRows(
   const newRef = `${numberToColumnLabel(range.start.column)}${range.start.row}:${numberToColumnLabel(range.end.column)}${Math.max(range.start.row, newEndRow)}`;
 
   const worksheetXml = await pkg.readText(table.worksheetPartName);
+  await assertTableRowsCanResize(pkg, table, worksheetXml, newRef);
   pkg.setText(
     table.worksheetPartName,
     replaceRowsInRange(
@@ -223,6 +224,7 @@ export async function appendWorkbookTableColumn(
   const bodyEndRow = range.end.row - table.totalsRowCount;
 
   let worksheetXml = await pkg.readText(table.worksheetPartName);
+  await assertTableColumnCanAppend(pkg, table, worksheetXml, newRef, column);
   for (let row = range.start.row; row <= range.end.row; row += 1) {
     const value =
       row === range.start.row
@@ -271,6 +273,7 @@ export async function removeRightmostWorkbookTableColumn(
   const column = range.start.column + columnIndex;
   const newRef = tableRef(range.start.column, range.start.row, column - 1, range.end.row);
   const worksheetXml = await pkg.readText(table.worksheetPartName);
+  await assertTableColumnCanRemove(pkg, table, column);
   pkg.setText(
     table.worksheetPartName,
     removeCellsInRange(worksheetXml, {
@@ -311,6 +314,147 @@ function parseTableRange(ref: string): {
     start: { row: parsedStart.row, column: parsedStart.column },
     end: { row: parsedEnd.row, column: parsedEnd.column }
   };
+}
+
+async function assertTableRowsCanResize(
+  pkg: OoxmlPackage,
+  table: WorkbookTable,
+  worksheetXml: string,
+  newRef: string
+): Promise<void> {
+  const oldRange = parseTableRange(table.ref);
+  const newRange = parseTableRange(newRef);
+  if (newRange.end.row > oldRange.end.row) {
+    const occupiedRows = worksheetOccupiedRows(worksheetXml);
+    for (let row = oldRange.end.row + 1; row <= newRange.end.row; row += 1) {
+      if (occupiedRows.has(row)) {
+        throw new WorkbookError(
+          `Cannot expand table ${table.displayName} through occupied worksheet row ${row}`
+        );
+      }
+    }
+  }
+
+  await assertTableRangeDoesNotOverlapOtherTables(pkg, table, newRef);
+}
+
+async function assertTableColumnCanAppend(
+  pkg: OoxmlPackage,
+  table: WorkbookTable,
+  worksheetXml: string,
+  newRef: string,
+  column: number
+): Promise<void> {
+  const range = parseTableRange(table.ref);
+  const occupiedAddress = firstOccupiedCellInRange(worksheetXml, {
+    start: { row: range.start.row, column },
+    end: { row: range.end.row, column }
+  });
+  if (occupiedAddress !== undefined) {
+    throw new WorkbookError(
+      `Cannot append column to table ${table.displayName}; ${occupiedAddress} is already occupied`
+    );
+  }
+
+  await assertTableRangeDoesNotOverlapOtherTables(pkg, table, newRef);
+}
+
+async function assertTableColumnCanRemove(
+  pkg: OoxmlPackage,
+  table: WorkbookTable,
+  column: number
+): Promise<void> {
+  const range = parseTableRange(table.ref);
+  await assertTableRangeDoesNotOverlapOtherTables(
+    pkg,
+    table,
+    tableRef(column, range.start.row, column, range.end.row)
+  );
+}
+
+async function assertTableRangeDoesNotOverlapOtherTables(
+  pkg: OoxmlPackage,
+  table: WorkbookTable,
+  ref: string
+): Promise<void> {
+  const range = parseTableRange(ref);
+  for (const other of await listWorkbookTables(pkg)) {
+    if (other.partName === table.partName || other.worksheetPartName !== table.worksheetPartName) {
+      continue;
+    }
+
+    if (tableRangesIntersect(range, parseTableRange(other.ref))) {
+      throw new WorkbookError(
+        `Cannot resize table ${table.displayName}; new range ${ref} overlaps table ${other.displayName} at ${other.ref}`
+      );
+    }
+  }
+}
+
+function worksheetOccupiedRows(xml: string): Set<number> {
+  const rows = new Set<number>();
+  for (const row of findStartTags(xml, "row")) {
+    const rowNumber = Number.parseInt(row.attributes.r ?? "", 10);
+    if (Number.isInteger(rowNumber) && rowNumber > 0) {
+      rows.add(rowNumber);
+    }
+  }
+
+  for (const cell of findStartTags(xml, "c")) {
+    const address = cell.attributes.r;
+    if (address === undefined) {
+      continue;
+    }
+
+    rows.add(parseCellAddress(address).row);
+  }
+
+  return rows;
+}
+
+function firstOccupiedCellInRange(
+  xml: string,
+  range: {
+    start: { row: number; column: number };
+    end: { row: number; column: number };
+  }
+): string | undefined {
+  for (const cell of findStartTags(xml, "c")) {
+    const address = cell.attributes.r;
+    if (address === undefined) {
+      continue;
+    }
+
+    const parsed = parseCellAddress(address);
+    if (
+      parsed.column >= range.start.column &&
+      parsed.column <= range.end.column &&
+      parsed.row >= range.start.row &&
+      parsed.row <= range.end.row
+    ) {
+      return parsed.address;
+    }
+  }
+
+  return undefined;
+}
+
+function tableRangesIntersect(
+  left: {
+    start: { row: number; column: number };
+    end: { row: number; column: number };
+  },
+  right: {
+    start: { row: number; column: number };
+    end: { row: number; column: number };
+  }
+): boolean {
+  return (
+    left.start.column <= right.end.column &&
+    left.end.column >= right.start.column &&
+    left.start.row <= right.end.row &&
+    left.end.row >= right.start.row
+  );
 }
 
 function tableRef(

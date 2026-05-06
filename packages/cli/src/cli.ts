@@ -4,14 +4,6 @@ import process from "node:process";
 import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "@ironsheet/core";
 import {
-  appendWorkbookRows,
-  appendWorkbookTableColumn,
-  deleteWorkbookAutoFilter,
-  deleteWorkbookConditionalFormat,
-  deleteWorkbookDataValidation,
-  deleteWorkbookDefinedName,
-  deleteWorkbookHyperlink,
-  hideWorkbookSheet,
   inspectWorkbookTemplate,
   inspectWorkbookStyles,
   listWorkbookAutoFilters,
@@ -24,38 +16,20 @@ import {
   listWorkbookMergedCells,
   listWorkbookNamedRanges,
   listWorkbookTables,
-  mergeWorkbookCells,
-  patchWorkbookCell,
-  patchWorkbookNamedRange,
-  patchWorkbookRange,
+  mutateWorkbookFile,
   readWorkbook,
   readWorkbookCell,
   readWorkbookNamedRange,
   readWorkbookRange,
-  removeRightmostWorkbookTableColumn,
-  renameWorkbookSheet,
-  renameWorkbookTable,
-  renameWorkbookTableColumn,
-  replaceWorkbookImageFile,
-  replaceWorkbookTableRows,
   renderWorkbookTemplate,
   renderWorkbookTemplateSafely,
-  retargetWorkbookChartFormulasFile,
-  retargetWorkbookPivotCacheSourcesFile,
-  setWorkbookAutoFilter,
-  setWorkbookConditionalFormat,
-  setWorkbookDataValidation,
-  setWorkbookDefinedName,
-  setWorkbookHyperlink,
-  showWorkbookSheet,
-  styleWorkbookCell,
-  unmergeWorkbookCells,
   validateWorkbookFile
 } from "@ironsheet/node";
 import type {
   CellInput,
   ChartFormulaRetarget,
   PivotCacheSourceRetarget,
+  Workbook,
   WorkbookCellStyleInput,
   WorkbookSheetState,
   WorkbookTemplatePatch,
@@ -264,6 +238,31 @@ async function diff(beforePath: string, afterPath: string): Promise<void> {
   console.log(JSON.stringify(diffZipPackages(before, after), null, 2));
 }
 
+async function safeMutate(
+  inputPath: string,
+  outputPath: string,
+  mutate: (workbook: Workbook) => Promise<unknown> | unknown,
+  operation: string | (() => string)
+): Promise<void> {
+  const report = await mutateWorkbookFile(inputPath, outputPath, async (workbook) => {
+    await mutate(workbook);
+  });
+  console.log(
+    JSON.stringify(
+      {
+        operation: typeof operation === "function" ? operation() : operation,
+        ...report
+      },
+      null,
+      2
+    )
+  );
+
+  if (!report.wrote) {
+    process.exitCode = 1;
+  }
+}
+
 async function patch(
   inputPath: string,
   outputPath: string,
@@ -271,8 +270,12 @@ async function patch(
   address: string,
   rawValue: string
 ): Promise<void> {
-  await patchWorkbookCell(inputPath, outputPath, sheetName, address, parseCliValue(rawValue));
-  console.log(`patched ${sheetName}!${address} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.patchCell(sheetName, address, parseCliValue(rawValue)),
+    `patched ${sheetName}!${address}`
+  );
 }
 
 async function styleCellCommand(
@@ -282,8 +285,12 @@ async function styleCellCommand(
   address: string,
   rawStyle: string
 ): Promise<void> {
-  await styleWorkbookCell(inputPath, outputPath, sheetName, address, parseStyle(rawStyle));
-  console.log(`styled ${sheetName}!${address} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.styleCell(sheetName, address, parseStyle(rawStyle)),
+    `styled ${sheetName}!${address}`
+  );
 }
 
 async function patchRangeCommand(
@@ -293,8 +300,12 @@ async function patchRangeCommand(
   startAddress: string,
   rawRows: string
 ): Promise<void> {
-  await patchWorkbookRange(inputPath, outputPath, sheetName, startAddress, parseRows(rawRows));
-  console.log(`patched ${sheetName}!${startAddress} range -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.patchRange(sheetName, startAddress, parseRows(rawRows)),
+    `patched ${sheetName}!${startAddress} range`
+  );
 }
 
 async function patchNamedRangeCommand(
@@ -304,14 +315,17 @@ async function patchNamedRangeCommand(
   rawRows: string,
   sheetName: string | undefined
 ): Promise<void> {
-  await patchWorkbookNamedRange(
+  await safeMutate(
     inputPath,
     outputPath,
-    name,
-    parseRows(rawRows),
-    sheetName === undefined ? {} : { sheetName }
+    (workbook) =>
+      workbook.patchNamedRange(
+        name,
+        parseRows(rawRows),
+        sheetName === undefined ? {} : { sheetName }
+      ),
+    `patched named range ${name}`
   );
-  console.log(`patched named range ${name} -> ${outputPath}`);
 }
 
 async function appendRowsCommand(
@@ -320,8 +334,12 @@ async function appendRowsCommand(
   sheetName: string,
   rawRows: string
 ): Promise<void> {
-  await appendWorkbookRows(inputPath, outputPath, sheetName, parseRows(rawRows));
-  console.log(`appended rows to ${sheetName} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.appendRows(sheetName, parseRows(rawRows)),
+    `appended rows to ${sheetName}`
+  );
 }
 
 async function appendTableColumn(
@@ -331,14 +349,17 @@ async function appendTableColumn(
   columnName: string,
   rawValues: string | undefined
 ): Promise<void> {
-  await appendWorkbookTableColumn(
+  await safeMutate(
     inputPath,
     outputPath,
-    tableName,
-    columnName,
-    rawValues === undefined ? [] : parseRowValues(rawValues)
+    (workbook) =>
+      workbook.appendTableColumn(
+        tableName,
+        columnName,
+        rawValues === undefined ? [] : parseRowValues(rawValues)
+      ),
+    `appended ${tableName}[${columnName}]`
   );
-  console.log(`appended ${tableName}[${columnName}] -> ${outputPath}`);
 }
 
 async function setDefinedName(
@@ -348,14 +369,12 @@ async function setDefinedName(
   text: string,
   rawOptions: string | undefined
 ): Promise<void> {
-  await setWorkbookDefinedName(
+  await safeMutate(
     inputPath,
     outputPath,
-    name,
-    text,
-    parseDefinedNameOptions(rawOptions)
+    (workbook) => workbook.setDefinedName(name, text, parseDefinedNameOptions(rawOptions)),
+    `set defined name ${name}`
   );
-  console.log(`set defined name ${name} -> ${outputPath}`);
 }
 
 async function deleteDefinedName(
@@ -364,13 +383,15 @@ async function deleteDefinedName(
   name: string,
   rawOptions: string | undefined
 ): Promise<void> {
-  const deleted = await deleteWorkbookDefinedName(
+  let deleted = false;
+  await safeMutate(
     inputPath,
     outputPath,
-    name,
-    parseDefinedNameDeleteOptions(rawOptions)
+    async (workbook) => {
+      deleted = await workbook.deleteDefinedName(name, parseDefinedNameDeleteOptions(rawOptions));
+    },
+    () => `${deleted ? "deleted" : "did not find"} defined name ${name}`
   );
-  console.log(`${deleted ? "deleted" : "did not find"} defined name ${name} -> ${outputPath}`);
 }
 
 async function setAutoFilter(
@@ -380,8 +401,12 @@ async function setAutoFilter(
   rawAutoFilter: string
 ): Promise<void> {
   const autoFilter = parseAutoFilter(rawAutoFilter);
-  await setWorkbookAutoFilter(inputPath, outputPath, sheetName, autoFilter);
-  console.log(`set auto filter ${sheetName}!${autoFilter.ref} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.setAutoFilter(sheetName, autoFilter),
+    `set auto filter ${sheetName}!${autoFilter.ref}`
+  );
 }
 
 async function deleteAutoFilter(
@@ -389,8 +414,15 @@ async function deleteAutoFilter(
   outputPath: string,
   sheetName: string
 ): Promise<void> {
-  const deleted = await deleteWorkbookAutoFilter(inputPath, outputPath, sheetName);
-  console.log(`${deleted ? "deleted" : "did not find"} auto filter ${sheetName} -> ${outputPath}`);
+  let deleted = false;
+  await safeMutate(
+    inputPath,
+    outputPath,
+    async (workbook) => {
+      deleted = await workbook.deleteAutoFilter(sheetName);
+    },
+    () => `${deleted ? "deleted" : "did not find"} auto filter ${sheetName}`
+  );
 }
 
 async function setConditionalFormat(
@@ -400,8 +432,12 @@ async function setConditionalFormat(
   rawConditionalFormat: string
 ): Promise<void> {
   const conditionalFormat = parseConditionalFormat(rawConditionalFormat);
-  await setWorkbookConditionalFormat(inputPath, outputPath, sheetName, conditionalFormat);
-  console.log(`set conditional format ${sheetName}!${conditionalFormat.sqref} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.setConditionalFormat(sheetName, conditionalFormat),
+    `set conditional format ${sheetName}!${conditionalFormat.sqref}`
+  );
 }
 
 async function deleteConditionalFormat(
@@ -410,9 +446,14 @@ async function deleteConditionalFormat(
   sheetName: string,
   sqref: string
 ): Promise<void> {
-  const deleted = await deleteWorkbookConditionalFormat(inputPath, outputPath, sheetName, sqref);
-  console.log(
-    `${deleted ? "deleted" : "did not find"} conditional format ${sheetName}!${sqref} -> ${outputPath}`
+  let deleted = false;
+  await safeMutate(
+    inputPath,
+    outputPath,
+    async (workbook) => {
+      deleted = await workbook.deleteConditionalFormat(sheetName, sqref);
+    },
+    () => `${deleted ? "deleted" : "did not find"} conditional format ${sheetName}!${sqref}`
   );
 }
 
@@ -423,8 +464,12 @@ async function setDataValidation(
   rawValidation: string
 ): Promise<void> {
   const dataValidation = parseDataValidation(rawValidation);
-  await setWorkbookDataValidation(inputPath, outputPath, sheetName, dataValidation);
-  console.log(`set data validation ${sheetName}!${dataValidation.sqref} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.setDataValidation(sheetName, dataValidation),
+    `set data validation ${sheetName}!${dataValidation.sqref}`
+  );
 }
 
 async function deleteDataValidation(
@@ -433,9 +478,14 @@ async function deleteDataValidation(
   sheetName: string,
   sqref: string
 ): Promise<void> {
-  const deleted = await deleteWorkbookDataValidation(inputPath, outputPath, sheetName, sqref);
-  console.log(
-    `${deleted ? "deleted" : "did not find"} data validation ${sheetName}!${sqref} -> ${outputPath}`
+  let deleted = false;
+  await safeMutate(
+    inputPath,
+    outputPath,
+    async (workbook) => {
+      deleted = await workbook.deleteDataValidation(sheetName, sqref);
+    },
+    () => `${deleted ? "deleted" : "did not find"} data validation ${sheetName}!${sqref}`
   );
 }
 
@@ -445,8 +495,12 @@ async function mergeCells(
   sheetName: string,
   ref: string
 ): Promise<void> {
-  await mergeWorkbookCells(inputPath, outputPath, sheetName, ref);
-  console.log(`merged ${sheetName}!${ref} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.mergeCells(sheetName, ref),
+    `merged ${sheetName}!${ref}`
+  );
 }
 
 async function unmergeCells(
@@ -455,8 +509,15 @@ async function unmergeCells(
   sheetName: string,
   ref: string
 ): Promise<void> {
-  const unmerged = await unmergeWorkbookCells(inputPath, outputPath, sheetName, ref);
-  console.log(`${unmerged ? "unmerged" : "did not find"} ${sheetName}!${ref} -> ${outputPath}`);
+  let unmerged = false;
+  await safeMutate(
+    inputPath,
+    outputPath,
+    async (workbook) => {
+      unmerged = await workbook.unmergeCells(sheetName, ref);
+    },
+    () => `${unmerged ? "unmerged" : "did not find"} ${sheetName}!${ref}`
+  );
 }
 
 async function setHyperlink(
@@ -467,15 +528,12 @@ async function setHyperlink(
   target: string,
   rawOptions: string | undefined
 ): Promise<void> {
-  await setWorkbookHyperlink(
+  await safeMutate(
     inputPath,
     outputPath,
-    sheetName,
-    ref,
-    target,
-    parseHyperlinkOptions(rawOptions)
+    (workbook) => workbook.setHyperlink(sheetName, ref, target, parseHyperlinkOptions(rawOptions)),
+    `set hyperlink ${sheetName}!${ref}`
   );
-  console.log(`set hyperlink ${sheetName}!${ref} -> ${outputPath}`);
 }
 
 async function deleteHyperlink(
@@ -484,9 +542,14 @@ async function deleteHyperlink(
   sheetName: string,
   ref: string
 ): Promise<void> {
-  const deleted = await deleteWorkbookHyperlink(inputPath, outputPath, sheetName, ref);
-  console.log(
-    `${deleted ? "deleted" : "did not find"} hyperlink ${sheetName}!${ref} -> ${outputPath}`
+  let deleted = false;
+  await safeMutate(
+    inputPath,
+    outputPath,
+    async (workbook) => {
+      deleted = await workbook.deleteHyperlink(sheetName, ref);
+    },
+    () => `${deleted ? "deleted" : "did not find"} hyperlink ${sheetName}!${ref}`
   );
 }
 
@@ -496,8 +559,12 @@ async function replaceTable(
   tableName: string,
   rawRows: string
 ): Promise<void> {
-  await replaceWorkbookTableRows(inputPath, outputPath, tableName, parseRows(rawRows));
-  console.log(`replaced ${tableName} rows -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.replaceTableRows(tableName, parseRows(rawRows)),
+    `replaced ${tableName} rows`
+  );
 }
 
 async function replaceImage(
@@ -506,8 +573,13 @@ async function replaceImage(
   imagePartName: string,
   imagePath: string
 ): Promise<void> {
-  await replaceWorkbookImageFile(inputPath, outputPath, imagePartName, imagePath);
-  console.log(`replaced ${imagePartName} from ${imagePath} -> ${outputPath}`);
+  const imageData = new Uint8Array(await readFile(imagePath));
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.replaceImage(imagePartName, imageData),
+    `replaced ${imagePartName} from ${imagePath}`
+  );
 }
 
 async function renderTemplate(
@@ -546,8 +618,12 @@ async function renameTable(
   tableName: string,
   nextName: string
 ): Promise<void> {
-  await renameWorkbookTable(inputPath, outputPath, tableName, nextName);
-  console.log(`renamed ${tableName} to ${nextName} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.renameTable(tableName, nextName),
+    `renamed ${tableName} to ${nextName}`
+  );
 }
 
 async function renameSheet(
@@ -556,8 +632,12 @@ async function renameSheet(
   sheetName: string,
   nextName: string
 ): Promise<void> {
-  await renameWorkbookSheet(inputPath, outputPath, sheetName, nextName);
-  console.log(`renamed ${sheetName} to ${nextName} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.renameSheet(sheetName, nextName),
+    `renamed ${sheetName} to ${nextName}`
+  );
 }
 
 async function hideSheet(
@@ -567,13 +647,21 @@ async function hideSheet(
   rawState: string | undefined
 ): Promise<void> {
   const state = parseSheetState(rawState);
-  await hideWorkbookSheet(inputPath, outputPath, sheetName, state);
-  console.log(`hid ${sheetName} as ${state} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.hideSheet(sheetName, state),
+    `hid ${sheetName} as ${state}`
+  );
 }
 
 async function showSheet(inputPath: string, outputPath: string, sheetName: string): Promise<void> {
-  await showWorkbookSheet(inputPath, outputPath, sheetName);
-  console.log(`showed ${sheetName} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.showSheet(sheetName),
+    `showed ${sheetName}`
+  );
 }
 
 async function renameTableColumn(
@@ -583,8 +671,12 @@ async function renameTableColumn(
   columnName: string,
   nextName: string
 ): Promise<void> {
-  await renameWorkbookTableColumn(inputPath, outputPath, tableName, columnName, nextName);
-  console.log(`renamed ${tableName}[${columnName}] to ${nextName} -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.renameTableColumn(tableName, columnName, nextName),
+    `renamed ${tableName}[${columnName}] to ${nextName}`
+  );
 }
 
 async function removeTableColumn(
@@ -593,8 +685,12 @@ async function removeTableColumn(
   tableName: string,
   columnName: string
 ): Promise<void> {
-  await removeRightmostWorkbookTableColumn(inputPath, outputPath, tableName, columnName);
-  console.log(`removed ${tableName}[${columnName}] -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.removeRightmostTableColumn(tableName, columnName),
+    `removed ${tableName}[${columnName}]`
+  );
 }
 
 async function retargetChart(
@@ -602,8 +698,12 @@ async function retargetChart(
   outputPath: string,
   rawRetargets: string
 ): Promise<void> {
-  await retargetWorkbookChartFormulasFile(inputPath, outputPath, parseChartRetargets(rawRetargets));
-  console.log(`retargeted chart formulas -> ${outputPath}`);
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.retargetChartFormulas(parseChartRetargets(rawRetargets)),
+    "retargeted chart formulas"
+  );
 }
 
 async function retargetPivot(
@@ -611,12 +711,12 @@ async function retargetPivot(
   outputPath: string,
   rawRetargets: string
 ): Promise<void> {
-  await retargetWorkbookPivotCacheSourcesFile(
+  await safeMutate(
     inputPath,
     outputPath,
-    parsePivotRetargets(rawRetargets)
+    (workbook) => workbook.retargetPivotCacheSources(parsePivotRetargets(rawRetargets)),
+    "retargeted pivot cache sources"
   );
-  console.log(`retargeted pivot cache sources -> ${outputPath}`);
 }
 
 function parseCliValue(value: string): CellInput {
@@ -1023,9 +1123,19 @@ function parseJsonCell(value: unknown): CellInput {
     typeof value === "object" &&
     value !== null &&
     "formula" in value &&
-    typeof value.formula === "string"
+    typeof value.formula === "string" &&
+    Object.keys(value).every((key) => key === "formula" || key === "result")
   ) {
-    return value as { formula: string };
+    const result = "result" in value ? value.result : undefined;
+    if (
+      result === undefined ||
+      result === null ||
+      typeof result === "string" ||
+      typeof result === "number" ||
+      typeof result === "boolean"
+    ) {
+      return result === undefined ? { formula: value.formula } : { formula: value.formula, result };
+    }
   }
 
   throw new Error(`Unsupported table cell value ${JSON.stringify(value)}`);

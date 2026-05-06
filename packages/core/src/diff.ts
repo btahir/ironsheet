@@ -1,10 +1,12 @@
 import { parseZip } from "./zip/index.ts";
 
-export type PackageDiffStatus = "added" | "removed" | "changed" | "unchanged";
+export type PackageDiffStatus = "added" | "removed" | "changed" | "repacked" | "unchanged";
 
 export type PackageEntryDiff = {
   name: string;
   status: PackageDiffStatus;
+  contentChanged: boolean;
+  containerChanged: boolean;
   before?: PackageEntrySnapshot;
   after?: PackageEntrySnapshot;
 };
@@ -33,6 +35,8 @@ export function diffZipPackages(beforeData: Uint8Array, afterData: Uint8Array): 
       return {
         name,
         status: "added",
+        contentChanged: true,
+        containerChanged: true,
         after: snapshotEntry(afterEntry)
       };
     }
@@ -41,6 +45,8 @@ export function diffZipPackages(beforeData: Uint8Array, afterData: Uint8Array): 
       return {
         name,
         status: "removed",
+        contentChanged: true,
+        containerChanged: true,
         before: snapshotEntry(beforeEntry)
       };
     }
@@ -49,9 +55,19 @@ export function diffZipPackages(beforeData: Uint8Array, afterData: Uint8Array): 
       throw new Error(`Unexpected package diff state for ${name}`);
     }
 
+    const contentChanged = entryContentChanged(beforeEntry, afterEntry);
+    const containerChanged = entryContainerChanged(beforeEntry, afterEntry);
+
     return {
       name,
-      status: entriesEqual(beforeEntry, afterEntry) ? "unchanged" : "changed",
+      status:
+        contentChanged || !containerChanged
+          ? contentChanged
+            ? "changed"
+            : "unchanged"
+          : "repacked",
+      contentChanged,
+      containerChanged,
       before: snapshotEntry(beforeEntry),
       after: snapshotEntry(afterEntry)
     };
@@ -77,14 +93,20 @@ function snapshotEntry(entry: {
   };
 }
 
-function entriesEqual(
-  before: { crc32: number; compressedData: Uint8Array; compressionMethod: number },
-  after: { crc32: number; compressedData: Uint8Array; compressionMethod: number }
+function entryContentChanged(
+  before: { crc32: number; uncompressedSize: number },
+  after: { crc32: number; uncompressedSize: number }
+): boolean {
+  return before.crc32 !== after.crc32 || before.uncompressedSize !== after.uncompressedSize;
+}
+
+function entryContainerChanged(
+  before: { compressedData: Uint8Array; compressionMethod: number },
+  after: { compressedData: Uint8Array; compressionMethod: number }
 ): boolean {
   return (
-    before.crc32 === after.crc32 &&
-    before.compressionMethod === after.compressionMethod &&
-    bytesEqual(before.compressedData, after.compressedData)
+    before.compressionMethod !== after.compressionMethod ||
+    !bytesEqual(before.compressedData, after.compressedData)
   );
 }
 
@@ -107,6 +129,7 @@ function summarize(entries: PackageEntryDiff[]): Record<PackageDiffStatus, numbe
     added: 0,
     removed: 0,
     changed: 0,
+    repacked: 0,
     unchanged: 0
   };
 
