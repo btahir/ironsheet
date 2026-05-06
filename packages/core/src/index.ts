@@ -85,6 +85,7 @@ export {
   type WorkbookTemplateCellPatch,
   type WorkbookTemplateImagePatch,
   type WorkbookTemplateNamedRangePatch,
+  type WorkbookTemplateManifest,
   type WorkbookTemplatePatch,
   type WorkbookTemplateRangePatch,
   type WorkbookTemplateRenderResult,

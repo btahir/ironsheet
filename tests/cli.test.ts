@@ -49,6 +49,32 @@ test("CLI validate exits nonzero for validation errors", async () => {
   }
 });
 
+test("CLI template-manifest reports patchable anchors", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
+
+  try {
+    const workbookPath = resolve(directory, "template.xlsx");
+    await writeFile(
+      workbookPath,
+      await createMinimalWorkbook({
+        includeDefinedName: true,
+        includeDrawing: true,
+        includeTable: true
+      })
+    );
+
+    const result = runCli(["template-manifest", workbookPath]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"namedRanges"/);
+    assert.match(result.stdout, /"RevenueRange"/);
+    assert.match(result.stdout, /"RevenueTable"/);
+    assert.match(result.stdout, /"xl\/media\/image1\.png"/);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test("CLI patch-named-range updates a defined-name target", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
 

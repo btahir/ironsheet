@@ -121,6 +121,18 @@ export type WorkbookInspectResult = {
   diagnostics: Diagnostic[];
 };
 
+export type WorkbookTemplateManifest = {
+  workbookPart: string;
+  sheets: WorkbookSheet[];
+  definedNames: WorkbookDefinedName[];
+  diagnostics: Diagnostic[];
+  features: WorkbookFeatureSummary;
+  images: WorkbookImage[];
+  namedRanges: WorkbookNamedRange[];
+  tables: WorkbookTable[];
+  validation: ValidationReport;
+};
+
 export type WorkbookFeatureSummary = {
   calcChains: number;
   charts: number;
@@ -1092,6 +1104,21 @@ export class Workbook {
       parts,
       features: await summarizeFeatures(this.pkg, parts, this.workbookPart),
       diagnostics: this.diagnostics()
+    };
+  }
+
+  async templateManifest(): Promise<WorkbookTemplateManifest> {
+    const inspected = await this.inspect();
+    return {
+      workbookPart: inspected.workbookPart,
+      sheets: inspected.sheets,
+      definedNames: inspected.definedNames,
+      diagnostics: inspected.diagnostics,
+      features: inspected.features,
+      images: await this.images(),
+      namedRanges: await this.namedRanges(),
+      tables: await this.tables(),
+      validation: await this.validate()
     };
   }
 

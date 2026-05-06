@@ -12,6 +12,7 @@ import {
   deleteWorkbookDefinedName,
   deleteWorkbookHyperlink,
   hideWorkbookSheet,
+  inspectWorkbookTemplate,
   inspectWorkbookStyles,
   listWorkbookAutoFilters,
   listWorkbookComments,
@@ -108,6 +109,7 @@ type Command =
   | "style-cell"
   | "styles"
   | "tables"
+  | "template-manifest"
   | "unmerge-cells"
   | "validate"
   | "diff";
@@ -125,6 +127,7 @@ function usage(): never {
   npm run cli -- images <workbook.xlsx> [sheet]
   npm run cli -- merged-cells <workbook.xlsx> [sheet]
   npm run cli -- named-ranges <workbook.xlsx> [name]
+  npm run cli -- template-manifest <workbook.xlsx>
   npm run cli -- styles <workbook.xlsx>
   npm run cli -- validate <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
@@ -214,6 +217,10 @@ async function mergedCells(path: string, sheetName: string | undefined): Promise
 
 async function namedRanges(path: string, name: string | undefined): Promise<void> {
   console.log(JSON.stringify(await listWorkbookNamedRanges(path, name), null, 2));
+}
+
+async function templateManifest(path: string): Promise<void> {
+  console.log(JSON.stringify(await inspectWorkbookTemplate(path), null, 2));
 }
 
 async function styles(path: string): Promise<void> {
@@ -1093,6 +1100,12 @@ try {
       usage();
     }
     await namedRanges(path, name);
+  } else if (command === "template-manifest") {
+    const [path] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await templateManifest(path);
   } else if (command === "styles") {
     const [path] = args;
     if (path === undefined) {

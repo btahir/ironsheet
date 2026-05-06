@@ -305,6 +305,13 @@ export async function listWorkbookImages(
   return workbook.images(sheetName);
 }
 
+export async function inspectWorkbookTemplate(
+  inputPath: string
+): Promise<Awaited<ReturnType<Workbook["templateManifest"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.templateManifest();
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {

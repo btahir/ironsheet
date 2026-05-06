@@ -95,6 +95,27 @@ test("inspect reports workbook feature signals", async () => {
   });
 });
 
+test("builds a template manifest for patchable workbook anchors", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({
+      includeDefinedName: true,
+      includeDrawing: true,
+      includeTable: true
+    })
+  );
+
+  const manifest = await workbook.templateManifest();
+
+  assert.equal(manifest.validation.summary.errors, 0);
+  assert.equal(manifest.namedRanges.length, 1);
+  assert.equal(manifest.namedRanges[0]?.name, "RevenueRange");
+  assert.equal(manifest.tables.length, 1);
+  assert.equal(manifest.tables[0]?.name, "RevenueTable");
+  assert.equal(manifest.images.length, 1);
+  assert.equal(manifest.images[0]?.imagePartName, "xl/media/image1.png");
+  assert.equal(manifest.features.definedNames, 2);
+});
+
 test("inspect counts worksheet formula cells", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeTable: true, includeTableTotals: true })

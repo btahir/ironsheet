@@ -41,6 +41,7 @@ This repository currently implements the first vertical slice:
 - Formula writes, formula removal, totals-row formula movement, and dependent value edits with namespace-aware `calcPr` recalculation metadata and stale calc-chain removal.
 - Formula inventory plus sheet, cell/range, bounds, shared-formula metadata, and structured table-reference parsing for validation and future retargeting work.
 - Feature inspection for macros, shared strings, formula cells, external relationships, tables, drawings, charts, media, merges, hyperlinks, validation, conditional formatting, hidden sheets, comments, pivots, and defined names.
+- Template manifest API/CLI for discovering patchable named ranges, tables, images, validation state, and workbook feature signals in one call.
 - Exact chart formula retargeting and pivot cache worksheet-source retargeting.
 - Preservation fixtures for macros, merge cells, hyperlinks, validations, conditional formatting, drawings, charts, media, hidden sheets, and styled table rows.
 - Namespace-prefix preservation for workbook recalculation edits, worksheet cell/row insertion, append rows, and table row replacement.
@@ -131,6 +132,12 @@ List workbook named ranges:
 
 ```bash
 npm run cli -- named-ranges path/to/workbook.xlsx
+```
+
+Inspect patchable workbook template anchors:
+
+```bash
+npm run cli -- template-manifest path/to/workbook.xlsx
 ```
 
 Inspect workbook styles:
