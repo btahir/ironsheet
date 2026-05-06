@@ -37,7 +37,9 @@ import { validateWorkbookPackage, type ValidationReport } from "./validation.ts"
 import {
   appendRows,
   applyCellStyle,
+  deleteWorksheetDataValidation,
   deleteWorksheetHyperlink,
+  listWorksheetDataValidations,
   listWorksheetHyperlinks,
   listWorksheetMergedCells,
   mergeWorksheetCells,
@@ -46,13 +48,15 @@ import {
   patchRange,
   readCell,
   readRange,
+  setWorksheetDataValidation,
   setWorksheetHyperlink,
   unmergeWorksheetCells,
   type CellInput,
   type CellPatch,
   type FormulaValue,
   type ReadCellResult,
-  type ReadRangeResult
+  type ReadRangeResult,
+  type WorksheetDataValidation
 } from "./worksheet.ts";
 import {
   decodeXml,
@@ -147,6 +151,11 @@ export type WorkbookMergedCell = {
   sheetName: string;
   sheetPartName: string;
   ref: string;
+};
+
+export type WorkbookDataValidation = WorksheetDataValidation & {
+  sheetName: string;
+  sheetPartName: string;
 };
 
 export class Workbook {
@@ -340,6 +349,53 @@ export class Workbook {
     }
 
     return merges;
+  }
+
+  async dataValidations(sheetName?: string): Promise<WorkbookDataValidation[]> {
+    const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
+    const dataValidations: WorkbookDataValidation[] = [];
+
+    for (const sheet of sheets) {
+      const xml = await this.pkg.readText(sheet.partName);
+      for (const dataValidation of listWorksheetDataValidations(xml)) {
+        dataValidations.push({
+          sheetName: sheet.name,
+          sheetPartName: sheet.partName,
+          ...dataValidation
+        });
+      }
+    }
+
+    return dataValidations;
+  }
+
+  async setDataValidation(
+    sheetName: string,
+    dataValidation: WorksheetDataValidation
+  ): Promise<WorkbookDataValidation> {
+    const sheet = this.sheet(sheetName);
+    const result = setWorksheetDataValidation(
+      await this.pkg.readText(sheet.partName),
+      dataValidation
+    );
+    this.pkg.setText(sheet.partName, result.xml);
+
+    return {
+      sheetName: sheet.name,
+      sheetPartName: sheet.partName,
+      ...result.dataValidation
+    };
+  }
+
+  async deleteDataValidation(sheetName: string, sqref: string): Promise<boolean> {
+    const sheet = this.sheet(sheetName);
+    const result = deleteWorksheetDataValidation(await this.pkg.readText(sheet.partName), sqref);
+    if (!result.deleted) {
+      return false;
+    }
+
+    this.pkg.setText(sheet.partName, result.xml);
+    return true;
   }
 
   async mergeCells(sheetName: string, ref: string): Promise<WorkbookMergedCell> {

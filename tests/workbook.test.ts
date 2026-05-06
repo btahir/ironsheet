@@ -129,6 +129,23 @@ test("lists workbook merged cells", async () => {
   ]);
 });
 
+test("lists workbook data validations", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDataValidation: true }));
+
+  assert.deepEqual(await workbook.dataValidations(), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      sqref: "B2:B10",
+      allowBlank: true,
+      formula1: "0",
+      formula2: "100",
+      operator: "between",
+      type: "whole"
+    }
+  ]);
+});
+
 test("lists workbook table metadata", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeSecondTable: true, includeTable: true })
@@ -584,6 +601,69 @@ test("defined name mutation rejects invalid names and unknown sheet scopes", asy
     () => workbook.setDefinedName("ScopedRange", "Sheet1!$A$1", { sheetName: "Missing" }),
     /Unknown worksheet/
   );
+});
+
+test("sets, replaces, and deletes data validations", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  assert.deepEqual(
+    await workbook.setDataValidation("Sheet1", {
+      sqref: "$B$2:$B$10",
+      allowBlank: true,
+      error: "Use a whole number from 0 to 100.",
+      errorTitle: "Invalid amount",
+      formula1: "0",
+      formula2: "100",
+      operator: "between",
+      prompt: "Enter an amount",
+      promptTitle: "Amount",
+      showErrorMessage: true,
+      showInputMessage: true,
+      type: "whole"
+    }),
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      sqref: "B2:B10",
+      allowBlank: true,
+      error: "Use a whole number from 0 to 100.",
+      errorTitle: "Invalid amount",
+      formula1: "0",
+      formula2: "100",
+      operator: "between",
+      prompt: "Enter an amount",
+      promptTitle: "Amount",
+      showErrorMessage: true,
+      showInputMessage: true,
+      type: "whole"
+    }
+  );
+
+  assert.match(
+    await workbook.pkg.readText("xl/worksheets/sheet1.xml"),
+    /<dataValidations count="1"><dataValidation sqref="B2:B10" type="whole" operator="between" allowBlank="1" showErrorMessage="1" showInputMessage="1" errorTitle="Invalid amount" error="Use a whole number from 0 to 100\." promptTitle="Amount" prompt="Enter an amount"><formula1>0<\/formula1><formula2>100<\/formula2><\/dataValidation><\/dataValidations>/
+  );
+
+  await workbook.setDataValidation("Sheet1", {
+    sqref: "B2:B10",
+    formula1: '"North,South,West"',
+    type: "list"
+  });
+  assert.deepEqual(await workbook.dataValidations("Sheet1"), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      sqref: "B2:B10",
+      formula1: '"North,South,West"',
+      type: "list"
+    }
+  ]);
+
+  assert.equal(await workbook.deleteDataValidation("Sheet1", "$B$2:$B$10"), true);
+  assert.equal(await workbook.deleteDataValidation("Sheet1", "B2:B10"), false);
+  assert.deepEqual(await workbook.dataValidations("Sheet1"), []);
+  assert.doesNotMatch(await workbook.pkg.readText("xl/worksheets/sheet1.xml"), /dataValidations/);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
 test("sets, replaces, and deletes external hyperlinks", async () => {

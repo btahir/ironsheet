@@ -98,6 +98,34 @@ export type UnmergeWorksheetCellsResult = {
   xml: string;
 };
 
+export type WorksheetDataValidation = {
+  sqref: string;
+  allowBlank?: boolean;
+  error?: string;
+  errorStyle?: string;
+  errorTitle?: string;
+  formula1?: string;
+  formula2?: string;
+  operator?: string;
+  prompt?: string;
+  promptTitle?: string;
+  showDropDown?: boolean;
+  showErrorMessage?: boolean;
+  showInputMessage?: boolean;
+  type?: string;
+};
+
+export type SetWorksheetDataValidationResult = {
+  dataValidation: WorksheetDataValidation;
+  replaced: boolean;
+  xml: string;
+};
+
+export type DeleteWorksheetDataValidationResult = {
+  deleted: boolean;
+  xml: string;
+};
+
 export type WorksheetHyperlink = {
   ref: string;
   display?: string;
@@ -527,6 +555,97 @@ export async function* streamReplaceWorksheetRowsXml(
       skippingRowDepth = 1;
     }
   }
+}
+
+export function listWorksheetDataValidations(xml: string): WorksheetDataValidation[] {
+  return findStartTags(xml, "dataValidation").map((tag) => dataValidationFromTag(xml, tag));
+}
+
+export function setWorksheetDataValidation(
+  xml: string,
+  dataValidation: WorksheetDataValidation
+): SetWorksheetDataValidationResult {
+  const normalized = normalizeDataValidation(dataValidation);
+  const dataValidationXml = createDataValidationXml(xml, normalized);
+  const existing = findMatchingDataValidation(xml, normalized.sqref);
+  if (existing !== undefined) {
+    const end = existing.selfClosing ? existing.end : findElementEnd(xml, existing);
+    return {
+      dataValidation: normalized,
+      replaced: true,
+      xml: `${xml.slice(0, existing.start)}${dataValidationXml}${xml.slice(end)}`
+    };
+  }
+
+  const dataValidations = findFirstStartTag(xml, "dataValidations");
+  if (dataValidations !== undefined) {
+    if (dataValidations.selfClosing) {
+      const opening = upsertTagAttribute(dataValidations.raw, "count", "1").replace(/\/>$/, ">");
+      return {
+        dataValidation: normalized,
+        replaced: false,
+        xml: `${xml.slice(0, dataValidations.start)}${opening}${dataValidationXml}</${dataValidations.name}>${xml.slice(dataValidations.end)}`
+      };
+    }
+
+    const count = findStartTags(xml, "dataValidation").length + 1;
+    const opening = upsertTagAttribute(dataValidations.raw, "count", String(count));
+    const close = findElementCloseStart(xml, dataValidations);
+    return {
+      dataValidation: normalized,
+      replaced: false,
+      xml: `${xml.slice(0, dataValidations.start)}${opening}${xml.slice(dataValidations.end, close)}${dataValidationXml}${xml.slice(close)}`
+    };
+  }
+
+  const insertOffset = dataValidationContainerInsertOffset(xml);
+  const dataValidationsTag = qualifiedName(inferWorksheetPrefix(xml), "dataValidations");
+  return {
+    dataValidation: normalized,
+    replaced: false,
+    xml: `${xml.slice(0, insertOffset)}<${dataValidationsTag} count="1">${dataValidationXml}</${dataValidationsTag}>${xml.slice(insertOffset)}`
+  };
+}
+
+export function deleteWorksheetDataValidation(
+  xml: string,
+  sqref: string
+): DeleteWorksheetDataValidationResult {
+  const normalizedSqref = normalizeSqref(sqref);
+  const removals = findStartTags(xml, "dataValidation")
+    .filter((tag) => normalizeSqref(tag.attributes.sqref ?? "") === normalizedSqref)
+    .map((tag) => ({
+      tag,
+      end: tag.selfClosing ? tag.end : findElementEnd(xml, tag)
+    }));
+
+  if (removals.length === 0) {
+    return { deleted: false, xml };
+  }
+
+  let nextXml = xml;
+  for (const removal of removals.toReversed()) {
+    nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
+  }
+
+  const dataValidations = findFirstStartTag(nextXml, "dataValidations");
+  if (dataValidations === undefined) {
+    return { deleted: true, xml: nextXml };
+  }
+
+  const remaining = findStartTags(nextXml, "dataValidation").length;
+  if (remaining === 0) {
+    return {
+      deleted: true,
+      xml: `${nextXml.slice(0, dataValidations.start)}${nextXml.slice(findElementEnd(nextXml, dataValidations))}`
+    };
+  }
+
+  const opening = upsertTagAttribute(dataValidations.raw, "count", String(remaining));
+  return {
+    deleted: true,
+    xml: `${nextXml.slice(0, dataValidations.start)}${opening}${nextXml.slice(dataValidations.end)}`
+  };
 }
 
 export function listWorksheetMergedCells(xml: string): WorksheetMergedCell[] {
@@ -1133,6 +1252,202 @@ function inferWorksheetPrefix(xml: string): string | undefined {
 
 function normalizeHyperlinkRef(ref: string): string {
   return parseCellRange(ref).ref;
+}
+
+function normalizeSqref(sqref: string): string {
+  const refs = sqref
+    .trim()
+    .split(/\s+/)
+    .filter((ref) => ref.length > 0)
+    .map((ref) => parseCellRange(ref.replaceAll("$", "")).ref);
+
+  if (refs.length === 0) {
+    throw new WorksheetError("Data validation sqref cannot be empty");
+  }
+
+  return refs.join(" ");
+}
+
+function normalizeDataValidation(dataValidation: WorksheetDataValidation): WorksheetDataValidation {
+  return {
+    sqref: normalizeSqref(dataValidation.sqref),
+    ...(dataValidation.allowBlank === undefined ? {} : { allowBlank: dataValidation.allowBlank }),
+    ...(dataValidation.error === undefined ? {} : { error: dataValidation.error }),
+    ...(dataValidation.errorStyle === undefined ? {} : { errorStyle: dataValidation.errorStyle }),
+    ...(dataValidation.errorTitle === undefined ? {} : { errorTitle: dataValidation.errorTitle }),
+    ...(dataValidation.formula1 === undefined ? {} : { formula1: dataValidation.formula1 }),
+    ...(dataValidation.formula2 === undefined ? {} : { formula2: dataValidation.formula2 }),
+    ...(dataValidation.operator === undefined ? {} : { operator: dataValidation.operator }),
+    ...(dataValidation.prompt === undefined ? {} : { prompt: dataValidation.prompt }),
+    ...(dataValidation.promptTitle === undefined
+      ? {}
+      : { promptTitle: dataValidation.promptTitle }),
+    ...(dataValidation.showDropDown === undefined
+      ? {}
+      : { showDropDown: dataValidation.showDropDown }),
+    ...(dataValidation.showErrorMessage === undefined
+      ? {}
+      : { showErrorMessage: dataValidation.showErrorMessage }),
+    ...(dataValidation.showInputMessage === undefined
+      ? {}
+      : { showInputMessage: dataValidation.showInputMessage }),
+    ...(dataValidation.type === undefined ? {} : { type: dataValidation.type })
+  };
+}
+
+function dataValidationFromTag(
+  xml: string,
+  tag: ReturnType<typeof findStartTags>[number]
+): WorksheetDataValidation {
+  const dataValidation: WorksheetDataValidation = {
+    sqref: normalizeSqref(tag.attributes.sqref ?? "")
+  };
+
+  for (const [attribute, key] of [
+    ["error", "error"],
+    ["errorStyle", "errorStyle"],
+    ["errorTitle", "errorTitle"],
+    ["operator", "operator"],
+    ["prompt", "prompt"],
+    ["promptTitle", "promptTitle"],
+    ["type", "type"]
+  ] as const) {
+    if (tag.attributes[attribute] !== undefined) {
+      dataValidation[key] = tag.attributes[attribute];
+    }
+  }
+
+  for (const [attribute, key] of [
+    ["allowBlank", "allowBlank"],
+    ["showDropDown", "showDropDown"],
+    ["showErrorMessage", "showErrorMessage"],
+    ["showInputMessage", "showInputMessage"]
+  ] as const) {
+    if (tag.attributes[attribute] !== undefined) {
+      dataValidation[key] = xmlBoolean(tag.attributes[attribute]);
+    }
+  }
+
+  const raw = xml.slice(tag.start, tag.selfClosing ? tag.end : findElementEnd(xml, tag));
+  const formula1 = readTagText(raw, "formula1");
+  if (formula1 !== undefined) {
+    dataValidation.formula1 = formula1;
+  }
+
+  const formula2 = readTagText(raw, "formula2");
+  if (formula2 !== undefined) {
+    dataValidation.formula2 = formula2;
+  }
+
+  return dataValidation;
+}
+
+function createDataValidationXml(xml: string, dataValidation: WorksheetDataValidation): string {
+  const prefix = inferWorksheetPrefix(xml);
+  const tagName = qualifiedName(prefix, "dataValidation");
+  const attributes = [
+    `sqref="${escapeXmlAttribute(dataValidation.sqref)}"`,
+    dataValidation.type === undefined
+      ? undefined
+      : `type="${escapeXmlAttribute(dataValidation.type)}"`,
+    dataValidation.operator === undefined
+      ? undefined
+      : `operator="${escapeXmlAttribute(dataValidation.operator)}"`,
+    dataValidation.allowBlank === undefined
+      ? undefined
+      : `allowBlank="${dataValidation.allowBlank ? "1" : "0"}"`,
+    dataValidation.showDropDown === undefined
+      ? undefined
+      : `showDropDown="${dataValidation.showDropDown ? "1" : "0"}"`,
+    dataValidation.showErrorMessage === undefined
+      ? undefined
+      : `showErrorMessage="${dataValidation.showErrorMessage ? "1" : "0"}"`,
+    dataValidation.showInputMessage === undefined
+      ? undefined
+      : `showInputMessage="${dataValidation.showInputMessage ? "1" : "0"}"`,
+    dataValidation.errorStyle === undefined
+      ? undefined
+      : `errorStyle="${escapeXmlAttribute(dataValidation.errorStyle)}"`,
+    dataValidation.errorTitle === undefined
+      ? undefined
+      : `errorTitle="${escapeXmlAttribute(dataValidation.errorTitle)}"`,
+    dataValidation.error === undefined
+      ? undefined
+      : `error="${escapeXmlAttribute(dataValidation.error)}"`,
+    dataValidation.promptTitle === undefined
+      ? undefined
+      : `promptTitle="${escapeXmlAttribute(dataValidation.promptTitle)}"`,
+    dataValidation.prompt === undefined
+      ? undefined
+      : `prompt="${escapeXmlAttribute(dataValidation.prompt)}"`
+  ]
+    .filter((attribute): attribute is string => attribute !== undefined)
+    .join(" ");
+
+  const formulaXml = [
+    dataValidation.formula1 === undefined
+      ? undefined
+      : `<${qualifiedName(prefix, "formula1")}>${escapeXmlText(dataValidation.formula1)}</${qualifiedName(prefix, "formula1")}>`,
+    dataValidation.formula2 === undefined
+      ? undefined
+      : `<${qualifiedName(prefix, "formula2")}>${escapeXmlText(dataValidation.formula2)}</${qualifiedName(prefix, "formula2")}>`
+  ]
+    .filter((formula): formula is string => formula !== undefined)
+    .join("");
+
+  return formulaXml.length === 0
+    ? `<${tagName} ${attributes}/>`
+    : `<${tagName} ${attributes}>${formulaXml}</${tagName}>`;
+}
+
+function findMatchingDataValidation(
+  xml: string,
+  sqref: string
+): ReturnType<typeof findStartTags>[number] | undefined {
+  return findStartTags(xml, "dataValidation").find(
+    (tag) => normalizeSqref(tag.attributes.sqref ?? "") === sqref
+  );
+}
+
+function dataValidationContainerInsertOffset(xml: string): number {
+  for (const localName of [
+    "hyperlinks",
+    "printOptions",
+    "pageMargins",
+    "pageSetup",
+    "headerFooter",
+    "rowBreaks",
+    "colBreaks",
+    "customProperties",
+    "cellWatches",
+    "ignoredErrors",
+    "smartTags",
+    "drawing",
+    "legacyDrawing",
+    "legacyDrawingHF",
+    "picture",
+    "oleObjects",
+    "controls",
+    "webPublishItems",
+    "tableParts",
+    "extLst"
+  ]) {
+    const tag = findFirstStartTag(xml, localName);
+    if (tag !== undefined) {
+      return tag.start;
+    }
+  }
+
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined) {
+    throw new WorksheetError("Worksheet is missing worksheet root");
+  }
+
+  return findElementCloseStart(xml, worksheet);
+}
+
+function xmlBoolean(value: string | undefined): boolean {
+  return value === "1" || value === "true";
 }
 
 function normalizeMergeRef(ref: string): string {

@@ -9,7 +9,8 @@ import {
   type ChartFormulaRetarget,
   type PivotCacheSourceRetarget,
   type WorkbookCellStyleInput,
-  type WorkbookSheetState
+  type WorkbookSheetState,
+  type WorksheetDataValidation
 } from "@ironsheet/core";
 
 export const nodeCompressionAdapter: CompressionAdapter = {
@@ -144,6 +145,14 @@ export async function listWorkbookMergedCells(
   return workbook.mergedCells(sheetName);
 }
 
+export async function listWorkbookDataValidations(
+  inputPath: string,
+  sheetName?: string
+): Promise<Awaited<ReturnType<Workbook["dataValidations"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.dataValidations(sheetName);
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {
@@ -203,6 +212,29 @@ export async function unmergeWorkbookCells(
   const unmerged = await workbook.unmergeCells(sheetName, ref);
   await writeWorkbook(workbook, outputPath);
   return unmerged;
+}
+
+export async function setWorkbookDataValidation(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  dataValidation: WorksheetDataValidation
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.setDataValidation(sheetName, dataValidation);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function deleteWorkbookDataValidation(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  sqref: string
+): Promise<boolean> {
+  const workbook = await readWorkbook(inputPath);
+  const deleted = await workbook.deleteDataValidation(sheetName, sqref);
+  await writeWorkbook(workbook, outputPath);
+  return deleted;
 }
 
 export async function setWorkbookHyperlink(
