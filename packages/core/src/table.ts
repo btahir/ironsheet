@@ -3,7 +3,7 @@ import { WorkbookError } from "./errors.ts";
 import type { OoxmlPackage } from "./opc.ts";
 import { resolveRelationshipTarget } from "./opc.ts";
 import { replaceRowsInRange, type CellInput } from "./worksheet.ts";
-import { escapeXmlAttribute, findFirstStartTag } from "./xml.ts";
+import { escapeXmlAttribute, findFirstStartTag, findStartTags } from "./xml.ts";
 
 const tableRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
@@ -11,16 +11,22 @@ const tableRelationship =
 export type WorkbookTable = {
   name: string;
   displayName: string;
+  columns: WorkbookTableColumn[];
   partName: string;
   worksheetPartName: string;
   ref: string;
   totalsRowCount: number;
 };
 
-export async function findWorkbookTable(
-  pkg: OoxmlPackage,
-  tableName: string
-): Promise<WorkbookTable> {
+export type WorkbookTableColumn = {
+  id?: string;
+  name?: string;
+  totalsRowFunction?: string;
+};
+
+export async function listWorkbookTables(pkg: OoxmlPackage): Promise<WorkbookTable[]> {
+  const tables: WorkbookTable[] = [];
+
   for (const partName of pkg.listParts().filter((part) => /^xl\/tables\/.+\.xml$/.test(part))) {
     const tableXml = await pkg.readText(partName);
     const table = findFirstStartTag(tableXml, "table");
@@ -32,22 +38,32 @@ export async function findWorkbookTable(
     const displayName = table.attributes.displayName ?? name;
     const ref = table.attributes.ref;
 
-    if (name !== tableName && displayName !== tableName) {
-      continue;
-    }
-
     if (name === undefined || displayName === undefined || ref === undefined) {
       throw new WorkbookError(`Table part ${partName} is missing name/displayName/ref`);
     }
 
-    return {
+    tables.push({
       name,
       displayName,
+      columns: parseTableColumns(tableXml),
       partName,
       worksheetPartName: await findWorksheetForTable(pkg, partName),
       ref,
       totalsRowCount: parseTotalsRowCount(table.attributes)
-    };
+    });
+  }
+
+  return tables;
+}
+
+export async function findWorkbookTable(
+  pkg: OoxmlPackage,
+  tableName: string
+): Promise<WorkbookTable> {
+  for (const table of await listWorkbookTables(pkg)) {
+    if (table.name === tableName || table.displayName === tableName) {
+      return table;
+    }
   }
 
   throw new WorkbookError(`Unknown table ${tableName}`);
@@ -115,6 +131,16 @@ function parseTotalsRowCount(attributes: Record<string, string>): number {
   }
 
   return attributes.totalsRowShown === "1" ? 1 : 0;
+}
+
+function parseTableColumns(xml: string): WorkbookTableColumn[] {
+  return findStartTags(xml, "tableColumn").map((column) => ({
+    ...(column.attributes.id === undefined ? {} : { id: column.attributes.id }),
+    ...(column.attributes.name === undefined ? {} : { name: column.attributes.name }),
+    ...(column.attributes.totalsRowFunction === undefined
+      ? {}
+      : { totalsRowFunction: column.attributes.totalsRowFunction })
+  }));
 }
 
 async function findWorksheetForTable(pkg: OoxmlPackage, tablePartName: string): Promise<string> {

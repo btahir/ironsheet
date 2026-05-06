@@ -102,6 +102,39 @@ test("inspect counts worksheet formula cells", async () => {
   assert.equal((await workbook.inspect()).features.formulaCells, 1);
 });
 
+test("lists workbook table metadata", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeSecondTable: true, includeTable: true })
+  );
+
+  assert.deepEqual(await workbook.tables(), [
+    {
+      name: "RevenueTable",
+      displayName: "RevenueTable",
+      columns: [
+        { id: "1", name: "Name" },
+        { id: "2", name: "Amount" }
+      ],
+      partName: "xl/tables/table1.xml",
+      worksheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "A1:B2",
+      totalsRowCount: 0
+    },
+    {
+      name: "ExpenseTable",
+      displayName: "ExpenseTable",
+      columns: [
+        { id: "1", name: "Category" },
+        { id: "2", name: "Amount" }
+      ],
+      partName: "xl/tables/table2.xml",
+      worksheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "C1:D2",
+      totalsRowCount: 0
+    }
+  ]);
+});
+
 test("reads workbook formula inventory with parsed dependencies", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");

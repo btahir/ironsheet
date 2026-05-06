@@ -15,6 +15,7 @@ This repository currently implements the first vertical slice:
 - OPC relationship parsing and target resolution.
 - Workbook sheet discovery.
 - Defined-name inspection.
+- Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Cell, batch-cell, and range read/write APIs.
 - Append-row API for template-backed exports.
 - Chunked row XML streaming primitive for large worksheet writer work.

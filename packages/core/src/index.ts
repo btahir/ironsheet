@@ -19,7 +19,13 @@ export {
 } from "./formula.ts";
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
 export { parseSharedStrings } from "./shared-strings.ts";
-export { findWorkbookTable, replaceTableRows, type WorkbookTable } from "./table.ts";
+export {
+  findWorkbookTable,
+  listWorkbookTables,
+  replaceTableRows,
+  type WorkbookTable,
+  type WorkbookTableColumn
+} from "./table.ts";
 export {
   validateWorkbookPackage,
   type ValidationIssue,

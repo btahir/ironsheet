@@ -12,7 +12,7 @@ import {
 } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
-import { replaceTableRows, type WorkbookTable } from "./table.ts";
+import { listWorkbookTables, replaceTableRows, type WorkbookTable } from "./table.ts";
 import { validateWorkbookPackage, type ValidationReport } from "./validation.ts";
 import {
   appendRows,
@@ -248,6 +248,10 @@ export class Workbook {
     });
 
     return table;
+  }
+
+  tables(): Promise<WorkbookTable[]> {
+    return listWorkbookTables(this.pkg);
   }
 
   async inspect(): Promise<WorkbookInspectResult> {
