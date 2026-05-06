@@ -57,11 +57,13 @@ export {
 export {
   type XmlTag,
   type XmlChunkTransform,
+  type XmlElementChunk,
   type XmlToken,
   findElementCloseStart,
   findElementEnd,
   findFirstStartTag,
   findStartTags,
+  streamXmlElements,
   tokenizeXmlChunks,
   transformXmlChunks,
   tokenizeXml

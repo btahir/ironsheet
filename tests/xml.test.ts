@@ -5,6 +5,7 @@ import {
   findFirstStartTag,
   findStartTags,
   PackageError,
+  streamXmlElements,
   tokenizeXml,
   tokenizeXmlChunks,
   transformXmlChunks
@@ -97,6 +98,51 @@ test("XML chunk transform passes through untouched tokens and replaces selected 
   }
 
   assert.equal(chunks.join(""), "<root><v>new</v><!-- keep --><v>later</v></root>");
+});
+
+test("XML element stream extracts matching elements across chunks", async () => {
+  const rows = [];
+  for await (const row of streamXmlElements(
+    [
+      "<worksheet><sheetData><row r=",
+      '"1"><c r="A1"><v>1</v></c></row><row r="2"/>',
+      "</sheetData></worksheet>"
+    ],
+    "row"
+  )) {
+    rows.push(row);
+  }
+
+  assert.deepEqual(
+    rows.map((row) => ({
+      raw: row.raw,
+      start: row.start,
+      end: row.end,
+      ref: row.tag.attributes.r
+    })),
+    [
+      {
+        raw: '<row r="1"><c r="A1"><v>1</v></c></row>',
+        start: 22,
+        end: 61,
+        ref: "1"
+      },
+      {
+        raw: '<row r="2"/>',
+        start: 61,
+        end: 73,
+        ref: "2"
+      }
+    ]
+  );
+});
+
+test("XML element stream reports an unclosed selected element", async () => {
+  await assert.rejects(async () => {
+    for await (const _row of streamXmlElements(['<worksheet><row r="1">'], "row")) {
+      // drain stream
+    }
+  }, PackageError);
 });
 
 test("XML tokenizer reports unterminated quoted attributes", () => {

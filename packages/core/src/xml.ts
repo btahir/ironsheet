@@ -30,6 +30,13 @@ export type XmlChunkTransform = (
   token: XmlToken
 ) => string | undefined | Promise<string | undefined>;
 
+export type XmlElementChunk = {
+  tag: XmlTag;
+  raw: string;
+  start: number;
+  end: number;
+};
+
 export function* tokenizeXml(xml: string, options: { start?: number } = {}): Generator<XmlToken> {
   let offset = options.start ?? 0;
 
@@ -184,6 +191,68 @@ export async function* transformXmlChunks(
 ): AsyncGenerator<string> {
   for await (const token of tokenizeXmlChunks(chunks)) {
     yield (await transform(token)) ?? tokenRawText(token);
+  }
+}
+
+export async function* streamXmlElements(
+  chunks: Iterable<string> | AsyncIterable<string>,
+  localName: string
+): AsyncGenerator<XmlElementChunk> {
+  let collecting:
+    | {
+        depth: number;
+        raw: string;
+        tag: XmlTag;
+      }
+    | undefined;
+
+  for await (const token of tokenizeXmlChunks(chunks)) {
+    if (collecting === undefined) {
+      if (token.kind !== "start" || token.tag.localName !== localName) {
+        continue;
+      }
+
+      if (token.tag.selfClosing) {
+        yield {
+          tag: token.tag,
+          raw: token.tag.raw,
+          start: token.tag.start,
+          end: token.tag.end
+        };
+        continue;
+      }
+
+      collecting = {
+        depth: 1,
+        raw: token.tag.raw,
+        tag: token.tag
+      };
+      continue;
+    }
+
+    collecting.raw += tokenRawText(token);
+
+    if (token.kind === "start" && token.tag.localName === localName && !token.tag.selfClosing) {
+      collecting.depth += 1;
+      continue;
+    }
+
+    if (token.kind === "end" && token.localName === localName) {
+      collecting.depth -= 1;
+      if (collecting.depth === 0) {
+        yield {
+          tag: collecting.tag,
+          raw: collecting.raw,
+          start: collecting.tag.start,
+          end: token.end
+        };
+        collecting = undefined;
+      }
+    }
+  }
+
+  if (collecting !== undefined) {
+    throw new PackageError(`Element ${collecting.tag.name} is missing a closing tag`);
   }
 }
 
