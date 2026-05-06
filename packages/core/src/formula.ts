@@ -30,6 +30,52 @@ export type FormulaStructuredReference = {
   raw: string;
 };
 
+export function renameFormulaStructuredReferenceTable(
+  formula: string,
+  oldTableNames: string[],
+  nextTableName: string
+): string {
+  const oldNames = new Set(oldTableNames.map((name) => name.toLowerCase()));
+  const scrubbed = stripDoubleQuotedStrings(formula);
+  let result = "";
+  let lastCopiedOffset = 0;
+  let offset = 0;
+
+  while (offset < scrubbed.length) {
+    const bracket = scrubbed.indexOf("[", offset);
+    if (bracket === -1) {
+      break;
+    }
+
+    const tableStart = findTableNameStart(scrubbed, bracket);
+    if (tableStart === undefined || !isReferenceBoundaryBefore(scrubbed, tableStart)) {
+      offset = bracket + 1;
+      continue;
+    }
+
+    const end = findStructuredReferenceEnd(scrubbed, bracket);
+    if (end === undefined) {
+      offset = bracket + 1;
+      continue;
+    }
+
+    const tableName = scrubbed.slice(tableStart, bracket);
+    if (oldNames.has(tableName.toLowerCase())) {
+      result += formula.slice(lastCopiedOffset, tableStart);
+      result += nextTableName;
+      lastCopiedOffset = bracket;
+    }
+
+    offset = end;
+  }
+
+  if (lastCopiedOffset === 0) {
+    return formula;
+  }
+
+  return result + formula.slice(lastCopiedOffset);
+}
+
 export function parseFormulaSheetReferences(formula: string): FormulaSheetReference[] {
   const references = new Set<string>();
   const scrubbed = stripDoubleQuotedStrings(formula);

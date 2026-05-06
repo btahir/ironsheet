@@ -16,6 +16,7 @@ This repository currently implements the first vertical slice:
 - Workbook sheet discovery.
 - Defined-name inspection.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
+- Safe table renaming with structured-reference retargeting across formulas and defined names.
 - Style metadata inspection with cell format counts.
 - Cell, batch-cell, and range read/write APIs.
 - Append-row API for template-backed exports.
@@ -30,7 +31,7 @@ This repository currently implements the first vertical slice:
 - Streaming XML tokenizer, chunk transform primitives, and streamed element extraction powering local XML helpers and future large-worksheet transforms.
 - Semantic validation for package relationship targets, duplicate relationship IDs, orphan relationship parts, orphan content type overrides, local worksheet/drawing relationship IDs, workbook sheet metadata, content types, worksheet dimensions, merge/validation/conditional-format/hyperlink refs, style indexes and cell format limits, shared string references/counts, worksheet/defined-name/chart formula references, formula bounds, formula table references, shared formula groups, table refs, table part counts, table metadata, table column structure, pivot table/cache source sanity, stale calc chains, and defined-name scope integrity.
 - Node adapter using `node:zlib`.
-- CLI inspection, read, patch, range patch, table replacement, and package diff commands.
+- CLI inspection, read, patch, range patch, table replacement/rename, and package diff commands.
 - Compatibility harness with ZIP integrity and optional app-level checks.
 
 ## Commands
@@ -105,6 +106,12 @@ Replace basic table rows:
 
 ```bash
 npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["New",10],["Growth",20]]'
+```
+
+Rename a table and retarget structured references:
+
+```bash
+npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
 ```
 
 Diff two workbook packages:

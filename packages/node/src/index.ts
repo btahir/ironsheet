@@ -136,3 +136,14 @@ export async function replaceWorkbookTableRows(
   await workbook.replaceTableRows(tableName, rows);
   await writeWorkbook(workbook, outputPath);
 }
+
+export async function renameWorkbookTable(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  nextName: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.renameTable(tableName, nextName);
+  await writeWorkbook(workbook, outputPath);
+}

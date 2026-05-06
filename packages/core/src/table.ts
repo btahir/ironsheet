@@ -1,9 +1,18 @@
 import { numberToColumnLabel, parseCellAddress } from "./address.ts";
 import { WorkbookError } from "./errors.ts";
+import { renameFormulaStructuredReferenceTable } from "./formula.ts";
 import type { OoxmlPackage } from "./opc.ts";
 import { resolveRelationshipTarget } from "./opc.ts";
 import { replaceRowsInRange, type CellInput } from "./worksheet.ts";
-import { escapeXmlAttribute, findFirstStartTag, findStartTags } from "./xml.ts";
+import {
+  decodeXml,
+  escapeXmlAttribute,
+  escapeXmlText,
+  findElementCloseStart,
+  findFirstStartTag,
+  findStartTags,
+  type XmlTag
+} from "./xml.ts";
 
 const tableRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
@@ -23,6 +32,16 @@ export type WorkbookTableColumn = {
   name?: string;
   totalsRowFunction?: string;
 };
+
+const formulaElementNames = new Set([
+  "calculatedColumnFormula",
+  "definedName",
+  "f",
+  "formula",
+  "formula1",
+  "formula2",
+  "totalsRowFormula"
+]);
 
 export async function listWorkbookTables(pkg: OoxmlPackage): Promise<WorkbookTable[]> {
   const tables: WorkbookTable[] = [];
@@ -106,6 +125,50 @@ export async function replaceTableRows(
   };
 }
 
+export async function renameWorkbookTable(
+  pkg: OoxmlPackage,
+  tableName: string,
+  nextName: string
+): Promise<WorkbookTable> {
+  validateTableName(nextName);
+
+  const tables = await listWorkbookTables(pkg);
+  const table = tables.find((candidate) => {
+    return candidate.name === tableName || candidate.displayName === tableName;
+  });
+
+  if (table === undefined) {
+    throw new WorkbookError(`Unknown table ${tableName}`);
+  }
+
+  const duplicate = tables.find((candidate) => {
+    if (candidate.partName === table.partName) {
+      return false;
+    }
+
+    return (
+      candidate.name.toLowerCase() === nextName.toLowerCase() ||
+      candidate.displayName.toLowerCase() === nextName.toLowerCase()
+    );
+  });
+
+  if (duplicate !== undefined) {
+    throw new WorkbookError(`Table name ${nextName} is already used by ${duplicate.displayName}`);
+  }
+
+  const oldNames = [...new Set([table.name, table.displayName])];
+  const tableXml = await pkg.readText(table.partName);
+  pkg.setText(table.partName, updateTableIdentity(tableXml, nextName));
+
+  await rewriteTableFormulaReferences(pkg, oldNames, nextName);
+
+  return {
+    ...table,
+    name: nextName,
+    displayName: nextName
+  };
+}
+
 function parseTableRange(ref: string): {
   start: { row: number; column: number };
   end: { row: number; column: number };
@@ -174,6 +237,83 @@ function updateTableRef(xml: string, ref: string): string {
   return nextXml;
 }
 
+function updateTableIdentity(xml: string, name: string): string {
+  const table = findFirstStartTag(xml, "table");
+  if (table === undefined) {
+    throw new WorkbookError("Table XML is missing table tag");
+  }
+
+  return `${xml.slice(0, table.start)}${upsertAttributes(table.raw, {
+    displayName: name,
+    name
+  })}${xml.slice(table.end)}`;
+}
+
+async function rewriteTableFormulaReferences(
+  pkg: OoxmlPackage,
+  oldNames: string[],
+  nextName: string
+): Promise<void> {
+  for (const partName of pkg.listParts().filter((part) => part.endsWith(".xml"))) {
+    const xml = await pkg.readText(partName);
+    const nextXml = rewriteFormulaElementTableReferences(xml, oldNames, nextName);
+    if (nextXml !== xml) {
+      pkg.setText(partName, nextXml);
+    }
+  }
+}
+
+function rewriteFormulaElementTableReferences(
+  xml: string,
+  oldNames: string[],
+  nextName: string
+): string {
+  const formulaTags = findFormulaElementTags(xml);
+  if (formulaTags.length === 0) {
+    return xml;
+  }
+
+  let result = "";
+  let offset = 0;
+  let changed = false;
+
+  for (const tag of formulaTags) {
+    if (tag.selfClosing || tag.start < offset) {
+      continue;
+    }
+
+    const textStart = tag.end;
+    const textEnd = findElementCloseStart(xml, tag);
+    const rawText = xml.slice(textStart, textEnd);
+    if (rawText.includes("<")) {
+      continue;
+    }
+
+    const formula = decodeXml(rawText);
+    const rewritten = renameFormulaStructuredReferenceTable(formula, oldNames, nextName);
+    if (rewritten === formula) {
+      continue;
+    }
+
+    result += xml.slice(offset, textStart);
+    result += escapeXmlText(rewritten);
+    offset = textEnd;
+    changed = true;
+  }
+
+  if (!changed) {
+    return xml;
+  }
+
+  return result + xml.slice(offset);
+}
+
+function findFormulaElementTags(xml: string): XmlTag[] {
+  return [...formulaElementNames]
+    .flatMap((name) => findStartTags(xml, name))
+    .sort((left, right) => left.start - right.start);
+}
+
 function upsertRef(rawTag: string, ref: string): string {
   if (/\sref=(["']).*?\1/.test(rawTag)) {
     return rawTag.replace(/\sref=(["']).*?\1/, ` ref="${escapeXmlAttribute(ref)}"`);
@@ -181,4 +321,31 @@ function upsertRef(rawTag: string, ref: string): string {
 
   const closing = rawTag.endsWith("/>") ? "/>" : ">";
   return `${rawTag.slice(0, -closing.length)} ref="${escapeXmlAttribute(ref)}"${closing}`;
+}
+
+function upsertAttributes(rawTag: string, attributes: Record<string, string>): string {
+  return Object.entries(attributes).reduce((nextTag, [name, value]) => {
+    const escapedValue = escapeXmlAttribute(value);
+    const attributePattern = new RegExp(`\\s${escapeRegExp(name)}=(["']).*?\\1`);
+    if (attributePattern.test(nextTag)) {
+      return nextTag.replace(attributePattern, ` ${name}="${escapedValue}"`);
+    }
+
+    const closing = nextTag.endsWith("/>") ? "/>" : ">";
+    return `${nextTag.slice(0, -closing.length)} ${name}="${escapedValue}"${closing}`;
+  }, rawTag);
+}
+
+function validateTableName(name: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_.]*$/.test(name)) {
+    throw new WorkbookError(`Invalid table name ${name}`);
+  }
+
+  if (/^[A-Za-z]{1,3}[1-9][0-9]{0,6}$/.test(name)) {
+    throw new WorkbookError(`Table name ${name} cannot look like a cell reference`);
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

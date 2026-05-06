@@ -13,7 +13,12 @@ import {
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import { parseWorkbookStyles, type WorkbookStyles } from "./styles.ts";
-import { listWorkbookTables, replaceTableRows, type WorkbookTable } from "./table.ts";
+import {
+  listWorkbookTables,
+  renameWorkbookTable,
+  replaceTableRows,
+  type WorkbookTable
+} from "./table.ts";
 import { validateWorkbookPackage, type ValidationReport } from "./validation.ts";
 import {
   appendRows,
@@ -243,6 +248,17 @@ export class Workbook {
       await this.forceRecalculateOnOpen();
     }
 
+    await this.recordMutationImpactDiagnostics({
+      operation: "table",
+      sheetPartName: table.worksheetPartName
+    });
+
+    return table;
+  }
+
+  async renameTable(tableName: string, nextName: string): Promise<WorkbookTable> {
+    const table = await renameWorkbookTable(this.pkg, tableName, nextName);
+    await this.forceRecalculateOnOpen();
     await this.recordMutationImpactDiagnostics({
       operation: "table",
       sheetPartName: table.worksheetPartName

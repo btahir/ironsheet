@@ -12,6 +12,7 @@ import {
   readWorkbook,
   readWorkbookCell,
   readWorkbookRange,
+  renameWorkbookTable,
   replaceWorkbookTableRows,
   validateWorkbookFile
 } from "../../node/src/index.ts";
@@ -25,6 +26,7 @@ type Command =
   | "patch-range"
   | "read-cell"
   | "read-range"
+  | "rename-table"
   | "replace-table"
   | "styles"
   | "tables"
@@ -43,6 +45,7 @@ function usage(): never {
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
+  npm run cli -- rename-table <input.xlsx> <output.xlsx> <table> <newName>
   npm run cli -- replace-table <input.xlsx> <output.xlsx> <table> <jsonRows>
   npm run cli -- diff <before.xlsx> <after.xlsx>
 
@@ -130,6 +133,16 @@ async function replaceTable(
 ): Promise<void> {
   await replaceWorkbookTableRows(inputPath, outputPath, tableName, parseRows(rawRows));
   console.log(`replaced ${tableName} rows -> ${outputPath}`);
+}
+
+async function renameTable(
+  inputPath: string,
+  outputPath: string,
+  tableName: string,
+  nextName: string
+): Promise<void> {
+  await renameWorkbookTable(inputPath, outputPath, tableName, nextName);
+  console.log(`renamed ${tableName} to ${nextName} -> ${outputPath}`);
 }
 
 function parseCliValue(value: string): CellInput {
@@ -280,6 +293,17 @@ try {
       usage();
     }
     await replaceTable(inputPath, outputPath, tableName, rawRows);
+  } else if (command === "rename-table") {
+    const [inputPath, outputPath, tableName, nextName] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      tableName === undefined ||
+      nextName === undefined
+    ) {
+      usage();
+    }
+    await renameTable(inputPath, outputPath, tableName, nextName);
   } else {
     usage();
   }

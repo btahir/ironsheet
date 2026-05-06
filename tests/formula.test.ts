@@ -4,7 +4,8 @@ import {
   formulaReferenceWithinExcelBounds,
   parseFormulaReferences,
   parseFormulaSheetReferences,
-  parseFormulaStructuredReferences
+  parseFormulaStructuredReferences,
+  renameFormulaStructuredReferenceTable
 } from "../packages/core/src/index.ts";
 
 test("formula sheet reference parser handles quoted and unquoted sheet names", () => {
@@ -115,5 +116,16 @@ test("formula structured reference parser ignores bracketed external references"
   assert.deepEqual(
     parseFormulaStructuredReferences("[Book1.xlsx]Sheet1!A1+Expense_Table[Amount]"),
     [{ tableName: "Expense_Table", raw: "Expense_Table[Amount]" }]
+  );
+});
+
+test("formula structured reference rename retargets table tokens only", () => {
+  assert.equal(
+    renameFormulaStructuredReferenceTable(
+      'SUM(RevenueTable[Amount],RevenueTable[[#Totals],[Amount]],OtherTable[Amount],"RevenueTable[Amount]")',
+      ["RevenueTable"],
+      "SalesData"
+    ),
+    'SUM(SalesData[Amount],SalesData[[#Totals],[Amount]],OtherTable[Amount],"RevenueTable[Amount]")'
   );
 });
