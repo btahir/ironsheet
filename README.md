@@ -16,6 +16,7 @@ This repository currently implements the first vertical slice:
 - Workbook sheet discovery.
 - Defined-name inspection.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
+- Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
 - Safe table column append and guarded rightmost-column removal.
 - Style metadata inspection with cell format counts.
@@ -133,9 +134,10 @@ npm run cli -- append-table-column input.xlsx output.xlsx RevenueTable Margin '[
 npm run cli -- remove-table-column input.xlsx output.xlsx RevenueTable Margin
 ```
 
-Rename a table or table column and retarget structured references:
+Rename a sheet, table, or table column and retarget references:
 
 ```bash
+npm run cli -- rename-sheet input.xlsx output.xlsx Sheet1 "Revenue 2026"
 npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
 npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
 ```

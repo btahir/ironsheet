@@ -190,6 +190,51 @@ test("renames tables and retargets structured references", async () => {
   assert.match(await pkg.readText("xl/workbook.xml"), /forceFullCalc="1"/);
 });
 
+test("renames sheets and retargets workbook references", async () => {
+  const pkg = await openPackage(
+    await createMinimalWorkbook({
+      includeDefinedName: true,
+      includeDrawing: true,
+      includePivotTable: true,
+      includeTable: true
+    })
+  );
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace('<c r="B2"><v>1</v></c>', '<c r="B2"><f>SUM(Sheet1!$B$2)</f><v>1</v></c>')
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+
+  const renamed = await workbook.renameSheet("Sheet1", "Revenue 2026");
+
+  assert.equal(renamed.name, "Revenue 2026");
+  assert.equal(workbook.sheet("Revenue 2026").partName, "xl/worksheets/sheet1.xml");
+  assert.throws(() => workbook.sheet("Sheet1"), /Unknown worksheet/);
+  assert.match(await pkg.readText("xl/workbook.xml"), /name="Revenue 2026"/);
+  assert.deepEqual(
+    (await workbook.definedNames()).find((definedName) => definedName.name === "RevenueRange")
+      ?.text,
+    "'Revenue 2026'!$A$1:$B$2"
+  );
+  assert.match(await pkg.readText("xl/worksheets/sheet1.xml"), /SUM\('Revenue 2026'!\$B\$2\)/);
+  assert.match(await pkg.readText("xl/charts/chart1.xml"), /'Revenue 2026'!\$A\$2:\$A\$3/);
+  assert.match(
+    await pkg.readText("xl/pivotCache/pivotCacheDefinition1.xml"),
+    /sheet="Revenue 2026"/
+  );
+  assert.match(await pkg.readText("xl/workbook.xml"), /forceFullCalc="1"/);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
+test("renaming sheets rejects duplicates and invalid names", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeHiddenSheet: true }));
+
+  await assert.rejects(() => workbook.renameSheet("Sheet1", "HiddenData"), /already used/);
+  await assert.rejects(() => workbook.renameSheet("Sheet1", "Bad/Name"), /invalid Excel/);
+  await assert.rejects(() => workbook.renameSheet("Sheet1", "A".repeat(32)), /31 character/);
+});
+
 test("renaming tables rejects duplicate and invalid names", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeSecondTable: true, includeTable: true })

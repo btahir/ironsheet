@@ -3,10 +3,12 @@ import { retargetWorkbookChartFormulas, type ChartFormulaRetarget } from "./char
 import type { Diagnostic } from "./diagnostics.ts";
 import { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 import { PackageError, WorkbookError } from "./errors.ts";
+import { rewriteFormulaElements } from "./formula-rewrite.ts";
 import {
   parseFormulaReferences,
   parseFormulaSheetReferences,
   parseFormulaStructuredReferences,
+  renameFormulaSheetReferences,
   type FormulaReference,
   type FormulaSheetReference,
   type FormulaStructuredReference
@@ -48,6 +50,7 @@ import {
 } from "./worksheet.ts";
 import {
   decodeXml,
+  escapeXmlAttribute,
   findElementCloseStart,
   findElementEnd,
   findFirstStartTag,
@@ -354,6 +357,47 @@ export class Workbook {
     return table;
   }
 
+  async renameSheet(sheetName: string, nextName: string): Promise<WorkbookSheet> {
+    validateSheetName(nextName);
+
+    const sheet = this.sheet(sheetName);
+    const duplicate = this.sheets().find((candidate) => {
+      return (
+        candidate.partName !== sheet.partName &&
+        candidate.name.toLowerCase() === nextName.toLowerCase()
+      );
+    });
+    if (duplicate !== undefined) {
+      throw new WorkbookError(`Sheet name ${nextName} is already used by ${duplicate.name}`);
+    }
+
+    const workbookXml = await this.pkg.readText(this.workbookPart);
+    const sheetTag = findStartTags(workbookXml, "sheet").find(
+      (candidate) => candidate.attributes["r:id"] === sheet.relationshipId
+    );
+    if (sheetTag === undefined) {
+      throw new WorkbookError(`Workbook XML is missing sheet ${sheetName}`);
+    }
+
+    this.pkg.setText(
+      this.workbookPart,
+      `${workbookXml.slice(0, sheetTag.start)}${upsertAttributes(sheetTag.raw, {
+        name: nextName
+      })}${workbookXml.slice(sheetTag.end)}`
+    );
+
+    await this.rewriteSheetFormulaReferences(sheet.name, nextName);
+    await this.retargetPivotCacheSources([
+      { from: { sheet: sheet.name }, to: { sheet: nextName } }
+    ]);
+    await this.forceRecalculateOnOpen();
+
+    const renamed = { ...sheet, name: nextName };
+    this.sheetsByName.delete(sheet.name);
+    this.sheetsByName.set(nextName, renamed);
+    return renamed;
+  }
+
   retargetChartFormulas(retargets: ChartFormulaRetarget[]): Promise<number> {
     return retargetWorkbookChartFormulas(this.pkg, retargets);
   }
@@ -534,6 +578,18 @@ export class Workbook {
       message: "Removed stale calcChain.xml after formula mutation",
       part: "xl/calcChain.xml"
     });
+  }
+
+  private async rewriteSheetFormulaReferences(sheetName: string, nextName: string): Promise<void> {
+    for (const partName of this.pkg.listParts().filter((part) => part.endsWith(".xml"))) {
+      const xml = await this.pkg.readText(partName);
+      const nextXml = rewriteFormulaElements(xml, (formula) =>
+        renameFormulaSheetReferences(formula, sheetName, nextName)
+      );
+      if (nextXml !== xml) {
+        this.pkg.setText(partName, nextXml);
+      }
+    }
   }
 
   private async forceRecalculateIfFormulaDependenciesTouched(
@@ -729,6 +785,24 @@ function rangesIntersect(left: CellRange, right: CellRange): boolean {
   );
 }
 
+function validateSheetName(name: string): void {
+  if (name.length === 0) {
+    throw new WorkbookError("Sheet name cannot be empty");
+  }
+
+  if (name.length > 31) {
+    throw new WorkbookError(`Sheet name ${name} exceeds Excel's 31 character limit`);
+  }
+
+  if (/[:\\/?*[\]]/.test(name)) {
+    throw new WorkbookError(`Sheet name ${name} contains an invalid Excel sheet name character`);
+  }
+
+  if (name.startsWith("'") || name.endsWith("'")) {
+    throw new WorkbookError("Sheet name cannot start or end with an apostrophe");
+  }
+}
+
 async function resolveWorkbookPart(pkg: OoxmlPackage): Promise<string> {
   const rootRelationships = await pkg.rootRelationships();
   const workbookRelationship = rootRelationships.find(
@@ -800,13 +874,14 @@ function upsertAttributes(rawTag: string, attributes: Record<string, string>): s
   let tag = rawTag.slice(0, -closing.length);
 
   for (const [name, value] of Object.entries(attributes)) {
+    const escapedValue = escapeXmlAttribute(value);
     const pattern = new RegExp(`\\s${name}=(["']).*?\\1`);
     if (pattern.test(tag)) {
-      tag = tag.replace(pattern, ` ${name}="${value}"`);
+      tag = tag.replace(pattern, ` ${name}="${escapedValue}"`);
       continue;
     }
 
-    tag = `${tag} ${name}="${value}"`;
+    tag = `${tag} ${name}="${escapedValue}"`;
   }
 
   return `${tag}${closing}`;

@@ -175,6 +175,17 @@ export async function renameWorkbookTable(
   await writeWorkbook(workbook, outputPath);
 }
 
+export async function renameWorkbookSheet(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  nextName: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.renameSheet(sheetName, nextName);
+  await writeWorkbook(workbook, outputPath);
+}
+
 export async function removeRightmostWorkbookTableColumn(
   inputPath: string,
   outputPath: string,

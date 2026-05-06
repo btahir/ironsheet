@@ -12,7 +12,7 @@ Ironsheet is split into runtime-neutral core APIs and Node-specific IO APIs.
 ## Current Core Capabilities
 
 - Inspect sheets, features, defined names, formulas, tables, and styles.
-- Read and write cells, ranges, appended rows, table rows, table names, table columns, and cell styles.
+- Read and write cells, ranges, appended rows, table rows, sheet names, table names, table columns, and cell styles.
 - Preserve untouched ZIP entries and OOXML parts.
 - Validate relationships, dimensions, styles, shared strings, formula references, tables, pivots, charts, and calc chains.
 - Retarget exact chart formulas and pivot cache worksheet sources.

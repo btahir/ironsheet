@@ -5,6 +5,7 @@ import {
   parseFormulaReferences,
   parseFormulaSheetReferences,
   parseFormulaStructuredReferences,
+  renameFormulaSheetReferences,
   renameFormulaStructuredReferenceColumn,
   renameFormulaStructuredReferenceTable
 } from "../packages/core/src/index.ts";
@@ -27,6 +28,17 @@ test("formula sheet reference parser unescapes quoted sheet names", () => {
   assert.deepEqual(parseFormulaSheetReferences("'Bob''s Sheet'!A1+'Bob''s Sheet'!A2"), [
     { sheetName: "Bob's Sheet" }
   ]);
+});
+
+test("formula sheet reference rename retargets quoted and 3D references", () => {
+  assert.equal(
+    renameFormulaSheetReferences(
+      `SUM(Sheet1!A1,'Sheet1'!B2,Sheet1:Sheet2!C3,'Bob''s Sheet'!D4,"Sheet1!A1",[Book.xlsx]Sheet1!A1)`,
+      "Sheet1",
+      "Revenue 2026"
+    ),
+    `SUM('Revenue 2026'!A1,'Revenue 2026'!B2,'Revenue 2026':Sheet2!C3,'Bob''s Sheet'!D4,"Sheet1!A1",[Book.xlsx]Sheet1!A1)`
+  );
 });
 
 test("formula reference parser returns local cells and ranges", () => {

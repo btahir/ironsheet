@@ -16,6 +16,7 @@ export {
   parseFormulaReferences,
   parseFormulaSheetReferences,
   parseFormulaStructuredReferences,
+  renameFormulaSheetReferences,
   renameFormulaStructuredReferenceColumn,
   renameFormulaStructuredReferenceTable,
   type FormulaCellReference,

@@ -14,6 +14,7 @@ import {
   readWorkbookCell,
   readWorkbookRange,
   removeRightmostWorkbookTableColumn,
+  renameWorkbookSheet,
   renameWorkbookTable,
   renameWorkbookTableColumn,
   replaceWorkbookTableRows,
@@ -38,6 +39,7 @@ type Command =
   | "patch-range"
   | "read-cell"
   | "read-range"
+  | "rename-sheet"
   | "rename-table-column"
   | "rename-table"
   | "remove-table-column"
@@ -64,6 +66,7 @@ function usage(): never {
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
+  npm run cli -- rename-sheet <input.xlsx> <output.xlsx> <sheet> <newName>
   npm run cli -- rename-table <input.xlsx> <output.xlsx> <table> <newName>
   npm run cli -- rename-table-column <input.xlsx> <output.xlsx> <table> <column> <newName>
   npm run cli -- remove-table-column <input.xlsx> <output.xlsx> <table> <rightmostColumn>
@@ -199,6 +202,16 @@ async function renameTable(
 ): Promise<void> {
   await renameWorkbookTable(inputPath, outputPath, tableName, nextName);
   console.log(`renamed ${tableName} to ${nextName} -> ${outputPath}`);
+}
+
+async function renameSheet(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  nextName: string
+): Promise<void> {
+  await renameWorkbookSheet(inputPath, outputPath, sheetName, nextName);
+  console.log(`renamed ${sheetName} to ${nextName} -> ${outputPath}`);
 }
 
 async function renameTableColumn(
@@ -473,6 +486,17 @@ try {
       usage();
     }
     await renameTable(inputPath, outputPath, tableName, nextName);
+  } else if (command === "rename-sheet") {
+    const [inputPath, outputPath, sheetName, nextName] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      nextName === undefined
+    ) {
+      usage();
+    }
+    await renameSheet(inputPath, outputPath, sheetName, nextName);
   } else if (command === "rename-table-column") {
     const [inputPath, outputPath, tableName, columnName, nextName] = args;
     if (

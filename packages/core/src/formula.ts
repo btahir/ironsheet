@@ -135,6 +135,49 @@ export function renameFormulaStructuredReferenceColumn(
   return applyTextReplacements(formula, replacements);
 }
 
+export function renameFormulaSheetReferences(
+  formula: string,
+  oldSheetName: string,
+  nextSheetName: string
+): string {
+  const oldName = oldSheetName.toLowerCase();
+  const scrubbed = stripDoubleQuotedStrings(formula);
+  const sheetToken = String.raw`(?:'(?:(?:'')|[^'])+'|[A-Za-z_][A-Za-z0-9_ .]*)`;
+  const pattern = new RegExp(
+    String.raw`(?:^|[,( +\-*/^&=<>])(${sheetToken})(?::(${sheetToken}))?!`,
+    "g"
+  );
+  const replacements: TextReplacement[] = [];
+
+  for (const match of scrubbed.matchAll(pattern)) {
+    const startToken = match[1];
+    if (startToken === undefined || startToken.includes("[")) {
+      continue;
+    }
+
+    const endToken = match[2];
+    const wholeMatch = match[0];
+    const matchStart = match.index ?? 0;
+    const tokenStart = matchStart + wholeMatch.indexOf(startToken);
+    const tokenEnd = tokenStart + startToken.length;
+
+    if (unquoteSheetName(startToken).toLowerCase() === oldName) {
+      replacements.push({ start: tokenStart, end: tokenEnd, text: quoteSheetName(nextSheetName) });
+    }
+
+    if (endToken !== undefined && unquoteSheetName(endToken).toLowerCase() === oldName) {
+      const endStart = tokenEnd + 1;
+      replacements.push({
+        start: endStart,
+        end: endStart + endToken.length,
+        text: quoteSheetName(nextSheetName)
+      });
+    }
+  }
+
+  return applyTextReplacements(formula, replacements);
+}
+
 export function parseFormulaSheetReferences(formula: string): FormulaSheetReference[] {
   const references = new Set<string>();
   const scrubbed = stripDoubleQuotedStrings(formula);
@@ -462,6 +505,14 @@ function normalizedReference(firstAddress: string, secondAddress: string | undef
 
 function stripAbsoluteMarkers(address: string): string {
   return address.replaceAll("$", "");
+}
+
+function quoteSheetName(name: string): string {
+  if (/^[A-Za-z_][A-Za-z0-9_.]*$/.test(name)) {
+    return name;
+  }
+
+  return `'${name.replaceAll("'", "''")}'`;
 }
 
 function isReferenceBoundaryBefore(source: string, index: number): boolean {
