@@ -141,6 +141,7 @@ test("validation reports worksheet dimensions that exclude cells", async () => {
 test("validation reports invalid worksheet range attributes", async () => {
   const pkg = await openPackage(
     await createMinimalWorkbook({
+      includeAutoFilter: true,
       includeConditionalFormatting: true,
       includeDataValidation: true,
       includeHyperlink: true,
@@ -153,6 +154,7 @@ test("validation reports invalid worksheet range attributes", async () => {
     worksheetXml
       .replace('<mergeCells count="1">', '<mergeCells count="2">')
       .replace('<mergeCell ref="A1:B1"/>', '<mergeCell ref="XFE1:XFE2"/>')
+      .replace('ref="A1:B10"', 'ref="BAD"')
       .replace('sqref="B2:B10"', 'sqref="BAD XFE1"')
       .replace('sqref="A1:A10"', 'sqref="A1048577"')
       .replace(
@@ -163,7 +165,7 @@ test("validation reports invalid worksheet range attributes", async () => {
 
   const report = await validateWorkbookPackage(pkg);
 
-  assert.equal(report.summary.errors, 5);
+  assert.equal(report.summary.errors, 6);
   assert.equal(report.summary.warnings, 1);
   assert.equal(
     report.issues.some((issue) => issue.code === "MERGE_CELL_COUNT_MISMATCH"),
@@ -183,6 +185,10 @@ test("validation reports invalid worksheet range attributes", async () => {
   );
   assert.equal(
     report.issues.some((issue) => issue.code === "CONDITIONAL_FORMATTING_SQREF_OUT_OF_BOUNDS"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "AUTO_FILTER_REF_INVALID"),
     true
   );
   assert.equal(

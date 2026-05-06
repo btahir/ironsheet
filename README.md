@@ -14,6 +14,7 @@ This repository currently implements the first vertical slice:
 - Duplicate and unsafe ZIP entry path rejection on read and write.
 - OPC relationship parsing and target resolution.
 - Workbook sheet discovery.
+- Worksheet autoFilter inventory plus set/delete helpers that preserve existing filter criteria XML.
 - Defined-name inspection.
 - Classic worksheet comment inventory with author resolution through worksheet relationships.
 - Defined-name set/delete helpers for named ranges and scoped workbook names.
@@ -78,6 +79,12 @@ List workbook formulas:
 
 ```bash
 npm run cli -- formulas path/to/workbook.xlsx
+```
+
+List workbook auto filters:
+
+```bash
+npm run cli -- auto-filters path/to/workbook.xlsx
 ```
 
 List workbook comments:
@@ -191,6 +198,13 @@ Set or delete a defined name:
 ```bash
 npm run cli -- set-defined-name input.xlsx output.xlsx ReportRange 'Sheet1!$A$1:$B$10'
 npm run cli -- delete-defined-name input.xlsx output.xlsx ReportRange
+```
+
+Set or delete a worksheet auto filter:
+
+```bash
+npm run cli -- set-auto-filter input.xlsx output.xlsx Sheet1 '{"ref":"A1:C10"}'
+npm run cli -- delete-auto-filter input.xlsx output.xlsx Sheet1
 ```
 
 Set or delete a conditional format:

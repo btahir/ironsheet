@@ -1220,6 +1220,17 @@ async function validateWorksheetRangeReferences(
       });
     }
 
+    for (const autoFilter of findStartTags(xml, "autoFilter")) {
+      validateRangeAttribute({
+        issues,
+        part,
+        ref: autoFilter.attributes.ref,
+        missingCode: "AUTO_FILTER_REF_MISSING",
+        invalidCode: "AUTO_FILTER_REF_INVALID",
+        outOfBoundsCode: "AUTO_FILTER_REF_OUT_OF_BOUNDS"
+      });
+    }
+
     for (const hyperlink of findStartTags(xml, "hyperlink")) {
       validateRangeAttribute({
         issues,

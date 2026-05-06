@@ -5,12 +5,14 @@ import { diffZipPackages } from "@ironsheet/core";
 import {
   appendWorkbookRows,
   appendWorkbookTableColumn,
+  deleteWorkbookAutoFilter,
   deleteWorkbookConditionalFormat,
   deleteWorkbookDataValidation,
   deleteWorkbookDefinedName,
   deleteWorkbookHyperlink,
   hideWorkbookSheet,
   inspectWorkbookStyles,
+  listWorkbookAutoFilters,
   listWorkbookComments,
   listWorkbookConditionalFormats,
   listWorkbookDataValidations,
@@ -31,6 +33,7 @@ import {
   replaceWorkbookTableRows,
   retargetWorkbookChartFormulasFile,
   retargetWorkbookPivotCacheSourcesFile,
+  setWorkbookAutoFilter,
   setWorkbookConditionalFormat,
   setWorkbookDataValidation,
   setWorkbookDefinedName,
@@ -46,6 +49,7 @@ import type {
   PivotCacheSourceRetarget,
   WorkbookCellStyleInput,
   WorkbookSheetState,
+  WorksheetAutoFilter,
   WorksheetConditionalFormat,
   WorksheetDataValidation
 } from "@ironsheet/core";
@@ -54,8 +58,10 @@ type Command =
   | "inspect"
   | "append-rows"
   | "append-table-column"
+  | "auto-filters"
   | "comments"
   | "conditional-formats"
+  | "delete-auto-filter"
   | "delete-conditional-format"
   | "data-validations"
   | "delete-data-validation"
@@ -77,6 +83,7 @@ type Command =
   | "replace-table"
   | "retarget-chart"
   | "retarget-pivot"
+  | "set-auto-filter"
   | "set-conditional-format"
   | "set-data-validation"
   | "set-defined-name"
@@ -94,6 +101,7 @@ function usage(): never {
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- tables <workbook.xlsx>
   npm run cli -- formulas <workbook.xlsx>
+  npm run cli -- auto-filters <workbook.xlsx> [sheet]
   npm run cli -- comments <workbook.xlsx> [sheet]
   npm run cli -- conditional-formats <workbook.xlsx> [sheet]
   npm run cli -- data-validations <workbook.xlsx> [sheet]
@@ -108,6 +116,8 @@ function usage(): never {
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
+  npm run cli -- set-auto-filter <input.xlsx> <output.xlsx> <sheet> <jsonAutoFilter>
+  npm run cli -- delete-auto-filter <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
   npm run cli -- delete-conditional-format <input.xlsx> <output.xlsx> <sheet> <sqref>
   npm run cli -- set-data-validation <input.xlsx> <output.xlsx> <sheet> <jsonValidation>
@@ -149,6 +159,10 @@ async function tables(path: string): Promise<void> {
 
 async function formulas(path: string): Promise<void> {
   console.log(JSON.stringify(await listWorkbookFormulas(path), null, 2));
+}
+
+async function autoFilters(path: string, sheetName: string | undefined): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookAutoFilters(path, sheetName), null, 2));
 }
 
 async function comments(path: string, sheetName: string | undefined): Promise<void> {
@@ -288,6 +302,26 @@ async function deleteDefinedName(
     parseDefinedNameDeleteOptions(rawOptions)
   );
   console.log(`${deleted ? "deleted" : "did not find"} defined name ${name} -> ${outputPath}`);
+}
+
+async function setAutoFilter(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rawAutoFilter: string
+): Promise<void> {
+  const autoFilter = parseAutoFilter(rawAutoFilter);
+  await setWorkbookAutoFilter(inputPath, outputPath, sheetName, autoFilter);
+  console.log(`set auto filter ${sheetName}!${autoFilter.ref} -> ${outputPath}`);
+}
+
+async function deleteAutoFilter(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string
+): Promise<void> {
+  const deleted = await deleteWorkbookAutoFilter(inputPath, outputPath, sheetName);
+  console.log(`${deleted ? "deleted" : "did not find"} auto filter ${sheetName} -> ${outputPath}`);
 }
 
 async function setConditionalFormat(
@@ -523,6 +557,19 @@ function parseStyle(rawStyle: string): WorkbookCellStyleInput {
   return parsed as WorkbookCellStyleInput;
 }
 
+function parseAutoFilter(rawAutoFilter: string): WorksheetAutoFilter {
+  const parsed: unknown = JSON.parse(rawAutoFilter);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("jsonAutoFilter must be an object");
+  }
+
+  if (!("ref" in parsed) || typeof parsed.ref !== "string") {
+    throw new Error("jsonAutoFilter must include a string ref");
+  }
+
+  return parsed as WorksheetAutoFilter;
+}
+
 function parseConditionalFormat(rawConditionalFormat: string): WorksheetConditionalFormat {
   const parsed: unknown = JSON.parse(rawConditionalFormat);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -684,6 +731,12 @@ try {
       usage();
     }
     await formulas(path);
+  } else if (command === "auto-filters") {
+    const [path, sheetName] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await autoFilters(path, sheetName);
   } else if (command === "comments") {
     const [path, sheetName] = args;
     if (path === undefined) {
@@ -802,6 +855,23 @@ try {
       usage();
     }
     await appendTableColumn(inputPath, outputPath, tableName, columnName, rawValues);
+  } else if (command === "set-auto-filter") {
+    const [inputPath, outputPath, sheetName, rawAutoFilter] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      rawAutoFilter === undefined
+    ) {
+      usage();
+    }
+    await setAutoFilter(inputPath, outputPath, sheetName, rawAutoFilter);
+  } else if (command === "delete-auto-filter") {
+    const [inputPath, outputPath, sheetName] = args;
+    if (inputPath === undefined || outputPath === undefined || sheetName === undefined) {
+      usage();
+    }
+    await deleteAutoFilter(inputPath, outputPath, sheetName);
   } else if (command === "set-conditional-format") {
     const [inputPath, outputPath, sheetName, rawConditionalFormat] = args;
     if (

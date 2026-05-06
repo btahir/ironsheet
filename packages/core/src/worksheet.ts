@@ -162,6 +162,22 @@ export type DeleteWorksheetConditionalFormatResult = {
   xml: string;
 };
 
+export type WorksheetAutoFilter = {
+  ref: string;
+  rawXml?: string;
+};
+
+export type SetWorksheetAutoFilterResult = {
+  autoFilter: WorksheetAutoFilter;
+  replaced: boolean;
+  xml: string;
+};
+
+export type DeleteWorksheetAutoFilterResult = {
+  deleted: boolean;
+  xml: string;
+};
+
 export type WorksheetHyperlink = {
   ref: string;
   display?: string;
@@ -725,6 +741,55 @@ export function deleteWorksheetConditionalFormat(
       tag,
       end: tag.selfClosing ? tag.end : findElementEnd(xml, tag)
     }));
+
+  if (removals.length === 0) {
+    return { deleted: false, xml };
+  }
+
+  let nextXml = xml;
+  for (const removal of removals.toReversed()) {
+    nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
+  }
+
+  return {
+    deleted: true,
+    xml: nextXml
+  };
+}
+
+export function listWorksheetAutoFilters(xml: string): WorksheetAutoFilter[] {
+  return findStartTags(xml, "autoFilter").map((tag) => autoFilterFromTag(xml, tag));
+}
+
+export function setWorksheetAutoFilter(
+  xml: string,
+  autoFilter: WorksheetAutoFilter
+): SetWorksheetAutoFilterResult {
+  const normalized = normalizeAutoFilter(autoFilter);
+  const autoFilterXml = createAutoFilterXml(xml, normalized);
+  const existing = findFirstStartTag(xml, "autoFilter");
+  if (existing !== undefined) {
+    const end = existing.selfClosing ? existing.end : findElementEnd(xml, existing);
+    return {
+      autoFilter: normalized,
+      replaced: true,
+      xml: `${xml.slice(0, existing.start)}${autoFilterXml}${xml.slice(end)}`
+    };
+  }
+
+  const insertOffset = autoFilterInsertOffset(xml);
+  return {
+    autoFilter: normalized,
+    replaced: false,
+    xml: `${xml.slice(0, insertOffset)}${autoFilterXml}${xml.slice(insertOffset)}`
+  };
+}
+
+export function deleteWorksheetAutoFilter(xml: string): DeleteWorksheetAutoFilterResult {
+  const removals = findStartTags(xml, "autoFilter").map((tag) => ({
+    tag,
+    end: tag.selfClosing ? tag.end : findElementEnd(xml, tag)
+  }));
 
   if (removals.length === 0) {
     return { deleted: false, xml };
@@ -1504,6 +1569,89 @@ function findMatchingDataValidation(
 
 function dataValidationContainerInsertOffset(xml: string): number {
   for (const localName of [
+    "hyperlinks",
+    "printOptions",
+    "pageMargins",
+    "pageSetup",
+    "headerFooter",
+    "rowBreaks",
+    "colBreaks",
+    "customProperties",
+    "cellWatches",
+    "ignoredErrors",
+    "smartTags",
+    "drawing",
+    "legacyDrawing",
+    "legacyDrawingHF",
+    "picture",
+    "oleObjects",
+    "controls",
+    "webPublishItems",
+    "tableParts",
+    "extLst"
+  ]) {
+    const tag = findFirstStartTag(xml, localName);
+    if (tag !== undefined) {
+      return tag.start;
+    }
+  }
+
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined) {
+    throw new WorksheetError("Worksheet is missing worksheet root");
+  }
+
+  return findElementCloseStart(xml, worksheet);
+}
+
+function normalizeAutoFilter(autoFilter: WorksheetAutoFilter): WorksheetAutoFilter {
+  return {
+    ref: parseCellRange(autoFilter.ref.replaceAll("$", "")).ref,
+    ...(autoFilter.rawXml === undefined ? {} : { rawXml: autoFilter.rawXml })
+  };
+}
+
+function autoFilterFromTag(
+  xml: string,
+  tag: ReturnType<typeof findStartTags>[number]
+): WorksheetAutoFilter {
+  return {
+    ref: parseCellRange((tag.attributes.ref ?? "").replaceAll("$", "")).ref,
+    rawXml: xml.slice(tag.start, tag.selfClosing ? tag.end : findElementEnd(xml, tag))
+  };
+}
+
+function createAutoFilterXml(xml: string, autoFilter: WorksheetAutoFilter): string {
+  if (autoFilter.rawXml !== undefined) {
+    return normalizeAutoFilterRawXml(autoFilter.rawXml, autoFilter.ref);
+  }
+
+  return `<${qualifiedName(inferWorksheetPrefix(xml), "autoFilter")} ref="${escapeXmlAttribute(autoFilter.ref)}"/>`;
+}
+
+function normalizeAutoFilterRawXml(rawXml: string, ref: string): string {
+  const tag = findFirstStartTag(rawXml, "autoFilter");
+  if (tag === undefined || tag.start !== 0) {
+    throw new WorksheetError("Auto filter rawXml must start with an autoFilter element");
+  }
+
+  const end = tag.selfClosing ? tag.end : findElementEnd(rawXml, tag);
+  if (end !== rawXml.length) {
+    throw new WorksheetError("Auto filter rawXml must contain exactly one autoFilter element");
+  }
+
+  return `${rawXml.slice(0, tag.start)}${upsertRefAttribute(tag.raw, ref)}${rawXml.slice(tag.end)}`;
+}
+
+function autoFilterInsertOffset(xml: string): number {
+  for (const localName of [
+    "sortState",
+    "dataConsolidate",
+    "customSheetViews",
+    "mergeCells",
+    "phoneticPr",
+    "conditionalFormatting",
+    "dataValidations",
     "hyperlinks",
     "printOptions",
     "pageMargins",

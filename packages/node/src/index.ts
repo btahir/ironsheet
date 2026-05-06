@@ -10,6 +10,7 @@ import {
   type PivotCacheSourceRetarget,
   type WorkbookCellStyleInput,
   type WorkbookSheetState,
+  type WorksheetAutoFilter,
   type WorksheetConditionalFormat,
   type WorksheetDataValidation
 } from "@ironsheet/core";
@@ -170,6 +171,14 @@ export async function listWorkbookComments(
   return workbook.comments(sheetName);
 }
 
+export async function listWorkbookAutoFilters(
+  inputPath: string,
+  sheetName?: string
+): Promise<Awaited<ReturnType<Workbook["autoFilters"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.autoFilters(sheetName);
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {
@@ -273,6 +282,28 @@ export async function deleteWorkbookConditionalFormat(
 ): Promise<boolean> {
   const workbook = await readWorkbook(inputPath);
   const deleted = await workbook.deleteConditionalFormat(sheetName, sqref);
+  await writeWorkbook(workbook, outputPath);
+  return deleted;
+}
+
+export async function setWorkbookAutoFilter(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  autoFilter: WorksheetAutoFilter
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.setAutoFilter(sheetName, autoFilter);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function deleteWorkbookAutoFilter(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string
+): Promise<boolean> {
+  const workbook = await readWorkbook(inputPath);
+  const deleted = await workbook.deleteAutoFilter(sheetName);
   await writeWorkbook(workbook, outputPath);
   return deleted;
 }

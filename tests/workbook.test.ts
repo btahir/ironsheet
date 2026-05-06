@@ -136,6 +136,20 @@ test("lists workbook comments with authors", async () => {
   ]);
 });
 
+test("lists workbook auto filters", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeAutoFilter: true }));
+
+  assert.deepEqual(await workbook.autoFilters(), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "A1:B10",
+      rawXml:
+        '<autoFilter ref="A1:B10"><filterColumn colId="0"><filters><filter val="Original"/></filters></filterColumn></autoFilter>'
+    }
+  ]);
+});
+
 test("lists workbook merged cells", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook({ includeMerge: true }));
 
@@ -645,6 +659,43 @@ test("defined name mutation rejects invalid names and unknown sheet scopes", asy
     () => workbook.setDefinedName("ScopedRange", "Sheet1!$A$1", { sheetName: "Missing" }),
     /Unknown worksheet/
   );
+});
+
+test("sets, replaces, and deletes auto filters", async () => {
+  const workbook = await openWorkbook(
+    await createMinimalWorkbook({ includeConditionalFormatting: true })
+  );
+
+  assert.deepEqual(await workbook.setAutoFilter("Sheet1", { ref: "$A$1:$C$10" }), {
+    sheetName: "Sheet1",
+    sheetPartName: "xl/worksheets/sheet1.xml",
+    ref: "A1:C10"
+  });
+
+  let sheetXml = await workbook.pkg.readText("xl/worksheets/sheet1.xml");
+  assert.match(sheetXml, /<autoFilter ref="A1:C10"\/>/);
+  assert.ok(sheetXml.indexOf("<autoFilter") < sheetXml.indexOf("<conditionalFormatting"));
+
+  await workbook.setAutoFilter("Sheet1", {
+    ref: "A1:C20",
+    rawXml:
+      '<autoFilter ref="A1:C10"><filterColumn colId="0"><filters><filter val="Original"/></filters></filterColumn></autoFilter>'
+  });
+  assert.deepEqual(await workbook.autoFilters("Sheet1"), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "A1:C20",
+      rawXml:
+        '<autoFilter ref="A1:C20"><filterColumn colId="0"><filters><filter val="Original"/></filters></filterColumn></autoFilter>'
+    }
+  ]);
+
+  assert.equal(await workbook.deleteAutoFilter("Sheet1"), true);
+  assert.equal(await workbook.deleteAutoFilter("Sheet1"), false);
+  sheetXml = await workbook.pkg.readText("xl/worksheets/sheet1.xml");
+  assert.doesNotMatch(sheetXml, /<autoFilter/);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 
 test("sets, replaces, and deletes conditional formats", async () => {

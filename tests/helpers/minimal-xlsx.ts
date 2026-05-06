@@ -4,6 +4,7 @@ const textEncoder = new TextEncoder();
 
 export type MinimalWorkbookOptions = {
   includeCalcChain?: boolean;
+  includeAutoFilter?: boolean;
   includeComment?: boolean;
   includeConditionalFormatting?: boolean;
   includeDataValidation?: boolean;
@@ -125,6 +126,7 @@ export async function createMinimalWorkbook(
   <sheetData>
     ${options.includeTable === true ? tableSheetRows(tableRows, options.styledTableBody === true, options.includeTableTotals === true) : `<row r="1">${singleCellXml(options)}</row>`}
   </sheetData>
+  ${options.includeAutoFilter === true ? '<autoFilter ref="A1:B10"><filterColumn colId="0"><filters><filter val="Original"/></filters></filterColumn></autoFilter>' : ""}
   ${options.includeConditionalFormatting === true ? '<conditionalFormatting sqref="A1:A10"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting>' : ""}
   ${options.includeDataValidation === true ? '<dataValidations count="1"><dataValidation type="whole" operator="between" allowBlank="1" sqref="B2:B10"><formula1>0</formula1><formula2>100</formula2></dataValidation></dataValidations>' : ""}
   ${options.includeMerge === true ? '<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>' : ""}

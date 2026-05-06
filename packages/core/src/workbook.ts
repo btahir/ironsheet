@@ -42,9 +42,11 @@ import { validateWorkbookPackage, type ValidationReport } from "./validation.ts"
 import {
   appendRows,
   applyCellStyle,
+  deleteWorksheetAutoFilter,
   deleteWorksheetConditionalFormat,
   deleteWorksheetDataValidation,
   deleteWorksheetHyperlink,
+  listWorksheetAutoFilters,
   listWorksheetConditionalFormats,
   listWorksheetDataValidations,
   listWorksheetHyperlinks,
@@ -55,6 +57,7 @@ import {
   patchRange,
   readCell,
   readRange,
+  setWorksheetAutoFilter,
   setWorksheetConditionalFormat,
   setWorksheetDataValidation,
   setWorksheetHyperlink,
@@ -64,6 +67,7 @@ import {
   type FormulaValue,
   type ReadCellResult,
   type ReadRangeResult,
+  type WorksheetAutoFilter,
   type WorksheetConditionalFormat,
   type WorksheetDataValidation
 } from "./worksheet.ts";
@@ -168,6 +172,11 @@ export type WorkbookDataValidation = WorksheetDataValidation & {
 };
 
 export type WorkbookConditionalFormat = WorksheetConditionalFormat & {
+  sheetName: string;
+  sheetPartName: string;
+};
+
+export type WorkbookAutoFilter = WorksheetAutoFilter & {
   sheetName: string;
   sheetPartName: string;
 };
@@ -401,6 +410,24 @@ export class Workbook {
     return conditionalFormats;
   }
 
+  async autoFilters(sheetName?: string): Promise<WorkbookAutoFilter[]> {
+    const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
+    const autoFilters: WorkbookAutoFilter[] = [];
+
+    for (const sheet of sheets) {
+      const xml = await this.pkg.readText(sheet.partName);
+      for (const autoFilter of listWorksheetAutoFilters(xml)) {
+        autoFilters.push({
+          sheetName: sheet.name,
+          sheetPartName: sheet.partName,
+          ...autoFilter
+        });
+      }
+    }
+
+    return autoFilters;
+  }
+
   async comments(sheetName?: string): Promise<WorkbookComment[]> {
     const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
     const comments: WorkbookComment[] = [];
@@ -450,6 +477,21 @@ export class Workbook {
     };
   }
 
+  async setAutoFilter(
+    sheetName: string,
+    autoFilter: WorksheetAutoFilter
+  ): Promise<WorkbookAutoFilter> {
+    const sheet = this.sheet(sheetName);
+    const result = setWorksheetAutoFilter(await this.pkg.readText(sheet.partName), autoFilter);
+    this.pkg.setText(sheet.partName, result.xml);
+
+    return {
+      sheetName: sheet.name,
+      sheetPartName: sheet.partName,
+      ...result.autoFilter
+    };
+  }
+
   async setConditionalFormat(
     sheetName: string,
     conditionalFormat: WorksheetConditionalFormat
@@ -471,6 +513,17 @@ export class Workbook {
   async deleteDataValidation(sheetName: string, sqref: string): Promise<boolean> {
     const sheet = this.sheet(sheetName);
     const result = deleteWorksheetDataValidation(await this.pkg.readText(sheet.partName), sqref);
+    if (!result.deleted) {
+      return false;
+    }
+
+    this.pkg.setText(sheet.partName, result.xml);
+    return true;
+  }
+
+  async deleteAutoFilter(sheetName: string): Promise<boolean> {
+    const sheet = this.sheet(sheetName);
+    const result = deleteWorksheetAutoFilter(await this.pkg.readText(sheet.partName));
     if (!result.deleted) {
       return false;
     }
