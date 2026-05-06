@@ -405,8 +405,21 @@ async function validateDefinedNames(pkg: OoxmlPackage, issues: ValidationIssue[]
   const workbookXml = await pkg.readText("xl/workbook.xml");
   const sheets = findStartTags(workbookXml, "sheet");
   const sheetNames = workbookSheetNames(workbookXml);
+  const definedNameScopes = new Set<string>();
 
   for (const definedName of parseDefinedNames(workbookXml)) {
+    const scopeKey = `${definedName.localSheetId ?? "global"}:${definedName.name.toLowerCase()}`;
+    if (definedNameScopes.has(scopeKey)) {
+      issues.push({
+        severity: "warning",
+        code: "DEFINED_NAME_DUPLICATE",
+        message: `Defined name ${definedName.name} is duplicated in the same scope`,
+        part: "xl/workbook.xml",
+        target: definedName.name
+      });
+    }
+    definedNameScopes.add(scopeKey);
+
     if (definedName.localSheetId !== undefined) {
       const localSheetId = Number.parseInt(definedName.localSheetId, 10);
       if (!Number.isInteger(localSheetId) || localSheetId < 0 || localSheetId >= sheets.length) {

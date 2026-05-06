@@ -265,6 +265,24 @@ test("validation reports defined names that reference missing sheets", async () 
   assert.equal(report.issues[0]?.target, "RevenueRange");
 });
 
+test("validation reports duplicate defined names in the same scope", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  pkg.setText(
+    "xl/workbook.xml",
+    workbookXml.replace(
+      "</definedNames>",
+      '<definedName name="RevenueRange">Sheet1!$C$1:$D$2</definedName></definedNames>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "DEFINED_NAME_DUPLICATE");
+  assert.equal(report.issues[0]?.target, "RevenueRange");
+});
+
 test("validation reports formulas that reference missing sheets", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
