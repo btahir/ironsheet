@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import {
   createCompatibilityReport,
   hasFailingChecks,
@@ -262,7 +263,7 @@ function checkExcel(): CompatibilityCheck {
   };
 }
 
-async function runCompatibilityChecks(workbookPath: string): Promise<CompatibilityReport> {
+export async function runCompatibilityChecks(workbookPath: string): Promise<CompatibilityReport> {
   const absolutePath = realpathSync(workbookPath);
   const checks = [
     checkFile(absolutePath),
@@ -277,26 +278,33 @@ async function runCompatibilityChecks(workbookPath: string): Promise<Compatibili
   return createCompatibilityReport(absolutePath, checks);
 }
 
-function writeReport(report: CompatibilityReport): void {
+export function writeReport(report: CompatibilityReport): string {
   const outputDir = resolve("compat-output");
   mkdirSync(outputDir, { recursive: true });
 
   const outputPath = resolve(outputDir, `${basename(report.workbookPath)}.compat.json`);
   writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`);
   console.log(`compat: wrote ${outputPath}`);
+  return outputPath;
 }
 
-const workbookPath = process.argv[2];
-if (workbookPath === undefined) {
-  console.error("usage: npm run compat:check -- path/to/workbook.xlsx");
-  process.exit(2);
+async function main(): Promise<void> {
+  const workbookPath = process.argv[2];
+  if (workbookPath === undefined) {
+    console.error("usage: npm run compat:check -- path/to/workbook.xlsx");
+    process.exit(2);
+  }
+
+  const resolvedPath = resolve(workbookPath);
+  const report = await runCompatibilityChecks(resolvedPath);
+  console.log(JSON.stringify(report, null, 2));
+  writeReport(report);
+
+  if (hasFailingChecks(report)) {
+    process.exit(1);
+  }
 }
 
-const resolvedPath = resolve(workbookPath);
-const report = await runCompatibilityChecks(resolvedPath);
-console.log(JSON.stringify(report, null, 2));
-writeReport(report);
-
-if (hasFailingChecks(report)) {
-  process.exit(1);
+if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  await main();
 }

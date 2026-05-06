@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCompatibilityReport, hasFailingChecks } from "../packages/compat/src/index.ts";
+import {
+  createCompatibilityReport,
+  hasFailingChecks,
+  parseCompatibilityFixtureManifest,
+  requiredValidatorsPassed
+} from "../packages/compat/src/index.ts";
 
 test("compatibility reports detect failing checks", () => {
   const report = createCompatibilityReport("/tmp/workbook.xlsx", [
@@ -41,4 +46,81 @@ test("compatibility reports treat ironsheet validation as required", () => {
   ]);
 
   assert.equal(hasFailingChecks(report), true);
+});
+
+test("compatibility fixture manifests validate fixture shape", () => {
+  assert.deepEqual(
+    parseCompatibilityFixtureManifest({
+      schemaVersion: 1,
+      fixtures: [
+        {
+          id: "chart-dashboard",
+          path: "workbooks/chart-dashboard.xlsx",
+          description: "Workbook with chart formulas",
+          features: ["charts", "formulas"],
+          status: "pending",
+          requiredValidators: ["file", "zip", "ironsheet"]
+        }
+      ]
+    }),
+    {
+      schemaVersion: 1,
+      fixtures: [
+        {
+          id: "chart-dashboard",
+          path: "workbooks/chart-dashboard.xlsx",
+          description: "Workbook with chart formulas",
+          features: ["charts", "formulas"],
+          status: "pending",
+          requiredValidators: ["file", "zip", "ironsheet"]
+        }
+      ]
+    }
+  );
+});
+
+test("compatibility fixture manifests reject duplicate ids", () => {
+  assert.throws(
+    () =>
+      parseCompatibilityFixtureManifest({
+        schemaVersion: 1,
+        fixtures: [
+          {
+            id: "same",
+            path: "a.xlsx",
+            description: "A",
+            features: [],
+            status: "pending",
+            requiredValidators: ["file"]
+          },
+          {
+            id: "same",
+            path: "b.xlsx",
+            description: "B",
+            features: [],
+            status: "pending",
+            requiredValidators: ["file"]
+          }
+        ]
+      }),
+    /Duplicate fixture id/
+  );
+});
+
+test("required fixture validators must pass", () => {
+  const report = createCompatibilityReport("/tmp/workbook.xlsx", [
+    {
+      validator: "file",
+      status: "pass",
+      message: "exists"
+    },
+    {
+      validator: "zip",
+      status: "skip",
+      message: "missing unzip"
+    }
+  ]);
+
+  assert.equal(requiredValidatorsPassed(report, ["file"]), true);
+  assert.equal(requiredValidatorsPassed(report, ["file", "zip"]), false);
 });

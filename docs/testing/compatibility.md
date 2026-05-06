@@ -29,6 +29,14 @@ npm run compat:check -- path/to/workbook.xlsx
 
 This writes a JSON report under `compat-output/`.
 
+Run the fixture corpus:
+
+```bash
+npm run compat:corpus
+```
+
+The default manifest is `fixtures/corpus/manifest.json`. It intentionally starts with pending fixture slots for the workbook shapes we need to cover. Add cleared workbooks under `fixtures/corpus/workbooks/`, flip the matching manifest entry to `active`, and rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
+
 ## Numbers Smoke Checks
 
 By default, Numbers checks are reported as `manual` so CI and normal tests do not open desktop apps.
@@ -70,4 +78,3 @@ Future options:
 Open XML SDK validation can catch schema-level issues. It requires the .NET SDK and a validator harness that we have not scaffolded yet.
 
 This should become a future CI job once the workbook writer exists.
-

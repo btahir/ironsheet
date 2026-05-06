@@ -128,6 +128,12 @@ Run compatibility checks:
 npm run compat:check -- output.xlsx
 ```
 
+Run the fixture corpus compatibility matrix:
+
+```bash
+npm run compat:corpus
+```
+
 Open in Numbers for an interactive smoke check on macOS:
 
 ```bash

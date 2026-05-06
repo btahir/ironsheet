@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "styled-table-report",
+      "path": "workbooks/styled-table-report.xlsx",
+      "description": "Styled operational report with table formulas, totals rows, frozen panes, filters, and dense style reuse.",
+      "features": ["tables", "formulas", "styles", "filters"],
+      "status": "pending",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "macro-enabled-model",
+      "path": "workbooks/macro-enabled-model.xlsm",
+      "description": "Macro-enabled workbook used to verify raw VBA project preservation across safe edits.",
+      "features": ["macros", "formulas", "defined-names", "styles"],
+      "status": "pending",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "chart-dashboard",
+      "path": "workbooks/chart-dashboard.xlsx",
+      "description": "Dashboard workbook with chart series, chart formulas, drawings, images, and hidden source sheets.",
+      "features": ["charts", "drawings", "images", "hidden-sheets", "formulas"],
+      "status": "pending",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "pivot-cache-workbook",
+      "path": "workbooks/pivot-cache-workbook.xlsx",
+      "description": "Pivot table workbook with worksheet cache sources, pivot cache definitions, and refresh metadata.",
+      "features": ["pivot-tables", "pivot-caches", "tables", "defined-names"],
+      "status": "pending",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
+      "id": "large-sheet-export",
+      "path": "workbooks/large-sheet-export.xlsx",
+      "description": "Large worksheet export for streaming read/write validation and memory regression checks.",
+      "features": ["large-worksheets", "streaming", "styles", "shared-strings"],
+      "status": "pending",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    }
+  ]
+}
