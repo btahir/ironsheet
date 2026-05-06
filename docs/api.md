@@ -11,9 +11,9 @@ Ironsheet is split into runtime-neutral core APIs and Node-specific IO APIs.
 
 ## Current Core Capabilities
 
-- Inspect sheets, features, auto filters, comments, conditional formats, data validations, defined names, formulas, hyperlinks, images, merged cells, tables, and styles.
-- Read and write cells, ranges, appended rows, worksheet auto filters, conditional-formatting blocks, data validations, defined names, external hyperlinks, existing image bytes, merged cells, table rows, sheet names, sheet visibility, table names, table columns, and cell styles.
-- Render template patches across cells, ranges, tables, and existing images in one typed operation.
+- Inspect sheets, features, auto filters, comments, conditional formats, data validations, defined names, named ranges, formulas, hyperlinks, images, merged cells, tables, and styles.
+- Read and write cells, ranges, named ranges, appended rows, worksheet auto filters, conditional-formatting blocks, data validations, defined names, external hyperlinks, existing image bytes, merged cells, table rows, sheet names, sheet visibility, table names, table columns, and cell styles.
+- Render template patches across named ranges, cells, ranges, tables, and existing images in one typed operation.
 - Preserve untouched ZIP entries and OOXML parts.
 - Validate relationships, dimensions, hyperlinks, merged cells, styles, shared strings, formula references, tables, pivots, charts, and calc chains.
 - Retarget exact chart formulas and pivot cache worksheet sources.

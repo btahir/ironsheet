@@ -20,12 +20,15 @@ import {
   listWorkbookHyperlinks,
   listWorkbookImages,
   listWorkbookMergedCells,
+  listWorkbookNamedRanges,
   listWorkbookTables,
   mergeWorkbookCells,
   patchWorkbookCell,
+  patchWorkbookNamedRange,
   patchWorkbookRange,
   readWorkbook,
   readWorkbookCell,
+  readWorkbookNamedRange,
   readWorkbookRange,
   removeRightmostWorkbookTableColumn,
   renameWorkbookSheet,
@@ -78,8 +81,11 @@ type Command =
   | "patch"
   | "merge-cells"
   | "merged-cells"
+  | "named-ranges"
   | "patch-range"
+  | "patch-named-range"
   | "read-cell"
+  | "read-named-range"
   | "read-range"
   | "rename-sheet"
   | "rename-table-column"
@@ -115,13 +121,16 @@ function usage(): never {
   npm run cli -- hyperlinks <workbook.xlsx> [sheet]
   npm run cli -- images <workbook.xlsx> [sheet]
   npm run cli -- merged-cells <workbook.xlsx> [sheet]
+  npm run cli -- named-ranges <workbook.xlsx> [name]
   npm run cli -- styles <workbook.xlsx>
   npm run cli -- validate <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
   npm run cli -- read-range <workbook.xlsx> <sheet> <range>
+  npm run cli -- read-named-range <workbook.xlsx> <name> [sheet]
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
   npm run cli -- style-cell <input.xlsx> <output.xlsx> <sheet> <cell> <jsonStyle>
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
+  npm run cli -- patch-named-range <input.xlsx> <output.xlsx> <name> <jsonRows> [sheet]
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
   npm run cli -- set-auto-filter <input.xlsx> <output.xlsx> <sheet> <jsonAutoFilter>
@@ -199,6 +208,10 @@ async function mergedCells(path: string, sheetName: string | undefined): Promise
   console.log(JSON.stringify(await listWorkbookMergedCells(path, sheetName), null, 2));
 }
 
+async function namedRanges(path: string, name: string | undefined): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookNamedRanges(path, name), null, 2));
+}
+
 async function styles(path: string): Promise<void> {
   console.log(JSON.stringify(await inspectWorkbookStyles(path), null, 2));
 }
@@ -218,6 +231,20 @@ async function readCellCommand(path: string, sheetName: string, address: string)
 
 async function readRangeCommand(path: string, sheetName: string, rangeRef: string): Promise<void> {
   console.log(JSON.stringify(await readWorkbookRange(path, sheetName, rangeRef), null, 2));
+}
+
+async function readNamedRangeCommand(
+  path: string,
+  name: string,
+  sheetName: string | undefined
+): Promise<void> {
+  console.log(
+    JSON.stringify(
+      await readWorkbookNamedRange(path, name, sheetName === undefined ? {} : { sheetName }),
+      null,
+      2
+    )
+  );
 }
 
 async function diff(beforePath: string, afterPath: string): Promise<void> {
@@ -257,6 +284,23 @@ async function patchRangeCommand(
 ): Promise<void> {
   await patchWorkbookRange(inputPath, outputPath, sheetName, startAddress, parseRows(rawRows));
   console.log(`patched ${sheetName}!${startAddress} range -> ${outputPath}`);
+}
+
+async function patchNamedRangeCommand(
+  inputPath: string,
+  outputPath: string,
+  name: string,
+  rawRows: string,
+  sheetName: string | undefined
+): Promise<void> {
+  await patchWorkbookNamedRange(
+    inputPath,
+    outputPath,
+    name,
+    parseRows(rawRows),
+    sheetName === undefined ? {} : { sheetName }
+  );
+  console.log(`patched named range ${name} -> ${outputPath}`);
 }
 
 async function appendRowsCommand(
@@ -620,6 +664,7 @@ function parseTemplatePatch(rawPatch: string): WorkbookTemplatePatch {
   const patch = parsed as Record<string, unknown>;
   return {
     ...parseTemplateCells(patch.cells),
+    ...parseTemplateNames(patch.names),
     ...parseTemplateRanges(patch.ranges),
     ...parseTemplateTables(patch.tables)
   };
@@ -653,6 +698,49 @@ function parseTemplateCells(cells: unknown): Pick<WorkbookTemplatePatch, "cells"
         sheetName: candidate.sheetName,
         address: candidate.address,
         value: parseJsonCell(candidate.value)
+      };
+    })
+  };
+}
+
+function parseTemplateNames(names: unknown): Pick<WorkbookTemplatePatch, "names"> {
+  if (names === undefined) {
+    return {};
+  }
+
+  if (!Array.isArray(names)) {
+    throw new Error("jsonPatch.names must be an array");
+  }
+
+  return {
+    names: names.map((name) => {
+      if (typeof name !== "object" || name === null || Array.isArray(name)) {
+        throw new Error("jsonPatch.names entries must be objects");
+      }
+
+      const candidate = name as Record<string, unknown>;
+      if (typeof candidate.name !== "string" || !Array.isArray(candidate.values)) {
+        throw new Error("jsonPatch.names entries need name and values");
+      }
+
+      if (candidate.sheetName !== undefined && typeof candidate.sheetName !== "string") {
+        throw new Error("jsonPatch.names sheetName must be a string when provided");
+      }
+
+      if (
+        candidate.allowOutsideRange !== undefined &&
+        typeof candidate.allowOutsideRange !== "boolean"
+      ) {
+        throw new Error("jsonPatch.names allowOutsideRange must be a boolean when provided");
+      }
+
+      return {
+        name: candidate.name,
+        values: parseJsonRows(candidate.values),
+        ...(candidate.allowOutsideRange === undefined
+          ? {}
+          : { allowOutsideRange: candidate.allowOutsideRange }),
+        ...(candidate.sheetName === undefined ? {} : { sheetName: candidate.sheetName })
       };
     })
   };
@@ -922,6 +1010,12 @@ try {
       usage();
     }
     await mergedCells(path, sheetName);
+  } else if (command === "named-ranges") {
+    const [path, name] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await namedRanges(path, name);
   } else if (command === "styles") {
     const [path] = args;
     if (path === undefined) {
@@ -946,6 +1040,12 @@ try {
       usage();
     }
     await readRangeCommand(path, sheetName, rangeRef);
+  } else if (command === "read-named-range") {
+    const [path, name, sheetName] = args;
+    if (path === undefined || name === undefined) {
+      usage();
+    }
+    await readNamedRangeCommand(path, name, sheetName);
   } else if (command === "diff") {
     const [beforePath, afterPath] = args;
     if (beforePath === undefined || afterPath === undefined) {
@@ -976,6 +1076,17 @@ try {
       usage();
     }
     await patchRangeCommand(inputPath, outputPath, sheetName, startAddress, rawRows);
+  } else if (command === "patch-named-range") {
+    const [inputPath, outputPath, name, rawRows, sheetName] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      name === undefined ||
+      rawRows === undefined
+    ) {
+      usage();
+    }
+    await patchNamedRangeCommand(inputPath, outputPath, name, rawRows, sheetName);
   } else if (command === "style-cell") {
     const [inputPath, outputPath, sheetName, address, rawStyle] = args;
     if (

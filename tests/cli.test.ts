@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { openPackage } from "../packages/node/src/index.ts";
+import { openPackage, openWorkbook } from "../packages/node/src/index.ts";
 import { createMinimalWorkbook } from "./helpers/minimal-xlsx.ts";
 
 test("CLI validate exits successfully for valid workbooks", async () => {
@@ -44,6 +44,38 @@ test("CLI validate exits nonzero for validation errors", async () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stdout, /RELATIONSHIP_ID_DUPLICATE/);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test("CLI patch-named-range updates a defined-name target", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    const outputPath = resolve(directory, "output.xlsx");
+    await writeFile(inputPath, await createMinimalWorkbook({ includeDefinedName: true }));
+
+    const result = runCli([
+      "patch-named-range",
+      inputPath,
+      outputPath,
+      "RevenueRange",
+      '[["West",100],["East",200]]'
+    ]);
+
+    assert.equal(result.status, 0);
+    const workbook = await openWorkbook(new Uint8Array(await readFile(outputPath)));
+    assert.deepEqual(
+      (await workbook.readNamedRange("RevenueRange")).cells.map((row) =>
+        row.map((cell) => cell?.value)
+      ),
+      [
+        ["West", 100],
+        ["East", 200]
+      ]
+    );
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

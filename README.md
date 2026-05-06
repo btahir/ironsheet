@@ -24,7 +24,8 @@ This repository currently implements the first vertical slice:
 - Hyperlink inventory plus external hyperlink set/delete with worksheet relationship management.
 - Merged-cell inventory plus guarded merge/unmerge helpers with overlap validation.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
-- Template render API for applying cell, range, table, and existing-image patches in one typed operation.
+- Named-range discovery plus guarded named-range read/write for template anchors.
+- Template render API for applying named-range, cell, range, table, and existing-image patches in one typed operation.
 - Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
 - Safe sheet visibility changes with hidden and veryHidden state support.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
@@ -125,6 +126,12 @@ List workbook merged cells:
 npm run cli -- merged-cells path/to/workbook.xlsx
 ```
 
+List workbook named ranges:
+
+```bash
+npm run cli -- named-ranges path/to/workbook.xlsx
+```
+
 Inspect workbook styles:
 
 ```bash
@@ -149,6 +156,12 @@ Read a range:
 npm run cli -- read-range path/to/workbook.xlsx Sheet1 A1:C5
 ```
 
+Read a named range:
+
+```bash
+npm run cli -- read-named-range path/to/workbook.xlsx RevenueRange
+```
+
 Patch a single cell:
 
 ```bash
@@ -165,6 +178,12 @@ Patch a range:
 
 ```bash
 npm run cli -- patch-range input.xlsx output.xlsx Sheet1 B2 '[["Name","Amount"],["ACME",42]]'
+```
+
+Patch a named range without hard-coding cell coordinates:
+
+```bash
+npm run cli -- patch-named-range input.xlsx output.xlsx RevenueRange '[["Name","Amount"],["ACME",42]]'
 ```
 
 Append rows:
@@ -224,7 +243,7 @@ npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
 Render a template with cells, ranges, and tables in one JSON patch:
 
 ```bash
-npm run cli -- render-template input.xlsx output.xlsx '{"cells":[{"sheetName":"Sheet1","address":"D1","value":"Rendered"}],"ranges":[{"sheetName":"Sheet1","startAddress":"E1","values":[[1,2],[3,4]]}],"tables":[{"tableName":"RevenueTable","rows":[["North",10],["South",20]]}]}'
+npm run cli -- render-template input.xlsx output.xlsx '{"names":[{"name":"RevenueRange","values":[["Name","Amount"],["ACME",42]]}],"cells":[{"sheetName":"Sheet1","address":"D1","value":"Rendered"}],"ranges":[{"sheetName":"Sheet1","startAddress":"E1","values":[[1,2],[3,4]]}],"tables":[{"tableName":"RevenueTable","rows":[["North",10],["South",20]]}]}'
 ```
 
 Set or delete a conditional format:

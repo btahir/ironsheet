@@ -187,6 +187,23 @@ export type WorkbookAutoFilter = WorksheetAutoFilter & {
   sheetPartName: string;
 };
 
+export type WorkbookNamedRange = {
+  name: string;
+  text: string;
+  sheetName: string;
+  sheetPartName: string;
+  ref: string;
+  range: CellRange;
+  comment?: string;
+  hidden?: boolean;
+  localSheetId?: string;
+};
+
+export type WorkbookNamedRangePatchOptions = {
+  allowOutsideRange?: boolean;
+  sheetName?: string;
+};
+
 export type WorkbookTemplateCellPatch = {
   sheetName: string;
   address: string;
@@ -209,9 +226,17 @@ export type WorkbookTemplateImagePatch = {
   data: Uint8Array;
 };
 
+export type WorkbookTemplateNamedRangePatch = {
+  name: string;
+  values: CellInput[][];
+  allowOutsideRange?: boolean;
+  sheetName?: string;
+};
+
 export type WorkbookTemplatePatch = {
   cells?: WorkbookTemplateCellPatch[];
   images?: WorkbookTemplateImagePatch[];
+  names?: WorkbookTemplateNamedRangePatch[];
   ranges?: WorkbookTemplateRangePatch[];
   tables?: WorkbookTemplateTablePatch[];
 };
@@ -220,6 +245,7 @@ export type WorkbookTemplateRenderResult = {
   applied: {
     cells: number;
     images: number;
+    names: number;
     ranges: number;
     tables: number;
   };
@@ -353,12 +379,23 @@ export class Workbook {
   async renderTemplate(patch: WorkbookTemplatePatch): Promise<WorkbookTemplateRenderResult> {
     let cells = 0;
     let images = 0;
+    let names = 0;
     let ranges = 0;
     let tables = 0;
 
     for (const table of patch.tables ?? []) {
       await this.replaceTableRows(table.tableName, table.rows);
       tables += 1;
+    }
+
+    for (const name of patch.names ?? []) {
+      await this.patchNamedRange(name.name, name.values, {
+        ...(name.allowOutsideRange === undefined
+          ? {}
+          : { allowOutsideRange: name.allowOutsideRange }),
+        ...(name.sheetName === undefined ? {} : { sheetName: name.sheetName })
+      });
+      names += 1;
     }
 
     for (const cell of patch.cells ?? []) {
@@ -380,6 +417,7 @@ export class Workbook {
       applied: {
         cells,
         images,
+        names,
         ranges,
         tables
       },
@@ -397,6 +435,58 @@ export class Workbook {
     const sheet = this.sheet(sheetName);
     const xml = await this.pkg.readText(sheet.partName);
     return readRange(xml, rangeRef, { sharedStrings: await this.sharedStrings() });
+  }
+
+  async namedRanges(name?: string): Promise<WorkbookNamedRange[]> {
+    const ranges: WorkbookNamedRange[] = [];
+
+    for (const definedName of await this.definedNames()) {
+      if (name !== undefined && definedName.name.toLowerCase() !== name.toLowerCase()) {
+        continue;
+      }
+
+      const range = this.namedRangeFromDefinedName(definedName);
+      if (range !== undefined) {
+        ranges.push(range);
+      }
+    }
+
+    return ranges;
+  }
+
+  async resolveNamedRange(
+    name: string,
+    options: { sheetName?: string } = {}
+  ): Promise<WorkbookNamedRange> {
+    const definedName = await this.findDefinedNameForUse(name, options);
+    const range = this.namedRangeFromDefinedName(definedName);
+    if (range === undefined) {
+      throw new WorkbookError(`Defined name ${name} does not resolve to a single cell range`);
+    }
+
+    return range;
+  }
+
+  async readNamedRange(
+    name: string,
+    options: { sheetName?: string } = {}
+  ): Promise<ReadRangeResult> {
+    const range = await this.resolveNamedRange(name, options);
+    return this.readRange(range.sheetName, range.ref);
+  }
+
+  async patchNamedRange(
+    name: string,
+    values: CellInput[][],
+    options: WorkbookNamedRangePatchOptions = {}
+  ): Promise<WorkbookNamedRange> {
+    const range = await this.resolveNamedRange(name, options);
+    if (options.allowOutsideRange !== true) {
+      assertValuesFitNamedRange(range, values);
+    }
+
+    await this.patchRange(range.sheetName, range.range.start.address, values);
+    return range;
   }
 
   async hyperlinks(sheetName?: string): Promise<WorkbookHyperlink[]> {
@@ -1105,6 +1195,81 @@ export class Workbook {
     return String(index);
   }
 
+  private async findDefinedNameForUse(
+    name: string,
+    options: { sheetName?: string }
+  ): Promise<WorkbookDefinedName> {
+    const localSheetId =
+      options.sheetName === undefined ? undefined : this.localSheetIdForSheet(options.sheetName);
+    const matches = (await this.definedNames()).filter(
+      (definedName) => definedName.name.toLowerCase() === name.toLowerCase()
+    );
+
+    if (localSheetId !== undefined) {
+      const scoped = matches.find((definedName) => definedName.localSheetId === localSheetId);
+      const global = matches.find((definedName) => definedName.localSheetId === undefined);
+      const match = scoped ?? global;
+      if (match === undefined) {
+        throw new WorkbookError(`Unknown defined name ${name} for worksheet ${options.sheetName}`);
+      }
+
+      return match;
+    }
+
+    const global = matches.find((definedName) => definedName.localSheetId === undefined);
+    if (global !== undefined) {
+      return global;
+    }
+
+    if (matches.length === 1) {
+      const match = matches[0];
+      if (match !== undefined) {
+        return match;
+      }
+    }
+
+    if (matches.length > 1) {
+      throw new WorkbookError(`Defined name ${name} is sheet-scoped; pass a sheetName option`);
+    }
+
+    throw new WorkbookError(`Unknown defined name ${name}`);
+  }
+
+  private namedRangeFromDefinedName(
+    definedName: WorkbookDefinedName
+  ): WorkbookNamedRange | undefined {
+    const target = parseSimpleDefinedNameRange(definedName.text);
+    if (target === undefined) {
+      return undefined;
+    }
+
+    const scopedSheet =
+      definedName.localSheetId === undefined
+        ? undefined
+        : this.sheets()[Number.parseInt(definedName.localSheetId, 10)];
+    const sheetName = target.sheetName ?? scopedSheet?.name;
+    if (sheetName === undefined) {
+      return undefined;
+    }
+
+    const sheet = this.sheetsByName.get(sheetName);
+    if (sheet === undefined) {
+      return undefined;
+    }
+
+    return {
+      name: definedName.name,
+      text: definedName.text,
+      sheetName: sheet.name,
+      sheetPartName: sheet.partName,
+      ref: target.range.ref,
+      range: target.range,
+      ...(definedName.comment === undefined ? {} : { comment: definedName.comment }),
+      ...(definedName.hidden === undefined ? {} : { hidden: definedName.hidden }),
+      ...(definedName.localSheetId === undefined ? {} : { localSheetId: definedName.localSheetId })
+    };
+  }
+
   async formulas(): Promise<WorkbookFormula[]> {
     const formulas: WorkbookFormula[] = [];
 
@@ -1407,6 +1572,58 @@ function formulaReferenceRange(reference: FormulaReference): CellRange {
   }
 
   return parseCellRange(reference.ref);
+}
+
+function assertValuesFitNamedRange(range: WorkbookNamedRange, values: CellInput[][]): void {
+  const height = range.range.end.row - range.range.start.row + 1;
+  const width = range.range.end.column - range.range.start.column + 1;
+  const valuesHeight = values.length;
+  const valuesWidth = values.reduce((max, row) => Math.max(max, row.length), 0);
+
+  if (valuesHeight > height || valuesWidth > width) {
+    throw new WorkbookError(
+      `Named range ${range.name} is ${height}x${width}; refusing to write ${valuesHeight}x${valuesWidth} outside ${range.ref}`
+    );
+  }
+}
+
+function parseSimpleDefinedNameRange(
+  text: string
+): { range: CellRange; sheetName?: string } | undefined {
+  const match =
+    /^=?(?:(?<sheet>'(?:(?:'')|[^'])+'|[A-Za-z_][A-Za-z0-9_ .]*)!)?(?<first>\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6})(?::(?<second>\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6}))?$/.exec(
+      text.trim()
+    );
+  const first = match?.groups?.first;
+  if (match === null || first === undefined) {
+    return undefined;
+  }
+
+  const second = match.groups?.second;
+  const ref =
+    second === undefined
+      ? stripCellAbsoluteMarkers(first)
+      : `${stripCellAbsoluteMarkers(first)}:${stripCellAbsoluteMarkers(second)}`;
+  const sheetName =
+    match.groups?.sheet === undefined ? undefined : unquoteDefinedNameSheet(match.groups.sheet);
+
+  return {
+    range: parseCellRange(ref),
+    ...(sheetName === undefined ? {} : { sheetName })
+  };
+}
+
+function stripCellAbsoluteMarkers(address: string): string {
+  return address.replaceAll("$", "");
+}
+
+function unquoteDefinedNameSheet(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replaceAll("''", "'");
+  }
+
+  return trimmed;
 }
 
 function rangesIntersect(left: CellRange, right: CellRange): boolean {

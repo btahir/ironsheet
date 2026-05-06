@@ -9,6 +9,7 @@ import {
   type ChartFormulaRetarget,
   type PivotCacheSourceRetarget,
   type WorkbookCellStyleInput,
+  type WorkbookNamedRangePatchOptions,
   type WorkbookSheetState,
   type WorkbookTemplatePatch,
   type WorksheetAutoFilter,
@@ -77,6 +78,18 @@ export async function patchWorkbookRange(
   await writeWorkbook(workbook, outputPath);
 }
 
+export async function patchWorkbookNamedRange(
+  inputPath: string,
+  outputPath: string,
+  name: string,
+  values: CellInput[][],
+  options: WorkbookNamedRangePatchOptions = {}
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.patchNamedRange(name, values, options);
+  await writeWorkbook(workbook, outputPath);
+}
+
 export async function styleWorkbookCell(
   inputPath: string,
   outputPath: string,
@@ -127,6 +140,23 @@ export async function readWorkbookRange(
 ): Promise<Awaited<ReturnType<Workbook["readRange"]>>> {
   const workbook = await readWorkbook(inputPath);
   return workbook.readRange(sheetName, rangeRef);
+}
+
+export async function readWorkbookNamedRange(
+  inputPath: string,
+  name: string,
+  options: { sheetName?: string } = {}
+): Promise<Awaited<ReturnType<Workbook["readNamedRange"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.readNamedRange(name, options);
+}
+
+export async function listWorkbookNamedRanges(
+  inputPath: string,
+  name?: string
+): Promise<Awaited<ReturnType<Workbook["namedRanges"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.namedRanges(name);
 }
 
 export async function listWorkbookFormulas(

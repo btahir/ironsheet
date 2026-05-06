@@ -208,7 +208,7 @@ test("renders template patches across cells ranges tables and images", async () 
     images: [{ imagePartName: "xl/media/image1.png", data: replacement }]
   });
 
-  assert.deepEqual(result.applied, { cells: 1, images: 1, ranges: 1, tables: 1 });
+  assert.deepEqual(result.applied, { cells: 1, images: 1, names: 0, ranges: 1, tables: 1 });
   assert.equal((await workbook.readCell("Sheet1", "D1"))?.value, "Rendered");
   assert.deepEqual(
     (await workbook.readRange("Sheet1", "E1:F2")).cells.map((row) =>
@@ -692,6 +692,78 @@ test("reads workbook defined names", async () => {
       localSheetId: "0"
     }
   ]);
+});
+
+test("reads and patches workbook named ranges", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDefinedName: true }));
+
+  assert.deepEqual(await workbook.namedRanges(), [
+    {
+      name: "RevenueRange",
+      text: "Sheet1!$A$1:$B$2",
+      comment: "Template output range",
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "A1:B2",
+      range: {
+        ref: "A1:B2",
+        start: { address: "A1", column: 1, row: 1 },
+        end: { address: "B2", column: 2, row: 2 }
+      }
+    }
+  ]);
+
+  await workbook.patchNamedRange("RevenueRange", [
+    ["Region", "Amount"],
+    ["North", 42]
+  ]);
+
+  assert.deepEqual(
+    (await workbook.readNamedRange("RevenueRange")).cells.map((row) =>
+      row.map((cell) => cell?.value)
+    ),
+    [
+      ["Region", "Amount"],
+      ["North", 42]
+    ]
+  );
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+
+  await assert.rejects(
+    () =>
+      workbook.patchNamedRange("RevenueRange", [
+        [1, 2, 3],
+        [4, 5, 6]
+      ]),
+    /refusing to write 2x3/
+  );
+});
+
+test("renders template patches into named ranges", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDefinedName: true }));
+
+  const result = await workbook.renderTemplate({
+    names: [
+      {
+        name: "RevenueRange",
+        values: [
+          ["West", 100],
+          ["East", 200]
+        ]
+      }
+    ]
+  });
+
+  assert.deepEqual(result.applied, { cells: 0, images: 0, names: 1, ranges: 0, tables: 0 });
+  assert.deepEqual(
+    (await workbook.readNamedRange("RevenueRange")).cells.map((row) =>
+      row.map((cell) => cell?.value)
+    ),
+    [
+      ["West", 100],
+      ["East", 200]
+    ]
+  );
 });
 
 test("sets, replaces, and deletes workbook defined names", async () => {
