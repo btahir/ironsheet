@@ -11,7 +11,7 @@ Ironsheet is split into runtime-neutral core APIs and Node-specific IO APIs.
 
 ## Current Core Capabilities
 
-- Inspect sheets, features, conditional formats, data validations, defined names, formulas, hyperlinks, merged cells, tables, and styles.
+- Inspect sheets, features, comments, conditional formats, data validations, defined names, formulas, hyperlinks, merged cells, tables, and styles.
 - Read and write cells, ranges, appended rows, conditional-formatting blocks, data validations, defined names, external hyperlinks, merged cells, table rows, sheet names, sheet visibility, table names, table columns, and cell styles.
 - Preserve untouched ZIP entries and OOXML parts.
 - Validate relationships, dimensions, hyperlinks, merged cells, styles, shared strings, formula references, tables, pivots, charts, and calc chains.

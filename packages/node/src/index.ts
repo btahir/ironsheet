@@ -162,6 +162,14 @@ export async function listWorkbookConditionalFormats(
   return workbook.conditionalFormats(sheetName);
 }
 
+export async function listWorkbookComments(
+  inputPath: string,
+  sheetName?: string
+): Promise<Awaited<ReturnType<Workbook["comments"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.comments(sheetName);
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {

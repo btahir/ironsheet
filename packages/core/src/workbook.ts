@@ -1,5 +1,10 @@
 import { type CellRange, parseCellRange } from "./address.ts";
 import { retargetWorkbookChartFormulas, type ChartFormulaRetarget } from "./chart.ts";
+import {
+  parseWorksheetComments,
+  worksheetCommentsRelationship,
+  type WorkbookComment
+} from "./comments.ts";
 import type { Diagnostic } from "./diagnostics.ts";
 import { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 import { PackageError, WorkbookError } from "./errors.ts";
@@ -394,6 +399,37 @@ export class Workbook {
     }
 
     return conditionalFormats;
+  }
+
+  async comments(sheetName?: string): Promise<WorkbookComment[]> {
+    const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
+    const comments: WorkbookComment[] = [];
+
+    for (const sheet of sheets) {
+      const relationships = await this.pkg.relationshipsFor(sheet.partName);
+      for (const relationship of relationships) {
+        if (relationship.type !== worksheetCommentsRelationship) {
+          continue;
+        }
+
+        const commentPartName = resolveRelationshipTarget(sheet.partName, relationship.target);
+        if (!this.pkg.hasPart(commentPartName)) {
+          continue;
+        }
+
+        for (const comment of parseWorksheetComments(await this.pkg.readText(commentPartName))) {
+          comments.push({
+            sheetName: sheet.name,
+            sheetPartName: sheet.partName,
+            commentPartName,
+            relationshipId: relationship.id,
+            ...comment
+          });
+        }
+      }
+    }
+
+    return comments;
   }
 
   async setDataValidation(

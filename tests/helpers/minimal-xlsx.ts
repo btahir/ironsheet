@@ -4,6 +4,7 @@ const textEncoder = new TextEncoder();
 
 export type MinimalWorkbookOptions = {
   includeCalcChain?: boolean;
+  includeComment?: boolean;
   includeConditionalFormatting?: boolean;
   includeDataValidation?: boolean;
   includeDefinedName?: boolean;
@@ -49,6 +50,7 @@ export async function createMinimalWorkbook(
   ${options.includeDrawing === true ? '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>' : ""}
   ${options.includePivotTable === true ? '<Override PartName="/xl/pivotTables/pivotTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/>' : ""}
   ${options.includePivotTable === true ? '<Override PartName="/xl/pivotCache/pivotCacheDefinition1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>' : ""}
+  ${options.includeComment === true ? '<Override PartName="/xl/comments1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>' : ""}
   ${options.includeMacro === true ? '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>' : ""}
   ${options.useSharedStrings === true ? '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>' : ""}
@@ -166,6 +168,21 @@ export async function createMinimalWorkbook(
 <calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <c r="A1" i="1"/>
 </calcChain>`
+      )
+    );
+  }
+
+  if (options.includeComment === true) {
+    entries.push(
+      textPart(
+        "xl/comments1.xml",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <authors><author>Ironsheet</author></authors>
+  <commentList>
+    <comment ref="A1" authorId="0"><text><r><t>Check this value</t></r></text></comment>
+  </commentList>
+</comments>`
       )
     );
   }
@@ -306,6 +323,9 @@ function sheetRelationshipsXml(options: MinimalWorkbookOptions): string {
       : undefined,
     options.includeHyperlink === true
       ? '<Relationship Id="rIdHyperlink1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>'
+      : undefined,
+    options.includeComment === true
+      ? '<Relationship Id="rIdComments1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/>'
       : undefined,
     options.includeDrawing === true
       ? '<Relationship Id="rIdDrawing1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>'

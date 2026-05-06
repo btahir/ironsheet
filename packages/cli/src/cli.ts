@@ -11,6 +11,7 @@ import {
   deleteWorkbookHyperlink,
   hideWorkbookSheet,
   inspectWorkbookStyles,
+  listWorkbookComments,
   listWorkbookConditionalFormats,
   listWorkbookDataValidations,
   listWorkbookFormulas,
@@ -53,6 +54,7 @@ type Command =
   | "inspect"
   | "append-rows"
   | "append-table-column"
+  | "comments"
   | "conditional-formats"
   | "delete-conditional-format"
   | "data-validations"
@@ -92,6 +94,7 @@ function usage(): never {
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- tables <workbook.xlsx>
   npm run cli -- formulas <workbook.xlsx>
+  npm run cli -- comments <workbook.xlsx> [sheet]
   npm run cli -- conditional-formats <workbook.xlsx> [sheet]
   npm run cli -- data-validations <workbook.xlsx> [sheet]
   npm run cli -- hyperlinks <workbook.xlsx> [sheet]
@@ -146,6 +149,10 @@ async function tables(path: string): Promise<void> {
 
 async function formulas(path: string): Promise<void> {
   console.log(JSON.stringify(await listWorkbookFormulas(path), null, 2));
+}
+
+async function comments(path: string, sheetName: string | undefined): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookComments(path, sheetName), null, 2));
 }
 
 async function conditionalFormats(path: string, sheetName: string | undefined): Promise<void> {
@@ -677,6 +684,12 @@ try {
       usage();
     }
     await formulas(path);
+  } else if (command === "comments") {
+    const [path, sheetName] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await comments(path, sheetName);
   } else if (command === "conditional-formats") {
     const [path, sheetName] = args;
     if (path === undefined) {

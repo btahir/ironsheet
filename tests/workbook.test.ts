@@ -44,6 +44,7 @@ test("inspect reports workbook feature signals", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({
       includeCalcChain: true,
+      includeComment: true,
       includeConditionalFormatting: true,
       includeDataValidation: true,
       includeDefinedName: true,
@@ -76,7 +77,7 @@ test("inspect reports workbook feature signals", async () => {
   assert.deepEqual((await workbook.inspect()).features, {
     calcChains: 1,
     charts: 1,
-    comments: 0,
+    comments: 1,
     conditionalFormats: 1,
     dataValidations: 1,
     definedNames: 2,
@@ -113,6 +114,24 @@ test("lists workbook hyperlinks with external targets", async () => {
       relationshipId: "rIdHyperlink1",
       target: "https://example.com",
       targetMode: "External"
+    }
+  ]);
+});
+
+test("lists workbook comments with authors", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeComment: true }));
+
+  assert.deepEqual(await workbook.comments(), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      commentPartName: "xl/comments1.xml",
+      relationshipId: "rIdComments1",
+      ref: "A1",
+      text: "Check this value",
+      author: "Ironsheet",
+      authorId: "0",
+      rawXml: '<comment ref="A1" authorId="0"><text><r><t>Check this value</t></r></text></comment>'
     }
   ]);
 });

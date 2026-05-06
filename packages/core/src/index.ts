@@ -5,6 +5,12 @@ export {
   retargetWorkbookChartFormulas,
   type ChartFormulaRetarget
 } from "./chart.ts";
+export {
+  parseWorksheetComments,
+  worksheetCommentsRelationship,
+  type WorkbookComment,
+  type WorksheetComment
+} from "./comments.ts";
 export { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 export type { Diagnostic, DiagnosticSeverity } from "./diagnostics.ts";
 export { diffZipPackages, type PackageDiff, type PackageEntryDiff } from "./diff.ts";

@@ -15,6 +15,7 @@ This repository currently implements the first vertical slice:
 - OPC relationship parsing and target resolution.
 - Workbook sheet discovery.
 - Defined-name inspection.
+- Classic worksheet comment inventory with author resolution through worksheet relationships.
 - Defined-name set/delete helpers for named ranges and scoped workbook names.
 - Conditional-formatting inventory plus set/delete helpers for worksheet-level rule blocks.
 - Data-validation inventory plus set/delete helpers with worksheet count maintenance.
@@ -77,6 +78,12 @@ List workbook formulas:
 
 ```bash
 npm run cli -- formulas path/to/workbook.xlsx
+```
+
+List workbook comments:
+
+```bash
+npm run cli -- comments path/to/workbook.xlsx
 ```
 
 List workbook conditional formats:
