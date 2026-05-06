@@ -8,7 +8,8 @@ import {
   type CellPatch,
   type ChartFormulaRetarget,
   type PivotCacheSourceRetarget,
-  type WorkbookCellStyleInput
+  type WorkbookCellStyleInput,
+  type WorkbookSheetState
 } from "@ironsheet/core";
 
 export const nodeCompressionAdapter: CompressionAdapter = {
@@ -271,6 +272,27 @@ export async function renameWorkbookSheet(
 ): Promise<void> {
   const workbook = await readWorkbook(inputPath);
   await workbook.renameSheet(sheetName, nextName);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function hideWorkbookSheet(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  state: WorkbookSheetState = "hidden"
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.hideSheet(sheetName, state);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function showWorkbookSheet(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.showSheet(sheetName);
   await writeWorkbook(workbook, outputPath);
 }
 

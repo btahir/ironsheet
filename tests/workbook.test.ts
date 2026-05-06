@@ -262,6 +262,50 @@ test("renaming sheets rejects duplicates and invalid names", async () => {
   await assert.rejects(() => workbook.renameSheet("Sheet1", "A".repeat(32)), /31 character/);
 });
 
+test("hides and shows worksheets without hiding the whole workbook", async () => {
+  const singleSheetWorkbook = await openWorkbook(await createMinimalWorkbook());
+  await assert.rejects(
+    () => singleSheetWorkbook.hideSheet("Sheet1"),
+    /at least one visible worksheet/
+  );
+
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeHiddenSheet: true }));
+
+  assert.deepEqual(await workbook.showSheet("HiddenData"), {
+    name: "HiddenData",
+    id: "2",
+    relationshipId: "rIdHidden",
+    partName: "xl/worksheets/sheet2.xml"
+  });
+  assert.deepEqual(await workbook.hideSheet("Sheet1", "veryHidden"), {
+    name: "Sheet1",
+    id: "1",
+    relationshipId: "rId1",
+    partName: "xl/worksheets/sheet1.xml",
+    state: "veryHidden"
+  });
+  assert.deepEqual(workbook.sheets(), [
+    {
+      name: "Sheet1",
+      id: "1",
+      relationshipId: "rId1",
+      partName: "xl/worksheets/sheet1.xml",
+      state: "veryHidden"
+    },
+    {
+      name: "HiddenData",
+      id: "2",
+      relationshipId: "rIdHidden",
+      partName: "xl/worksheets/sheet2.xml"
+    }
+  ]);
+
+  const workbookXml = await workbook.pkg.readText("xl/workbook.xml");
+  assert.match(workbookXml, /<sheet name="Sheet1" sheetId="1" r:id="rId1" state="veryHidden"\/>/);
+  assert.match(workbookXml, /<sheet name="HiddenData" sheetId="2" r:id="rIdHidden"\/>/);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
 test("renaming tables rejects duplicate and invalid names", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeSecondTable: true, includeTable: true })

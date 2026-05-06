@@ -20,6 +20,7 @@ This repository currently implements the first vertical slice:
 - Merged-cell inventory plus guarded merge/unmerge helpers with overlap validation.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
+- Safe sheet visibility changes with hidden and veryHidden state support.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
 - Safe table column append and guarded rightmost-column removal.
 - Style metadata inspection with cell format counts.
@@ -155,6 +156,13 @@ Rename a sheet, table, or table column and retarget references:
 npm run cli -- rename-sheet input.xlsx output.xlsx Sheet1 "Revenue 2026"
 npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
 npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
+```
+
+Hide or show a sheet:
+
+```bash
+npm run cli -- hide-sheet input.xlsx output.xlsx Sheet1 veryHidden
+npm run cli -- show-sheet input.xlsx output.xlsx Sheet1
 ```
 
 Set or delete a defined name:

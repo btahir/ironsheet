@@ -7,6 +7,7 @@ import {
   appendWorkbookTableColumn,
   deleteWorkbookDefinedName,
   deleteWorkbookHyperlink,
+  hideWorkbookSheet,
   inspectWorkbookStyles,
   listWorkbookFormulas,
   listWorkbookHyperlinks,
@@ -27,6 +28,7 @@ import {
   retargetWorkbookPivotCacheSourcesFile,
   setWorkbookDefinedName,
   setWorkbookHyperlink,
+  showWorkbookSheet,
   styleWorkbookCell,
   unmergeWorkbookCells,
   validateWorkbookFile
@@ -35,7 +37,8 @@ import type {
   CellInput,
   ChartFormulaRetarget,
   PivotCacheSourceRetarget,
-  WorkbookCellStyleInput
+  WorkbookCellStyleInput,
+  WorkbookSheetState
 } from "@ironsheet/core";
 
 type Command =
@@ -45,6 +48,7 @@ type Command =
   | "delete-defined-name"
   | "delete-hyperlink"
   | "formulas"
+  | "hide-sheet"
   | "hyperlinks"
   | "patch"
   | "merge-cells"
@@ -61,6 +65,7 @@ type Command =
   | "retarget-pivot"
   | "set-defined-name"
   | "set-hyperlink"
+  | "show-sheet"
   | "style-cell"
   | "styles"
   | "tables"
@@ -86,6 +91,8 @@ function usage(): never {
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
   npm run cli -- set-defined-name <input.xlsx> <output.xlsx> <name> <formula> [jsonOptions]
   npm run cli -- delete-defined-name <input.xlsx> <output.xlsx> <name> [jsonOptions]
+  npm run cli -- hide-sheet <input.xlsx> <output.xlsx> <sheet> [hidden|veryHidden]
+  npm run cli -- show-sheet <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- merge-cells <input.xlsx> <output.xlsx> <sheet> <range>
   npm run cli -- unmerge-cells <input.xlsx> <output.xlsx> <sheet> <range>
   npm run cli -- set-hyperlink <input.xlsx> <output.xlsx> <sheet> <ref> <target> [jsonOptions]
@@ -329,6 +336,22 @@ async function renameSheet(
   console.log(`renamed ${sheetName} to ${nextName} -> ${outputPath}`);
 }
 
+async function hideSheet(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rawState: string | undefined
+): Promise<void> {
+  const state = parseSheetState(rawState);
+  await hideWorkbookSheet(inputPath, outputPath, sheetName, state);
+  console.log(`hid ${sheetName} as ${state} -> ${outputPath}`);
+}
+
+async function showSheet(inputPath: string, outputPath: string, sheetName: string): Promise<void> {
+  await showWorkbookSheet(inputPath, outputPath, sheetName);
+  console.log(`showed ${sheetName} -> ${outputPath}`);
+}
+
 async function renameTableColumn(
   inputPath: string,
   outputPath: string,
@@ -464,6 +487,18 @@ function parseHyperlinkOptions(rawOptions: string | undefined): {
     ...(typeof options.display === "string" ? { display: options.display } : {}),
     ...(typeof options.tooltip === "string" ? { tooltip: options.tooltip } : {})
   };
+}
+
+function parseSheetState(rawState: string | undefined): WorkbookSheetState {
+  if (rawState === undefined || rawState === "hidden") {
+    return "hidden";
+  }
+
+  if (rawState === "veryHidden") {
+    return "veryHidden";
+  }
+
+  throw new Error("sheet state must be hidden or veryHidden");
 }
 
 function parseChartRetargets(rawRetargets: string): ChartFormulaRetarget[] {
@@ -655,6 +690,18 @@ try {
       usage();
     }
     await deleteDefinedName(inputPath, outputPath, name, rawOptions);
+  } else if (command === "hide-sheet") {
+    const [inputPath, outputPath, sheetName, rawState] = args;
+    if (inputPath === undefined || outputPath === undefined || sheetName === undefined) {
+      usage();
+    }
+    await hideSheet(inputPath, outputPath, sheetName, rawState);
+  } else if (command === "show-sheet") {
+    const [inputPath, outputPath, sheetName] = args;
+    if (inputPath === undefined || outputPath === undefined || sheetName === undefined) {
+      usage();
+    }
+    await showSheet(inputPath, outputPath, sheetName);
   } else if (command === "merge-cells") {
     const [inputPath, outputPath, sheetName, ref] = args;
     if (

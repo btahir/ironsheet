@@ -563,6 +563,58 @@ export class Workbook {
     return renamed;
   }
 
+  async setSheetState(
+    sheetName: string,
+    state: WorkbookSheetState | undefined
+  ): Promise<WorkbookSheet> {
+    const sheet = this.sheet(sheetName);
+    if (
+      state !== undefined &&
+      !this.sheets().some(
+        (candidate) => candidate.name !== sheetName && candidate.state === undefined
+      )
+    ) {
+      throw new WorkbookError("Workbook must keep at least one visible worksheet");
+    }
+
+    const workbookXml = await this.pkg.readText(this.workbookPart);
+    const sheetTag = findStartTags(workbookXml, "sheet").find(
+      (candidate) => candidate.attributes["r:id"] === sheet.relationshipId
+    );
+    if (sheetTag === undefined) {
+      throw new WorkbookError(`Workbook XML is missing sheet ${sheetName}`);
+    }
+
+    const updatedSheetTag =
+      state === undefined
+        ? removeAttributes(sheetTag.raw, ["state"])
+        : upsertAttributes(sheetTag.raw, { state });
+    this.pkg.setText(
+      this.workbookPart,
+      `${workbookXml.slice(0, sheetTag.start)}${updatedSheetTag}${workbookXml.slice(sheetTag.end)}`
+    );
+
+    const updated =
+      state === undefined
+        ? {
+            name: sheet.name,
+            id: sheet.id,
+            relationshipId: sheet.relationshipId,
+            partName: sheet.partName
+          }
+        : { ...sheet, state };
+    this.sheetsByName.set(sheet.name, updated);
+    return updated;
+  }
+
+  hideSheet(sheetName: string, state: WorkbookSheetState = "hidden"): Promise<WorkbookSheet> {
+    return this.setSheetState(sheetName, state);
+  }
+
+  showSheet(sheetName: string): Promise<WorkbookSheet> {
+    return this.setSheetState(sheetName, undefined);
+  }
+
   retargetChartFormulas(retargets: ChartFormulaRetarget[]): Promise<number> {
     return retargetWorkbookChartFormulas(this.pkg, retargets);
   }
@@ -1200,6 +1252,16 @@ function upsertAttributes(rawTag: string, attributes: Record<string, string>): s
   }
 
   return `${tag}${closing}`;
+}
+
+function removeAttributes(rawTag: string, names: string[]): string {
+  let tag = rawTag;
+  for (const name of names) {
+    const pattern = new RegExp(`\\s${name}=(["']).*?\\1`);
+    tag = tag.replace(pattern, "");
+  }
+
+  return tag;
 }
 
 function xmlPrefix(name: string): string | undefined {
