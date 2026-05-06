@@ -9,6 +9,7 @@ import {
   type CompatibilityCheck,
   type CompatibilityReport
 } from "../packages/compat/src/index.ts";
+import { validateWorkbookFile } from "../packages/node/src/index.ts";
 
 type CommandResult = {
   status: number | null;
@@ -77,6 +78,45 @@ function checkZip(workbookPath: string): CompatibilityCheck {
     status: "pass",
     message: "ZIP package integrity check passed"
   };
+}
+
+async function checkIronsheetValidation(workbookPath: string): Promise<CompatibilityCheck> {
+  try {
+    const report = await validateWorkbookFile(workbookPath);
+    if (report.summary.errors > 0) {
+      return {
+        validator: "ironsheet",
+        status: "fail",
+        message: "Ironsheet semantic validation found workbook errors",
+        details: {
+          summary: report.summary,
+          issues: report.issues
+        }
+      };
+    }
+
+    return {
+      validator: "ironsheet",
+      status: "pass",
+      message:
+        report.summary.warnings === 0
+          ? "Ironsheet semantic validation passed"
+          : "Ironsheet semantic validation passed with warnings",
+      details: {
+        summary: report.summary,
+        issues: report.issues
+      }
+    };
+  } catch (error) {
+    return {
+      validator: "ironsheet",
+      status: "fail",
+      message: "Ironsheet semantic validation could not read the workbook",
+      details: {
+        error: error instanceof Error ? error.message : String(error)
+      }
+    };
+  }
 }
 
 function checkNumbers(workbookPath: string): CompatibilityCheck {
@@ -222,11 +262,12 @@ function checkExcel(): CompatibilityCheck {
   };
 }
 
-function runCompatibilityChecks(workbookPath: string): CompatibilityReport {
+async function runCompatibilityChecks(workbookPath: string): Promise<CompatibilityReport> {
   const absolutePath = realpathSync(workbookPath);
   const checks = [
     checkFile(absolutePath),
     checkZip(absolutePath),
+    await checkIronsheetValidation(absolutePath),
     checkNumbers(absolutePath),
     checkLibreOffice(absolutePath),
     checkOpenXmlSdk(),
@@ -252,7 +293,7 @@ if (workbookPath === undefined) {
 }
 
 const resolvedPath = resolve(workbookPath);
-const report = runCompatibilityChecks(resolvedPath);
+const report = await runCompatibilityChecks(resolvedPath);
 console.log(JSON.stringify(report, null, 2));
 writeReport(report);
 

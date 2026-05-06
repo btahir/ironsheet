@@ -32,7 +32,7 @@ This repository currently implements the first vertical slice:
 - Semantic validation for package relationship targets, duplicate relationship IDs, orphan relationship parts, orphan content type overrides, local worksheet/drawing relationship IDs, workbook sheet metadata, content types, worksheet dimensions, merge/validation/conditional-format/hyperlink refs, style indexes and cell format limits, shared string references/counts, worksheet/defined-name/chart formula references, formula bounds, formula table references, shared formula groups, table refs, table part counts, table metadata, table column structure, pivot table/cache source sanity, stale calc chains, and defined-name scope integrity.
 - Node adapter using `node:zlib`.
 - CLI inspection, read, patch, range patch, table replacement/rename, and package diff commands.
-- Compatibility harness with ZIP integrity and optional app-level checks.
+- Compatibility harness with ZIP integrity, Ironsheet semantic validation, and optional app-level checks.
 - Runtime guard that automatically scans every core source file for Node-only imports and runtime dependencies.
 
 ## Commands

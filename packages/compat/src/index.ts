@@ -2,6 +2,7 @@ export type CompatibilityStatus = "pass" | "fail" | "skip" | "manual";
 
 export type CompatibilityValidator =
   | "file"
+  | "ironsheet"
   | "zip"
   | "numbers"
   | "libreoffice"

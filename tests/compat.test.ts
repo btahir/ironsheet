@@ -30,3 +30,15 @@ test("compatibility reports allow skipped optional validators", () => {
 
   assert.equal(hasFailingChecks(report), false);
 });
+
+test("compatibility reports treat ironsheet validation as required", () => {
+  const report = createCompatibilityReport("/tmp/workbook.xlsx", [
+    {
+      validator: "ironsheet",
+      status: "fail",
+      message: "semantic validation failed"
+    }
+  ]);
+
+  assert.equal(hasFailingChecks(report), true);
+});
