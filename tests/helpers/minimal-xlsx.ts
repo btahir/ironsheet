@@ -13,6 +13,7 @@ export type MinimalWorkbookOptions = {
   includeMacro?: boolean;
   includeMerge?: boolean;
   includeOrphanRelationshipPart?: boolean;
+  includeSecondTable?: boolean;
   includeTable?: boolean;
   includeTableTotals?: boolean;
   styledTableBody?: boolean;
@@ -41,6 +42,7 @@ export async function createMinimalWorkbook(
   ${options.includeHiddenSheet === true ? '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' : ""}
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
   ${options.includeTable === true ? '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>' : ""}
+  ${options.includeSecondTable === true ? '<Override PartName="/xl/tables/table2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>' : ""}
   ${options.includeDrawing === true ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ""}
   ${options.includeDrawing === true ? '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>' : ""}
   ${options.includeMacro === true ? '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>' : ""}
@@ -120,7 +122,7 @@ export async function createMinimalWorkbook(
   ${options.includeMerge === true ? '<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>' : ""}
   ${options.includeHyperlink === true ? '<hyperlinks><hyperlink ref="A1" r:id="rIdHyperlink1"/></hyperlinks>' : ""}
   ${options.includeDrawing === true ? '<drawing r:id="rIdDrawing1"/>' : ""}
-  ${options.includeTable === true ? '<tableParts count="1"><tablePart r:id="rIdTable1"/></tableParts>' : ""}
+  ${options.includeTable === true ? `<tableParts count="${options.includeSecondTable === true ? "2" : "1"}"><tablePart r:id="rIdTable1"/>${options.includeSecondTable === true ? '<tablePart r:id="rIdTable2"/>' : ""}</tableParts>` : ""}
 </worksheet>`
     )
   ];
@@ -200,6 +202,22 @@ export async function createMinimalWorkbook(
     );
   }
 
+  if (options.includeSecondTable === true) {
+    entries.push(
+      textPart(
+        "xl/tables/table2.xml",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="2" name="ExpenseTable" displayName="ExpenseTable" ref="C1:D2" totalsRowShown="0">
+  <autoFilter ref="C1:D2"/>
+  <tableColumns count="2">
+    <tableColumn id="1" name="Category"/>
+    <tableColumn id="2" name="Amount"/>
+  </tableColumns>
+</table>`
+      )
+    );
+  }
+
   if (options.includeDrawing === true) {
     entries.push(
       textPart(
@@ -244,6 +262,9 @@ function sheetRelationshipsXml(options: MinimalWorkbookOptions): string {
   return [
     options.includeTable === true
       ? '<Relationship Id="rIdTable1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>'
+      : undefined,
+    options.includeSecondTable === true
+      ? '<Relationship Id="rIdTable2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table2.xml"/>'
       : undefined,
     options.includeHyperlink === true
       ? '<Relationship Id="rIdHyperlink1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>'

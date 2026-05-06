@@ -391,3 +391,46 @@ test("validation reports table refs whose width does not match columns", async (
   assert.equal(report.issues[0]?.code, "TABLE_COLUMN_REF_WIDTH_MISMATCH");
   assert.equal(report.issues[0]?.target, "A1:C2");
 });
+
+test("validation reports duplicate table names", async () => {
+  const pkg = await openPackage(
+    await createMinimalWorkbook({ includeTable: true, includeSecondTable: true })
+  );
+  const tableXml = await pkg.readText("xl/tables/table2.xml");
+  pkg.setText(
+    "xl/tables/table2.xml",
+    tableXml.replace(
+      'name="ExpenseTable" displayName="ExpenseTable"',
+      'name="RevenueTable" displayName="RevenueTable"'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "TABLE_NAME_DUPLICATE");
+  assert.equal(report.issues[0]?.target, "RevenueTable");
+});
+
+test("validation reports invalid table column metadata", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeTable: true }));
+  const tableXml = await pkg.readText("xl/tables/table1.xml");
+  pkg.setText(
+    "xl/tables/table1.xml",
+    tableXml
+      .replace('<tableColumn id="1" name="Name"/>', '<tableColumn id="1"/>')
+      .replace('<tableColumn id="2" name="Amount"/>', '<tableColumn id="1" name="Amount"/>')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 2);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "TABLE_COLUMN_NAME_MISSING"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "TABLE_COLUMN_ID_DUPLICATE"),
+    true
+  );
+});

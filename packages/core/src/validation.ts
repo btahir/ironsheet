@@ -843,6 +843,7 @@ async function validateTableParts(
   issues: ValidationIssue[],
   parts: string[]
 ): Promise<void> {
+  const seenTableNames = new Set<string>();
   for (const part of parts.filter((name) => /^xl\/tables\/.+\.xml$/.test(name))) {
     const xml = await pkg.readText(part);
     const table = findFirstStartTag(xml, "table");
@@ -854,6 +855,25 @@ async function validateTableParts(
         part
       });
       continue;
+    }
+
+    const tableNames = new Set(
+      [table.attributes.name, table.attributes.displayName].filter(
+        (name): name is string => name !== undefined
+      )
+    );
+
+    for (const tableName of tableNames) {
+      if (seenTableNames.has(tableName)) {
+        issues.push({
+          severity: "error",
+          code: "TABLE_NAME_DUPLICATE",
+          message: `Workbook contains duplicate table name ${tableName}`,
+          part,
+          target: tableName
+        });
+      }
+      seenTableNames.add(tableName);
     }
 
     let range: ReturnType<typeof parseCellRange>;
@@ -884,6 +904,7 @@ async function validateTableParts(
     }
 
     const tableColumns = findStartTags(xml, "tableColumn");
+    const columnIds = new Set<string>();
     const tableColumnsContainer = findFirstStartTag(xml, "tableColumns");
     const declaredCount = Number.parseInt(tableColumnsContainer?.attributes.count ?? "", 10);
     if (Number.isInteger(declaredCount) && declaredCount !== tableColumns.length) {
@@ -904,6 +925,31 @@ async function validateTableParts(
         part,
         target: range.ref
       });
+    }
+
+    for (const tableColumn of tableColumns) {
+      const columnId = tableColumn.attributes.id;
+      if (columnId !== undefined) {
+        if (columnIds.has(columnId)) {
+          issues.push({
+            severity: "error",
+            code: "TABLE_COLUMN_ID_DUPLICATE",
+            message: `Table contains duplicate tableColumn id ${columnId}`,
+            part,
+            target: columnId
+          });
+        }
+        columnIds.add(columnId);
+      }
+
+      if (tableColumn.attributes.name === undefined) {
+        issues.push({
+          severity: "error",
+          code: "TABLE_COLUMN_NAME_MISSING",
+          message: "Table column is missing a name",
+          part
+        });
+      }
     }
   }
 }
