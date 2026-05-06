@@ -17,6 +17,7 @@ This repository currently implements the first vertical slice:
 - Defined-name inspection.
 - Defined-name set/delete helpers for named ranges and scoped workbook names.
 - Hyperlink inventory plus external hyperlink set/delete with worksheet relationship management.
+- Merged-cell inventory plus guarded merge/unmerge helpers with overlap validation.
 - Table metadata discovery with worksheet ownership, refs, totals-row count, and column metadata.
 - Safe sheet renaming with formula, defined-name, chart, and pivot cache retargeting.
 - Safe table and table-column renaming with structured-reference retargeting across formulas and defined names.
@@ -79,6 +80,12 @@ List workbook hyperlinks:
 
 ```bash
 npm run cli -- hyperlinks path/to/workbook.xlsx
+```
+
+List workbook merged cells:
+
+```bash
+npm run cli -- merged-cells path/to/workbook.xlsx
 ```
 
 Inspect workbook styles:
@@ -162,6 +169,13 @@ Set or delete an external hyperlink:
 ```bash
 npm run cli -- set-hyperlink input.xlsx output.xlsx Sheet1 B2 https://example.com '{"display":"Example"}'
 npm run cli -- delete-hyperlink input.xlsx output.xlsx Sheet1 B2
+```
+
+Merge or unmerge cells:
+
+```bash
+npm run cli -- merge-cells input.xlsx output.xlsx Sheet1 A1:B1
+npm run cli -- unmerge-cells input.xlsx output.xlsx Sheet1 A1:B1
 ```
 
 Retarget chart formulas or pivot cache sources:

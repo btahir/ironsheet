@@ -83,6 +83,21 @@ export type WorksheetRowReplacement = {
   xml: string;
 };
 
+export type WorksheetMergedCell = {
+  ref: string;
+};
+
+export type MergeWorksheetCellsResult = {
+  merged: boolean;
+  merge: WorksheetMergedCell;
+  xml: string;
+};
+
+export type UnmergeWorksheetCellsResult = {
+  unmerged: boolean;
+  xml: string;
+};
+
 export type WorksheetHyperlink = {
   ref: string;
   display?: string;
@@ -512,6 +527,102 @@ export async function* streamReplaceWorksheetRowsXml(
       skippingRowDepth = 1;
     }
   }
+}
+
+export function listWorksheetMergedCells(xml: string): WorksheetMergedCell[] {
+  return findStartTags(xml, "mergeCell").map((tag) => ({
+    ref: normalizeMergeRef(tag.attributes.ref ?? "")
+  }));
+}
+
+export function mergeWorksheetCells(xml: string, ref: string): MergeWorksheetCellsResult {
+  const merge = { ref: normalizeMergeRef(ref) };
+  const mergeRange = parseCellRange(merge.ref);
+  if (
+    mergeRange.start.column === mergeRange.end.column &&
+    mergeRange.start.row === mergeRange.end.row
+  ) {
+    throw new WorksheetError(`Cannot merge a single cell range ${merge.ref}`);
+  }
+
+  const existingMerges = listWorksheetMergedCells(xml);
+  if (existingMerges.some((existing) => existing.ref === merge.ref)) {
+    return { merged: false, merge, xml };
+  }
+
+  const overlap = existingMerges.find((existing) =>
+    cellRangesIntersect(parseCellRange(existing.ref), mergeRange)
+  );
+  if (overlap !== undefined) {
+    throw new WorksheetError(`Merged range ${merge.ref} overlaps existing merge ${overlap.ref}`);
+  }
+
+  const mergeCellXml = createMergeCellXml(xml, merge);
+  const mergeCells = findFirstStartTag(xml, "mergeCells");
+  if (mergeCells !== undefined) {
+    if (mergeCells.selfClosing) {
+      const opening = upsertTagAttribute(mergeCells.raw, "count", "1").replace(/\/>$/, ">");
+      return {
+        merged: true,
+        merge,
+        xml: `${xml.slice(0, mergeCells.start)}${opening}${mergeCellXml}</${mergeCells.name}>${xml.slice(mergeCells.end)}`
+      };
+    }
+
+    const opening = upsertTagAttribute(mergeCells.raw, "count", String(existingMerges.length + 1));
+    const close = findElementCloseStart(xml, mergeCells);
+    return {
+      merged: true,
+      merge,
+      xml: `${xml.slice(0, mergeCells.start)}${opening}${xml.slice(mergeCells.end, close)}${mergeCellXml}${xml.slice(close)}`
+    };
+  }
+
+  const insertOffset = mergeContainerInsertOffset(xml);
+  const mergeCellsTag = qualifiedName(inferWorksheetPrefix(xml), "mergeCells");
+  return {
+    merged: true,
+    merge,
+    xml: `${xml.slice(0, insertOffset)}<${mergeCellsTag} count="1">${mergeCellXml}</${mergeCellsTag}>${xml.slice(insertOffset)}`
+  };
+}
+
+export function unmergeWorksheetCells(xml: string, ref: string): UnmergeWorksheetCellsResult {
+  const normalizedRef = normalizeMergeRef(ref);
+  const removals = findStartTags(xml, "mergeCell")
+    .filter((tag) => normalizeMergeRef(tag.attributes.ref ?? "") === normalizedRef)
+    .map((tag) => ({
+      tag,
+      end: tag.selfClosing ? tag.end : findElementEnd(xml, tag)
+    }));
+
+  if (removals.length === 0) {
+    return { unmerged: false, xml };
+  }
+
+  let nextXml = xml;
+  for (const removal of removals.toReversed()) {
+    nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
+  }
+
+  const mergeCells = findFirstStartTag(nextXml, "mergeCells");
+  if (mergeCells === undefined) {
+    return { unmerged: true, xml: nextXml };
+  }
+
+  const remaining = findStartTags(nextXml, "mergeCell").length;
+  if (remaining === 0) {
+    return {
+      unmerged: true,
+      xml: `${nextXml.slice(0, mergeCells.start)}${nextXml.slice(findElementEnd(nextXml, mergeCells))}`
+    };
+  }
+
+  const opening = upsertTagAttribute(mergeCells.raw, "count", String(remaining));
+  return {
+    unmerged: true,
+    xml: `${nextXml.slice(0, mergeCells.start)}${opening}${nextXml.slice(mergeCells.end)}`
+  };
 }
 
 export function listWorksheetHyperlinks(xml: string): WorksheetHyperlink[] {
@@ -1022,6 +1133,63 @@ function inferWorksheetPrefix(xml: string): string | undefined {
 
 function normalizeHyperlinkRef(ref: string): string {
   return parseCellRange(ref).ref;
+}
+
+function normalizeMergeRef(ref: string): string {
+  return parseCellRange(ref.replaceAll("$", "")).ref;
+}
+
+function createMergeCellXml(xml: string, merge: WorksheetMergedCell): string {
+  return `<${qualifiedName(inferWorksheetPrefix(xml), "mergeCell")} ref="${escapeXmlAttribute(merge.ref)}"/>`;
+}
+
+function mergeContainerInsertOffset(xml: string): number {
+  for (const localName of [
+    "phoneticPr",
+    "conditionalFormatting",
+    "dataValidations",
+    "hyperlinks",
+    "printOptions",
+    "pageMargins",
+    "pageSetup",
+    "headerFooter",
+    "rowBreaks",
+    "colBreaks",
+    "customProperties",
+    "cellWatches",
+    "ignoredErrors",
+    "smartTags",
+    "drawing",
+    "legacyDrawing",
+    "legacyDrawingHF",
+    "picture",
+    "oleObjects",
+    "controls",
+    "webPublishItems",
+    "tableParts",
+    "extLst"
+  ]) {
+    const tag = findFirstStartTag(xml, localName);
+    if (tag !== undefined) {
+      return tag.start;
+    }
+  }
+
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined) {
+    throw new WorksheetError("Worksheet is missing worksheet root");
+  }
+
+  return findElementCloseStart(xml, worksheet);
+}
+
+function cellRangesIntersect(left: CellRange, right: CellRange): boolean {
+  return (
+    left.start.column <= right.end.column &&
+    left.end.column >= right.start.column &&
+    left.start.row <= right.end.row &&
+    left.end.row >= right.start.row
+  );
 }
 
 function createHyperlinkXml(xml: string, hyperlink: WorksheetHyperlink): string {

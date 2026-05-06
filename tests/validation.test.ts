@@ -209,6 +209,23 @@ test("validation reports worksheet hyperlinks with missing relationships", async
   assert.equal(report.issues[0]?.target, "rIdMissing");
 });
 
+test("validation reports overlapping merged cells", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includeMerge: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml
+      .replace('count="1"', 'count="2"')
+      .replace("</mergeCells>", '<mergeCell ref="B1:C1"/></mergeCells>')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "MERGE_CELL_OVERLAP");
+  assert.equal(report.issues[0]?.target, "A1:B1");
+});
+
 test("validation reports worksheet cells that reference missing style indexes", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");

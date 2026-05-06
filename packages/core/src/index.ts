@@ -63,6 +63,7 @@ export {
   type WorkbookFormula,
   type WorkbookHyperlink,
   type WorkbookInspectResult,
+  type WorkbookMergedCell,
   type WorkbookSheet,
   type WorkbookSheetState
 } from "./workbook.ts";
@@ -85,11 +86,17 @@ export {
   streamReplaceWorksheetRowsXml,
   streamWorksheetRowsXml,
   deleteWorksheetHyperlink,
+  listWorksheetMergedCells,
+  mergeWorksheetCells,
+  unmergeWorksheetCells,
   listWorksheetHyperlinks,
   setWorksheetHyperlink,
   type DeleteWorksheetHyperlinkResult,
+  type MergeWorksheetCellsResult,
   type SetWorksheetHyperlinkResult,
+  type UnmergeWorksheetCellsResult,
   type WorksheetHyperlink,
+  type WorksheetMergedCell,
   type WorksheetRowReplacement,
   type WorksheetRowXml
 } from "./worksheet.ts";

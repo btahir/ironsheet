@@ -135,6 +135,14 @@ export async function listWorkbookHyperlinks(
   return workbook.hyperlinks(sheetName);
 }
 
+export async function listWorkbookMergedCells(
+  inputPath: string,
+  sheetName?: string
+): Promise<Awaited<ReturnType<Workbook["mergedCells"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.mergedCells(sheetName);
+}
+
 export async function inspectWorkbookStyles(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["styles"]>>> {
@@ -171,6 +179,29 @@ export async function deleteWorkbookDefinedName(
   const deleted = await workbook.deleteDefinedName(name, options);
   await writeWorkbook(workbook, outputPath);
   return deleted;
+}
+
+export async function mergeWorkbookCells(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.mergeCells(sheetName, ref);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function unmergeWorkbookCells(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string
+): Promise<boolean> {
+  const workbook = await readWorkbook(inputPath);
+  const unmerged = await workbook.unmergeCells(sheetName, ref);
+  await writeWorkbook(workbook, outputPath);
+  return unmerged;
 }
 
 export async function setWorkbookHyperlink(

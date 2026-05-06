@@ -10,7 +10,9 @@ import {
   inspectWorkbookStyles,
   listWorkbookFormulas,
   listWorkbookHyperlinks,
+  listWorkbookMergedCells,
   listWorkbookTables,
+  mergeWorkbookCells,
   patchWorkbookCell,
   patchWorkbookRange,
   readWorkbook,
@@ -26,6 +28,7 @@ import {
   setWorkbookDefinedName,
   setWorkbookHyperlink,
   styleWorkbookCell,
+  unmergeWorkbookCells,
   validateWorkbookFile
 } from "@ironsheet/node";
 import type {
@@ -44,6 +47,8 @@ type Command =
   | "formulas"
   | "hyperlinks"
   | "patch"
+  | "merge-cells"
+  | "merged-cells"
   | "patch-range"
   | "read-cell"
   | "read-range"
@@ -59,6 +64,7 @@ type Command =
   | "style-cell"
   | "styles"
   | "tables"
+  | "unmerge-cells"
   | "validate"
   | "diff";
 
@@ -68,6 +74,7 @@ function usage(): never {
   npm run cli -- tables <workbook.xlsx>
   npm run cli -- formulas <workbook.xlsx>
   npm run cli -- hyperlinks <workbook.xlsx> [sheet]
+  npm run cli -- merged-cells <workbook.xlsx> [sheet]
   npm run cli -- styles <workbook.xlsx>
   npm run cli -- validate <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
@@ -79,6 +86,8 @@ function usage(): never {
   npm run cli -- append-table-column <input.xlsx> <output.xlsx> <table> <column> [jsonValues]
   npm run cli -- set-defined-name <input.xlsx> <output.xlsx> <name> <formula> [jsonOptions]
   npm run cli -- delete-defined-name <input.xlsx> <output.xlsx> <name> [jsonOptions]
+  npm run cli -- merge-cells <input.xlsx> <output.xlsx> <sheet> <range>
+  npm run cli -- unmerge-cells <input.xlsx> <output.xlsx> <sheet> <range>
   npm run cli -- set-hyperlink <input.xlsx> <output.xlsx> <sheet> <ref> <target> [jsonOptions]
   npm run cli -- delete-hyperlink <input.xlsx> <output.xlsx> <sheet> <ref>
   npm run cli -- rename-sheet <input.xlsx> <output.xlsx> <sheet> <newName>
@@ -114,6 +123,10 @@ async function formulas(path: string): Promise<void> {
 
 async function hyperlinks(path: string, sheetName: string | undefined): Promise<void> {
   console.log(JSON.stringify(await listWorkbookHyperlinks(path, sheetName), null, 2));
+}
+
+async function mergedCells(path: string, sheetName: string | undefined): Promise<void> {
+  console.log(JSON.stringify(await listWorkbookMergedCells(path, sheetName), null, 2));
 }
 
 async function styles(path: string): Promise<void> {
@@ -233,6 +246,26 @@ async function deleteDefinedName(
     parseDefinedNameDeleteOptions(rawOptions)
   );
   console.log(`${deleted ? "deleted" : "did not find"} defined name ${name} -> ${outputPath}`);
+}
+
+async function mergeCells(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string
+): Promise<void> {
+  await mergeWorkbookCells(inputPath, outputPath, sheetName, ref);
+  console.log(`merged ${sheetName}!${ref} -> ${outputPath}`);
+}
+
+async function unmergeCells(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  ref: string
+): Promise<void> {
+  const unmerged = await unmergeWorkbookCells(inputPath, outputPath, sheetName, ref);
+  console.log(`${unmerged ? "unmerged" : "did not find"} ${sheetName}!${ref} -> ${outputPath}`);
 }
 
 async function setHyperlink(
@@ -511,6 +544,12 @@ try {
       usage();
     }
     await hyperlinks(path, sheetName);
+  } else if (command === "merged-cells") {
+    const [path, sheetName] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await mergedCells(path, sheetName);
   } else if (command === "styles") {
     const [path] = args;
     if (path === undefined) {
@@ -616,6 +655,28 @@ try {
       usage();
     }
     await deleteDefinedName(inputPath, outputPath, name, rawOptions);
+  } else if (command === "merge-cells") {
+    const [inputPath, outputPath, sheetName, ref] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      ref === undefined
+    ) {
+      usage();
+    }
+    await mergeCells(inputPath, outputPath, sheetName, ref);
+  } else if (command === "unmerge-cells") {
+    const [inputPath, outputPath, sheetName, ref] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      ref === undefined
+    ) {
+      usage();
+    }
+    await unmergeCells(inputPath, outputPath, sheetName, ref);
   } else if (command === "set-hyperlink") {
     const [inputPath, outputPath, sheetName, ref, target, rawOptions] = args;
     if (

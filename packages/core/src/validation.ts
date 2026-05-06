@@ -1047,6 +1047,40 @@ function rangeWithinExcelBounds(range: ReturnType<typeof parseCellRange>): boole
   return range.end.column <= excelMaxColumn && range.end.row <= excelMaxRow;
 }
 
+function validateMergeCellOverlaps(
+  issues: ValidationIssue[],
+  part: string,
+  merges: Array<{ range: ReturnType<typeof parseCellRange>; ref: string }>
+): void {
+  for (const [index, merge] of merges.entries()) {
+    for (const candidate of merges.slice(index + 1)) {
+      if (!cellRangesIntersect(merge.range, candidate.range)) {
+        continue;
+      }
+
+      issues.push({
+        severity: "error",
+        code: "MERGE_CELL_OVERLAP",
+        message: `Merged range ${merge.ref} overlaps ${candidate.ref}`,
+        part,
+        target: merge.ref
+      });
+    }
+  }
+}
+
+function cellRangesIntersect(
+  left: ReturnType<typeof parseCellRange>,
+  right: ReturnType<typeof parseCellRange>
+): boolean {
+  return (
+    left.start.column <= right.end.column &&
+    left.end.column >= right.start.column &&
+    left.start.row <= right.end.row &&
+    left.end.row >= right.start.row
+  );
+}
+
 function sourcePartFromRelationshipPart(part: string): string | undefined {
   if (part === "_rels/.rels") {
     return "/";
@@ -1127,6 +1161,7 @@ async function validateWorksheetRangeReferences(
       label: "merge cell",
       part
     });
+    const mergeRanges: Array<{ range: ReturnType<typeof parseCellRange>; ref: string }> = [];
     for (const mergeCell of mergeCells) {
       validateRangeAttribute({
         issues,
@@ -1136,7 +1171,22 @@ async function validateWorksheetRangeReferences(
         invalidCode: "MERGE_CELL_REF_INVALID",
         outOfBoundsCode: "MERGE_CELL_REF_OUT_OF_BOUNDS"
       });
+
+      const ref = mergeCell.attributes.ref;
+      if (ref === undefined) {
+        continue;
+      }
+
+      try {
+        const range = parseCellRange(ref.replaceAll("$", ""));
+        if (rangeWithinExcelBounds(range)) {
+          mergeRanges.push({ range, ref });
+        }
+      } catch (_error) {
+        // validateRangeAttribute already emitted the structural error.
+      }
     }
+    validateMergeCellOverlaps(issues, part, mergeRanges);
 
     const dataValidations = findStartTags(xml, "dataValidation");
     const dataValidationsContainer = findFirstStartTag(xml, "dataValidations");

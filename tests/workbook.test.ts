@@ -117,6 +117,18 @@ test("lists workbook hyperlinks with external targets", async () => {
   ]);
 });
 
+test("lists workbook merged cells", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeMerge: true }));
+
+  assert.deepEqual(await workbook.mergedCells(), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "A1:B1"
+    }
+  ]);
+});
+
 test("lists workbook table metadata", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeSecondTable: true, includeTable: true })
@@ -599,6 +611,41 @@ test("sets, replaces, and deletes external hyperlinks", async () => {
     await workbook.pkg.readText("xl/worksheets/_rels/sheet1.xml.rels"),
     /hyperlink/
   );
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
+test("merges, dedupes, rejects overlaps, and unmerges cells", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  assert.deepEqual(await workbook.mergeCells("Sheet1", "$B$2:$C$3"), {
+    sheetName: "Sheet1",
+    sheetPartName: "xl/worksheets/sheet1.xml",
+    ref: "B2:C3"
+  });
+  assert.deepEqual(await workbook.mergeCells("Sheet1", "B2:C3"), {
+    sheetName: "Sheet1",
+    sheetPartName: "xl/worksheets/sheet1.xml",
+    ref: "B2:C3"
+  });
+  assert.deepEqual(await workbook.mergedCells("Sheet1"), [
+    {
+      sheetName: "Sheet1",
+      sheetPartName: "xl/worksheets/sheet1.xml",
+      ref: "B2:C3"
+    }
+  ]);
+  assert.match(
+    await workbook.pkg.readText("xl/worksheets/sheet1.xml"),
+    /<mergeCells count="1"><mergeCell ref="B2:C3"\/><\/mergeCells>/
+  );
+
+  await assert.rejects(() => workbook.mergeCells("Sheet1", "C3:D4"), /overlaps existing merge/);
+  await assert.rejects(() => workbook.mergeCells("Sheet1", "D4"), /single cell/);
+
+  assert.equal(await workbook.unmergeCells("Sheet1", "B2:C3"), true);
+  assert.equal(await workbook.unmergeCells("Sheet1", "B2:C3"), false);
+  assert.deepEqual(await workbook.mergedCells("Sheet1"), []);
+  assert.doesNotMatch(await workbook.pkg.readText("xl/worksheets/sheet1.xml"), /<mergeCells/);
   assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
 });
 

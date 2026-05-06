@@ -39,12 +39,15 @@ import {
   applyCellStyle,
   deleteWorksheetHyperlink,
   listWorksheetHyperlinks,
+  listWorksheetMergedCells,
+  mergeWorksheetCells,
   patchCell,
   patchCells,
   patchRange,
   readCell,
   readRange,
   setWorksheetHyperlink,
+  unmergeWorksheetCells,
   type CellInput,
   type CellPatch,
   type FormulaValue,
@@ -138,6 +141,12 @@ export type WorkbookHyperlink = {
   target?: string;
   targetMode?: string;
   tooltip?: string;
+};
+
+export type WorkbookMergedCell = {
+  sheetName: string;
+  sheetPartName: string;
+  ref: string;
 };
 
 export class Workbook {
@@ -313,6 +322,49 @@ export class Workbook {
     }
 
     return hyperlinks;
+  }
+
+  async mergedCells(sheetName?: string): Promise<WorkbookMergedCell[]> {
+    const sheets = sheetName === undefined ? this.sheets() : [this.sheet(sheetName)];
+    const merges: WorkbookMergedCell[] = [];
+
+    for (const sheet of sheets) {
+      const xml = await this.pkg.readText(sheet.partName);
+      for (const merge of listWorksheetMergedCells(xml)) {
+        merges.push({
+          sheetName: sheet.name,
+          sheetPartName: sheet.partName,
+          ref: merge.ref
+        });
+      }
+    }
+
+    return merges;
+  }
+
+  async mergeCells(sheetName: string, ref: string): Promise<WorkbookMergedCell> {
+    const sheet = this.sheet(sheetName);
+    const result = mergeWorksheetCells(await this.pkg.readText(sheet.partName), ref);
+    if (result.merged) {
+      this.pkg.setText(sheet.partName, result.xml);
+    }
+
+    return {
+      sheetName: sheet.name,
+      sheetPartName: sheet.partName,
+      ref: result.merge.ref
+    };
+  }
+
+  async unmergeCells(sheetName: string, ref: string): Promise<boolean> {
+    const sheet = this.sheet(sheetName);
+    const result = unmergeWorksheetCells(await this.pkg.readText(sheet.partName), ref);
+    if (!result.unmerged) {
+      return false;
+    }
+
+    this.pkg.setText(sheet.partName, result.xml);
+    return true;
   }
 
   async setHyperlink(
