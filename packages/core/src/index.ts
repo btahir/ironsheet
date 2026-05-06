@@ -35,6 +35,15 @@ export {
   streamRowsXml
 } from "./worksheet.ts";
 export {
+  type XmlTag,
+  type XmlToken,
+  findElementCloseStart,
+  findElementEnd,
+  findFirstStartTag,
+  findStartTags,
+  tokenizeXml
+} from "./xml.ts";
+export {
   type CompressionAdapter,
   crc32,
   parseZip,

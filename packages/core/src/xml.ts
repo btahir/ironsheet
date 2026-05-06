@@ -10,37 +10,130 @@ export type XmlTag = {
   raw: string;
 };
 
-export function findStartTags(xml: string, localName: string): XmlTag[] {
-  const tags: XmlTag[] = [];
-  let offset = 0;
+export type XmlToken =
+  | { kind: "text"; start: number; end: number; text: string }
+  | { kind: "start"; tag: XmlTag }
+  | {
+      kind: "end";
+      name: string;
+      localName: string;
+      start: number;
+      end: number;
+      raw: string;
+    }
+  | { kind: "comment"; start: number; end: number; raw: string; text: string }
+  | { kind: "cdata"; start: number; end: number; raw: string; text: string }
+  | { kind: "processingInstruction"; start: number; end: number; raw: string }
+  | { kind: "declaration"; start: number; end: number; raw: string };
+
+export function* tokenizeXml(xml: string, options: { start?: number } = {}): Generator<XmlToken> {
+  let offset = options.start ?? 0;
 
   while (offset < xml.length) {
-    const start = xml.indexOf("<", offset);
-    if (start === -1) {
-      break;
+    const tagStart = xml.indexOf("<", offset);
+    if (tagStart === -1) {
+      if (offset < xml.length) {
+        yield { kind: "text", start: offset, end: xml.length, text: xml.slice(offset) };
+      }
+      return;
     }
 
-    const specialTagEnd = findSpecialTagEnd(xml, start);
-    if (specialTagEnd !== undefined) {
-      offset = specialTagEnd + 1;
+    if (tagStart > offset) {
+      yield { kind: "text", start: offset, end: tagStart, text: xml.slice(offset, tagStart) };
+    }
+
+    if (xml.startsWith("<?", tagStart)) {
+      const end = findDelimitedEnd(xml, "?>", tagStart, "processing instruction") + 1;
+      yield {
+        kind: "processingInstruction",
+        start: tagStart,
+        end,
+        raw: xml.slice(tagStart, end)
+      };
+      offset = end;
       continue;
     }
 
-    const end = findTagEnd(xml, start);
-    const raw = xml.slice(start, end + 1);
-    const tag = parseStartTag(raw, start, end + 1);
-    if (tag !== undefined && tag.localName === localName) {
-      tags.push(tag);
+    if (xml.startsWith("<!--", tagStart)) {
+      const end = findDelimitedEnd(xml, "-->", tagStart, "comment") + 1;
+      yield {
+        kind: "comment",
+        start: tagStart,
+        end,
+        raw: xml.slice(tagStart, end),
+        text: xml.slice(tagStart + "<!--".length, end - "-->".length)
+      };
+      offset = end;
+      continue;
     }
 
-    offset = end + 1;
+    if (xml.startsWith("<![CDATA[", tagStart)) {
+      const end = findDelimitedEnd(xml, "]]>", tagStart, "CDATA section") + 1;
+      yield {
+        kind: "cdata",
+        start: tagStart,
+        end,
+        raw: xml.slice(tagStart, end),
+        text: xml.slice(tagStart + "<![CDATA[".length, end - "]]>".length)
+      };
+      offset = end;
+      continue;
+    }
+
+    const tagEnd = findTagEnd(xml, tagStart) + 1;
+    const raw = xml.slice(tagStart, tagEnd);
+
+    if (raw.startsWith("</")) {
+      const name = parseEndTagName(raw);
+      if (name !== undefined) {
+        yield {
+          kind: "end",
+          name,
+          localName: toLocalName(name),
+          start: tagStart,
+          end: tagEnd,
+          raw
+        };
+      }
+      offset = tagEnd;
+      continue;
+    }
+
+    if (raw.startsWith("<!")) {
+      yield { kind: "declaration", start: tagStart, end: tagEnd, raw };
+      offset = tagEnd;
+      continue;
+    }
+
+    const tag = parseStartTag(raw, tagStart, tagEnd);
+    if (tag !== undefined) {
+      yield { kind: "start", tag };
+    }
+
+    offset = tagEnd;
+  }
+}
+
+export function findStartTags(xml: string, localName: string): XmlTag[] {
+  const tags: XmlTag[] = [];
+
+  for (const token of tokenizeXml(xml)) {
+    if (token.kind === "start" && token.tag.localName === localName) {
+      tags.push(token.tag);
+    }
   }
 
   return tags;
 }
 
 export function findFirstStartTag(xml: string, localName: string): XmlTag | undefined {
-  return findStartTags(xml, localName)[0];
+  for (const token of tokenizeXml(xml)) {
+    if (token.kind === "start" && token.tag.localName === localName) {
+      return token.tag;
+    }
+  }
+
+  return undefined;
 }
 
 export function findElementEnd(xml: string, tag: XmlTag): number {
@@ -61,36 +154,19 @@ export function findElementCloseStart(xml: string, tag: XmlTag): number {
 
 function findElementCloseTag(xml: string, tag: XmlTag): { start: number; end: number } {
   let depth = 1;
-  let offset = tag.end;
 
-  while (offset < xml.length) {
-    const start = xml.indexOf("<", offset);
-    if (start === -1) {
-      break;
-    }
-
-    const specialTagEnd = findSpecialTagEnd(xml, start);
-    if (specialTagEnd !== undefined) {
-      offset = specialTagEnd + 1;
+  for (const token of tokenizeXml(xml, { start: tag.end })) {
+    if (token.kind === "end" && token.localName === tag.localName) {
+      depth -= 1;
+      if (depth === 0) {
+        return { start: token.start, end: token.end };
+      }
       continue;
     }
 
-    const end = findTagEnd(xml, start);
-    const raw = xml.slice(start, end + 1);
-    const closingLocalName = parseEndTagLocalName(raw);
-    if (closingLocalName === tag.localName) {
-      depth -= 1;
-      if (depth === 0) {
-        return { start, end: end + 1 };
-      }
-    } else {
-      const startTag = parseStartTag(raw, start, end + 1);
-      if (startTag?.localName === tag.localName && !startTag.selfClosing) {
-        depth += 1;
-      }
+    if (token.kind === "start" && token.tag.localName === tag.localName && !token.tag.selfClosing) {
+      depth += 1;
     }
-
-    offset = end + 1;
   }
 
   throw new PackageError(`Element ${tag.name} is missing a closing tag`);
@@ -167,6 +243,10 @@ export function parseAttributes(source: string): Record<string, string> {
       offset += 1;
     }
 
+    if (source[offset] !== quote) {
+      throw new PackageError(`Unterminated XML attribute ${name}`);
+    }
+
     attributes[name] = decodeXml(source.slice(valueStart, offset));
     offset += 1;
   }
@@ -232,33 +312,13 @@ function findNameEnd(source: string): number {
   return offset;
 }
 
-function parseEndTagLocalName(raw: string): string | undefined {
+function parseEndTagName(raw: string): string | undefined {
   if (!raw.startsWith("</")) {
     return undefined;
   }
 
   const name = raw.slice(2, raw.endsWith(">") ? -1 : undefined).trim();
-  return name.length === 0 ? undefined : toLocalName(name);
-}
-
-function findSpecialTagEnd(xml: string, start: number): number | undefined {
-  if (xml.startsWith("<?", start)) {
-    return findDelimitedEnd(xml, "?>", start, "processing instruction");
-  }
-
-  if (xml.startsWith("<!--", start)) {
-    return findDelimitedEnd(xml, "-->", start, "comment");
-  }
-
-  if (xml.startsWith("<![CDATA[", start)) {
-    return findDelimitedEnd(xml, "]]>", start, "CDATA section");
-  }
-
-  if (xml.startsWith("<!", start)) {
-    return findTagEnd(xml, start);
-  }
-
-  return undefined;
+  return name.length === 0 ? undefined : name;
 }
 
 function findDelimitedEnd(
