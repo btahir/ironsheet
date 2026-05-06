@@ -124,6 +124,7 @@ npm run cli -- patch-range input.xlsx output.xlsx Sheet1 B2 '[["Name","Amount"],
 npm run cli -- patch-named-range input.xlsx output.xlsx RevenueRange '[["Name","Amount"],["ACME",42]]'
 npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["North",10],["South",20]]'
 npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
+npm run cli -- insert-image input.xlsx output.xlsx Sheet1 logo.png
 npm run cli -- rename-sheet input.xlsx output.xlsx Sheet1 "Revenue 2026"
 npm run cli -- rename-table input.xlsx output.xlsx RevenueTable SalesData
 npm run cli -- rename-table-column input.xlsx output.xlsx RevenueTable Amount NetAmount
@@ -135,13 +136,13 @@ Mutating CLI commands use safe writes by default. They print JSON reports and ex
 
 Core workbook capabilities:
 
-- ZIP central-directory parse/write, CRC32, duplicate path rejection, unsafe path rejection, and raw compressed payload preservation.
+- ZIP central-directory parse/write, ZIP64 metadata read for in-memory archives, CRC32, duplicate path rejection, unsafe path rejection, and raw compressed payload preservation.
 - OPC relationship parsing, target resolution, relationship mutation, and content type validation.
 - Sheet discovery, visibility edits, and safe sheet renaming with formula, defined-name, chart, and pivot-cache retargeting.
 - Cell, batch-cell, range, named-range, append-row, and table-row writes.
 - Table metadata, table row replacement, table rename, table-column rename, rightmost column removal, and append column.
 - Defined names, worksheet auto filters, data validations, conditional formats, hyperlinks, merged cells, comments, images, styles, formulas, charts, pivots, and macros inspection.
-- Existing image replacement while preserving drawing anchors and relationships.
+- Existing image replacement plus new image insertion with one-cell and two-cell anchors.
 - Safe-by-default CLI mutation reports with validation, diagnostics, and content-vs-repack package diffs.
 - Style inspection and deduped cell format creation.
 - Template manifest and template render APIs.
@@ -163,7 +164,7 @@ Runtime split:
 - Named-range and table mutations conservatively force recalculation for defined-name and structured-reference formulas.
 - Template rendering preflights all targets before applying mutations.
 - Table expansion refuses occupied rows, and table column append refuses adjacent occupied cells or overlapping table ranges.
-- Existing image replacement validates bytes against the current media part type.
+- Image replacement and insertion validate bytes against the target media type.
 - Invalid worksheet dimensions and cell refs are reported as validation issues instead of crashing validation.
 - Safe writes validate the final workbook and suppress output when validation errors are found.
 - Core runtime code has a guard against Node-only imports and runtime dependencies.
@@ -172,8 +173,7 @@ Runtime split:
 
 These are intentional product boundaries, not hidden claims:
 
-- ZIP64 read/write is not implemented yet.
-- New image insertion is not implemented; existing image replacement is supported.
+- ZIP64 writing is not implemented yet; ZIP64 reading is metadata-only and still memory-backed.
 - Chart and pivot support focuses on preservation, validation, and targeted retargeting, not full chart/pivot authoring.
 - Some real-world Excel structures still need corpus fixtures before they should be considered release-ready.
 
@@ -203,6 +203,12 @@ Build publishable JS and declaration output under each package `dist/` directory
 
 ```bash
 npm run build
+```
+
+Run release preflight, including CI, package dry-runs, workspace metadata checks, validator capability reporting, and npm public publish dry-run with provenance:
+
+```bash
+npm run release:check
 ```
 
 Use the safe commit loop:

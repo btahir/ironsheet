@@ -13,6 +13,7 @@ import {
   type PivotCacheSourceRetarget,
   type ValidationReport,
   type WorkbookCellStyleInput,
+  type WorkbookInsertImageOptions,
   type WorkbookNamedRangePatchOptions,
   type WorkbookSheetState,
   type WorkbookTemplatePatch,
@@ -459,6 +460,35 @@ export async function replaceWorkbookImageFile(
   imagePath: string
 ): Promise<void> {
   await replaceWorkbookImage(inputPath, outputPath, imagePartName, await nodeReadFile(imagePath));
+}
+
+export async function insertWorkbookImage(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  data: Uint8Array,
+  options: WorkbookInsertImageOptions = {}
+): Promise<Awaited<ReturnType<Workbook["insertImage"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  const image = await workbook.insertImage(sheetName, data, options);
+  await writeWorkbook(workbook, outputPath);
+  return image;
+}
+
+export async function insertWorkbookImageFile(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  imagePath: string,
+  options: WorkbookInsertImageOptions = {}
+): Promise<Awaited<ReturnType<Workbook["insertImage"]>>> {
+  return insertWorkbookImage(
+    inputPath,
+    outputPath,
+    sheetName,
+    await nodeReadFile(imagePath),
+    options
+  );
 }
 
 export async function setWorkbookHyperlink(

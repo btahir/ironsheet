@@ -31,6 +31,7 @@ import type {
   PivotCacheSourceRetarget,
   Workbook,
   WorkbookCellStyleInput,
+  WorkbookInsertImageOptions,
   WorkbookSheetState,
   WorkbookTemplatePatch,
   WorksheetAutoFilter,
@@ -55,6 +56,7 @@ type Command =
   | "hide-sheet"
   | "hyperlinks"
   | "images"
+  | "insert-image"
   | "patch"
   | "merge-cells"
   | "merged-cells"
@@ -116,6 +118,7 @@ function usage(): never {
   npm run cli -- set-auto-filter <input.xlsx> <output.xlsx> <sheet> <jsonAutoFilter>
   npm run cli -- delete-auto-filter <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- replace-image <input.xlsx> <output.xlsx> <imagePartName> <imageFile>
+  npm run cli -- insert-image <input.xlsx> <output.xlsx> <sheet> <imageFile> [jsonOptions]
   npm run cli -- render-template <input.xlsx> <output.xlsx> <jsonPatch|@patch.json>
   npm run cli -- render-template-safe <input.xlsx> <output.xlsx> <jsonPatch|@patch.json>
   npm run cli -- set-conditional-format <input.xlsx> <output.xlsx> <sheet> <jsonConditionalFormat>
@@ -579,6 +582,28 @@ async function replaceImage(
     outputPath,
     (workbook) => workbook.replaceImage(imagePartName, imageData),
     `replaced ${imagePartName} from ${imagePath}`
+  );
+}
+
+async function insertImage(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  imagePath: string,
+  rawOptions: string | undefined
+): Promise<void> {
+  const imageData = new Uint8Array(await readFile(imagePath));
+  let inserted: Awaited<ReturnType<Workbook["insertImage"]>> | undefined;
+  await safeMutate(
+    inputPath,
+    outputPath,
+    async (workbook) => {
+      inserted = await workbook.insertImage(sheetName, imageData, parseImageOptions(rawOptions));
+    },
+    () =>
+      inserted === undefined
+        ? `inserted image into ${sheetName}`
+        : `inserted ${inserted.imagePartName} into ${sheetName}`
   );
 }
 
@@ -1068,6 +1093,19 @@ function parseHyperlinkOptions(rawOptions: string | undefined): {
   };
 }
 
+function parseImageOptions(rawOptions: string | undefined): WorkbookInsertImageOptions {
+  if (rawOptions === undefined) {
+    return {};
+  }
+
+  const parsed: unknown = JSON.parse(rawOptions);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("jsonOptions must be an object");
+  }
+
+  return parsed as WorkbookInsertImageOptions;
+}
+
 function parseSheetState(rawState: string | undefined): WorkbookSheetState {
   if (rawState === undefined || rawState === "hidden") {
     return "hidden";
@@ -1467,6 +1505,17 @@ try {
       usage();
     }
     await replaceImage(inputPath, outputPath, imagePartName, imagePath);
+  } else if (command === "insert-image") {
+    const [inputPath, outputPath, sheetName, imagePath, rawOptions] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      imagePath === undefined
+    ) {
+      usage();
+    }
+    await insertImage(inputPath, outputPath, sheetName, imagePath, rawOptions);
   } else if (command === "render-template") {
     const [inputPath, outputPath, rawPatch] = args;
     if (inputPath === undefined || outputPath === undefined || rawPatch === undefined) {

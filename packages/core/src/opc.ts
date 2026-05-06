@@ -267,6 +267,81 @@ export class OoxmlPackage {
     return true;
   }
 
+  async upsertContentTypeDefault(extension: string, contentType: string): Promise<void> {
+    if (!this.hasPart("[Content_Types].xml")) {
+      throw new PackageError("Cannot add content type default; [Content_Types].xml is missing");
+    }
+
+    const normalizedExtension = extension.replace(/^\./, "").toLowerCase();
+    const defaultXml = contentTypeDefaultXml(normalizedExtension, contentType);
+    const xml = await this.readText("[Content_Types].xml");
+    const existing = findStartTags(xml, "Default").find(
+      (tag) => tag.attributes.Extension?.toLowerCase() === normalizedExtension
+    );
+
+    if (existing !== undefined) {
+      if (existing.attributes.ContentType === contentType) {
+        return;
+      }
+
+      const end = existing.selfClosing ? existing.end : findElementEnd(xml, existing);
+      this.setText(
+        "[Content_Types].xml",
+        `${xml.slice(0, existing.start)}${defaultXml}${xml.slice(end)}`
+      );
+      return;
+    }
+
+    const types = findStartTags(xml, "Types")[0];
+    if (types === undefined) {
+      throw new PackageError("[Content_Types].xml is missing Types root");
+    }
+
+    const firstOverride = findStartTags(xml, "Override")[0];
+    const insertOffset = firstOverride?.start ?? findElementCloseStart(xml, types);
+    this.setText(
+      "[Content_Types].xml",
+      `${xml.slice(0, insertOffset)}  ${defaultXml}\n${xml.slice(insertOffset)}`
+    );
+  }
+
+  async upsertContentTypeOverride(partName: string, contentType: string): Promise<void> {
+    if (!this.hasPart("[Content_Types].xml")) {
+      throw new PackageError("Cannot add content type override; [Content_Types].xml is missing");
+    }
+
+    const normalizedPartName = `/${normalizePartName(partName)}`;
+    const overrideXml = contentTypeOverrideXml(partName, contentType);
+    const xml = await this.readText("[Content_Types].xml");
+    const existing = findStartTags(xml, "Override").find(
+      (tag) => tag.attributes.PartName === normalizedPartName
+    );
+
+    if (existing !== undefined) {
+      if (existing.attributes.ContentType === contentType) {
+        return;
+      }
+
+      const end = existing.selfClosing ? existing.end : findElementEnd(xml, existing);
+      this.setText(
+        "[Content_Types].xml",
+        `${xml.slice(0, existing.start)}${overrideXml}${xml.slice(end)}`
+      );
+      return;
+    }
+
+    const types = findStartTags(xml, "Types")[0];
+    if (types === undefined) {
+      throw new PackageError("[Content_Types].xml is missing Types root");
+    }
+
+    const insertOffset = findElementCloseStart(xml, types);
+    this.setText(
+      "[Content_Types].xml",
+      `${xml.slice(0, insertOffset)}  ${overrideXml}\n${xml.slice(insertOffset)}`
+    );
+  }
+
   async rootRelationships(): Promise<Relationship[]> {
     if (!this.hasPart("_rels/.rels")) {
       return [];
@@ -402,6 +477,24 @@ export function resolveRelationshipTarget(sourcePartName: string, target: string
   return resolved.join("/");
 }
 
+export function relativeRelationshipTarget(sourcePartName: string, targetPartName: string): string {
+  const sourceSegments = normalizePartName(sourcePartName).split("/").slice(0, -1);
+  const targetSegments = normalizePartName(targetPartName).split("/");
+  let common = 0;
+
+  while (
+    common < sourceSegments.length &&
+    common < targetSegments.length &&
+    sourceSegments[common] === targetSegments[common]
+  ) {
+    common += 1;
+  }
+
+  return [...sourceSegments.slice(common).map(() => ".."), ...targetSegments.slice(common)].join(
+    "/"
+  );
+}
+
 export function relationshipPartName(partName: string): string {
   const normalized = normalizePartName(partName);
   const slash = normalized.lastIndexOf("/");
@@ -457,4 +550,8 @@ function relationshipFromAttributes(attributes: Record<string, string>): Relatio
 
 export function contentTypeOverrideXml(partName: string, contentType: string): string {
   return `<Override PartName="/${escapeXmlAttribute(normalizePartName(partName))}" ContentType="${escapeXmlAttribute(contentType)}"/>`;
+}
+
+function contentTypeDefaultXml(extension: string, contentType: string): string {
+  return `<Default Extension="${escapeXmlAttribute(extension)}" ContentType="${escapeXmlAttribute(contentType)}"/>`;
 }

@@ -92,6 +92,6 @@ Non-goals for the first paid wedge:
 - Add real fixtures and promote them from pending to active, then require `npm run compat:corpus:strict` before release.
 - Add stronger table collision tests for tables below the edited table, totals rows, filters, and calculated columns.
 - Expand chart and pivot diagnostics beyond direct formula/source intersections into cache freshness, refresh flags, and stale cached values.
-- Add image insertion after drawing anchor and content-type helpers are ready.
-- Add ZIP64 support before claiming very-large-workbook support.
-- Add release automation around the built JS and `.d.ts` artifacts, including provenance, changelog, and npm dry-run checks.
+- Expand image insertion with richer sizing helpers, anchor parsing, and fixture coverage from Excel-authored workbooks.
+- Add ZIP64 writing and streaming package IO before claiming true very-large-workbook support.
+- Add release changelog/version automation on top of the current package metadata, provenance, and npm dry-run preflight.

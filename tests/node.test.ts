@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
+  insertWorkbookImageFile,
   mutateWorkbookFile,
   openWorkbook,
   renderWorkbookTemplateSafely
@@ -63,6 +64,29 @@ test("safe mutation refuses to write packages with validation errors", async () 
     assert.equal(report.wrote, false);
     assert.equal(report.validation.summary.errors > 0, true);
     await assert.rejects(() => access(outputPath, constants.F_OK));
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test("node adapter inserts image files", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-node-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    const outputPath = resolve(directory, "output.xlsx");
+    const imagePath = resolve(directory, "logo.png");
+    await writeFile(inputPath, await createMinimalWorkbook());
+    await writeFile(imagePath, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 5]));
+
+    const image = await insertWorkbookImageFile(inputPath, outputPath, "Sheet1", imagePath);
+    const workbook = await openWorkbook(new Uint8Array(await readFile(outputPath)));
+
+    assert.equal(image.imagePartName, "xl/media/image1.png");
+    assert.deepEqual(
+      (await workbook.images()).map((candidate) => candidate.imagePartName),
+      ["xl/media/image1.png"]
+    );
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

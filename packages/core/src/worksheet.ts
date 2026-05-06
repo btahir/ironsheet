@@ -198,6 +198,11 @@ export type DeleteWorksheetHyperlinkResult = {
   xml: string;
 };
 
+export type EnsureWorksheetDrawingResult = {
+  inserted: boolean;
+  xml: string;
+};
+
 export function readCell(
   xml: string,
   address: string,
@@ -1008,6 +1013,23 @@ export function deleteWorksheetHyperlink(xml: string, ref: string): DeleteWorksh
       .map((removal) => removal.relationshipId)
       .filter((relationshipId): relationshipId is string => relationshipId !== undefined),
     xml: nextXml
+  };
+}
+
+export function ensureWorksheetDrawing(
+  xml: string,
+  relationshipId: string
+): EnsureWorksheetDrawingResult {
+  const nextXml = ensureWorksheetRelationshipNamespace(xml);
+  if (findFirstStartTag(nextXml, "drawing") !== undefined) {
+    return { inserted: false, xml: nextXml };
+  }
+
+  const drawingXml = `<${qualifiedName(inferWorksheetPrefix(nextXml), "drawing")} r:id="${escapeXmlAttribute(relationshipId)}"/>`;
+  const insertOffset = drawingInsertOffset(nextXml);
+  return {
+    inserted: true,
+    xml: `${nextXml.slice(0, insertOffset)}${drawingXml}${nextXml.slice(insertOffset)}`
   };
 }
 
@@ -2083,6 +2105,31 @@ function hyperlinkContainerInsertOffset(xml: string): number {
     "ignoredErrors",
     "smartTags",
     "drawing",
+    "legacyDrawing",
+    "legacyDrawingHF",
+    "picture",
+    "oleObjects",
+    "controls",
+    "webPublishItems",
+    "tableParts",
+    "extLst"
+  ]) {
+    const tag = findFirstStartTag(xml, localName);
+    if (tag !== undefined) {
+      return tag.start;
+    }
+  }
+
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined) {
+    throw new WorksheetError("Worksheet is missing worksheet root");
+  }
+
+  return findElementCloseStart(xml, worksheet);
+}
+
+function drawingInsertOffset(xml: string): number {
+  for (const localName of [
     "legacyDrawing",
     "legacyDrawingHF",
     "picture",

@@ -23,10 +23,30 @@ import {
   type FormulaSheetReference,
   type FormulaStructuredReference
 } from "./formula.ts";
-import { drawingRelationship, imageRelationship, type WorkbookImage } from "./images.ts";
+import {
+  appendDrawingAnchorXml,
+  assertImageBytesMatchExtension,
+  assertImageBytesMatchPartName,
+  createDrawingXml,
+  createPictureAnchorXml,
+  drawingContentType,
+  drawingRelationship,
+  imageContentTypeForExtension,
+  imageExtensionForBytes,
+  imageRelationship,
+  nextDrawingPictureId,
+  normalizeImageExtension,
+  type WorkbookImage,
+  type WorkbookImageAnchor,
+  type WorkbookImageExtension,
+  type WorkbookImageAnchorMarker,
+  type WorkbookImageExtent,
+  type WorkbookInsertImageOptions
+} from "./images.ts";
 import {
   normalizePartName,
   type OoxmlPackage,
+  relativeRelationshipTarget,
   type Relationship,
   resolveRelationshipTarget
 } from "./opc.ts";
@@ -64,6 +84,7 @@ import {
   deleteWorksheetConditionalFormat,
   deleteWorksheetDataValidation,
   deleteWorksheetHyperlink,
+  ensureWorksheetDrawing,
   listWorksheetAutoFilters,
   listWorksheetConditionalFormats,
   listWorksheetDataValidations,
@@ -177,7 +198,15 @@ export type WorkbookFormula = {
   structuredReferences: FormulaStructuredReference[];
 };
 
-export type { WorkbookChart, WorkbookPivotCacheSource };
+export type {
+  WorkbookChart,
+  WorkbookImageAnchor,
+  WorkbookImageAnchorMarker,
+  WorkbookImageExtension,
+  WorkbookImageExtent,
+  WorkbookInsertImageOptions,
+  WorkbookPivotCacheSource
+};
 
 export type WorkbookHyperlink = {
   sheetName: string;
@@ -759,6 +788,64 @@ export class Workbook {
 
     this.pkg.setPart(normalized, data);
     return image;
+  }
+
+  async insertImage(
+    sheetName: string,
+    data: Uint8Array,
+    options: WorkbookInsertImageOptions = {}
+  ): Promise<WorkbookImage> {
+    const sheet = this.sheet(sheetName);
+    const extension =
+      options.extension === undefined
+        ? imageExtensionForBytes(data)
+        : normalizeImageExtension(options.extension);
+    if (extension === undefined) {
+      throw new WorkbookError(
+        "Cannot infer image extension from bytes; pass an explicit image extension"
+      );
+    }
+
+    assertImageAnchor(options.anchor);
+    assertImageBytesMatchExtension(extension, data);
+
+    const imagePartName = nextWorkbookPartName(
+      this.pkg,
+      /^xl\/media\/image(\d+)\.[^/]+$/,
+      "xl/media/image",
+      `.${extension}`
+    );
+    const drawing = await this.ensureSheetDrawing(sheet);
+    const imageRelationshipId = await this.pkg.nextRelationshipId(drawing.drawingPartName);
+    const target = relativeRelationshipTarget(drawing.drawingPartName, imagePartName);
+
+    this.pkg.addPart(imagePartName, data);
+    await this.pkg.upsertContentTypeDefault(extension, imageContentTypeForExtension(extension));
+    await this.pkg.upsertRelationship(drawing.drawingPartName, {
+      id: imageRelationshipId,
+      type: imageRelationship,
+      target
+    });
+
+    const drawingXml = await this.pkg.readText(drawing.drawingPartName);
+    const pictureId = nextDrawingPictureId(drawingXml);
+    this.pkg.setText(
+      drawing.drawingPartName,
+      appendDrawingAnchorXml(
+        drawingXml,
+        createPictureAnchorXml(imageRelationshipId, pictureId, options)
+      )
+    );
+
+    return {
+      sheetName: sheet.name,
+      sheetPartName: sheet.partName,
+      drawingPartName: drawing.drawingPartName,
+      drawingRelationshipId: drawing.relationshipId,
+      imageRelationshipId,
+      target,
+      imagePartName
+    };
   }
 
   async setDataValidation(
@@ -1450,6 +1537,74 @@ export class Workbook {
     return this.pkg.write();
   }
 
+  private async ensureSheetDrawing(
+    sheet: WorkbookSheet
+  ): Promise<{ drawingPartName: string; relationshipId: string }> {
+    const existing = await this.findSheetDrawing(sheet);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const drawingPartName = nextWorkbookPartName(
+      this.pkg,
+      /^xl\/drawings\/drawing(\d+)\.xml$/,
+      "xl/drawings/drawing",
+      ".xml"
+    );
+    const relationshipId = await this.pkg.nextRelationshipId(sheet.partName);
+
+    this.pkg.addTextPart(drawingPartName, createDrawingXml());
+    await this.pkg.upsertContentTypeOverride(drawingPartName, drawingContentType);
+    await this.pkg.upsertRelationship(sheet.partName, {
+      id: relationshipId,
+      type: drawingRelationship,
+      target: relativeRelationshipTarget(sheet.partName, drawingPartName)
+    });
+
+    const worksheetXml = await this.pkg.readText(sheet.partName);
+    const result = ensureWorksheetDrawing(worksheetXml, relationshipId);
+    this.pkg.setText(sheet.partName, result.xml);
+
+    return { drawingPartName, relationshipId };
+  }
+
+  private async findSheetDrawing(
+    sheet: WorkbookSheet
+  ): Promise<{ drawingPartName: string; relationshipId: string } | undefined> {
+    const worksheetXml = await this.pkg.readText(sheet.partName);
+    const drawings = findStartTags(worksheetXml, "drawing");
+    if (drawings.length === 0) {
+      return undefined;
+    }
+
+    const relationships = new Map(
+      (await this.pkg.relationshipsFor(sheet.partName)).map((relationship) => [
+        relationship.id,
+        relationship
+      ])
+    );
+    for (const drawing of drawings) {
+      const relationshipId = drawing.attributes["r:id"];
+      if (relationshipId === undefined) {
+        continue;
+      }
+
+      const relationship = relationships.get(relationshipId);
+      if (relationship?.type !== drawingRelationship) {
+        continue;
+      }
+
+      const drawingPartName = resolveRelationshipTarget(sheet.partName, relationship.target);
+      if (this.pkg.hasPart(drawingPartName)) {
+        return { drawingPartName, relationshipId };
+      }
+    }
+
+    throw new WorkbookError(
+      `Worksheet ${sheet.name} has a drawing element without a valid drawing relationship`
+    );
+  }
+
   private async forceRecalculateOnOpen(): Promise<void> {
     const xml = await this.pkg.readText(this.workbookPart);
     const calcPr = findFirstStartTag(xml, "calcPr");
@@ -1876,82 +2031,63 @@ function rangesIntersect(left: CellRange, right: CellRange): boolean {
   );
 }
 
-function assertImageBytesMatchPartName(partName: string, data: Uint8Array): void {
-  const extension = partName.slice(partName.lastIndexOf(".") + 1).toLowerCase();
-  const expected = imageSignatureForExtension(extension);
-  if (expected === undefined || expected.matches(data)) {
+function nextWorkbookPartName(
+  pkg: OoxmlPackage,
+  pattern: RegExp,
+  prefix: string,
+  suffix: string
+): string {
+  const highest = Math.max(
+    0,
+    ...pkg
+      .listParts()
+      .map((partName) => partName.match(pattern))
+      .filter((match): match is RegExpMatchArray => match !== null)
+      .map((match) => Number.parseInt(match[1] ?? "0", 10))
+      .filter((value) => Number.isSafeInteger(value) && value > 0)
+  );
+  let index = highest + 1;
+  let partName = `${prefix}${index}${suffix}`;
+  while (pkg.hasPart(partName)) {
+    index += 1;
+    partName = `${prefix}${index}${suffix}`;
+  }
+
+  return partName;
+}
+
+function assertImageAnchor(anchor: WorkbookImageAnchor | undefined): void {
+  if (anchor === undefined) {
     return;
   }
 
-  throw new WorkbookError(`Image part ${partName} expects ${expected.label} bytes`);
+  assertImageAnchorMarker(anchor.from, "from");
+  if (anchor.kind === "oneCell") {
+    assertPositiveEmu(anchor.ext.cx, "image width");
+    assertPositiveEmu(anchor.ext.cy, "image height");
+    return;
+  }
+
+  assertImageAnchorMarker(anchor.to, "to");
 }
 
-function imageSignatureForExtension(
-  extension: string
-): { label: string; matches: (data: Uint8Array) => boolean } | undefined {
-  if (extension === "png") {
-    return {
-      label: "PNG",
-      matches: (data) => startsWithBytes(data, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    };
-  }
-
-  if (extension === "jpg" || extension === "jpeg") {
-    return {
-      label: "JPEG",
-      matches: (data) => data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
-    };
-  }
-
-  if (extension === "gif") {
-    return {
-      label: "GIF",
-      matches: (data) => startsWithAscii(data, "GIF87a") || startsWithAscii(data, "GIF89a")
-    };
-  }
-
-  if (extension === "bmp") {
-    return {
-      label: "BMP",
-      matches: (data) => startsWithAscii(data, "BM")
-    };
-  }
-
-  if (extension === "tif" || extension === "tiff") {
-    return {
-      label: "TIFF",
-      matches: (data) =>
-        startsWithBytes(data, [0x49, 0x49, 0x2a, 0x00]) ||
-        startsWithBytes(data, [0x4d, 0x4d, 0x00, 0x2a])
-    };
-  }
-
-  if (extension === "webp") {
-    return {
-      label: "WEBP",
-      matches: (data) => startsWithAscii(data, "RIFF") && startsWithAscii(data.subarray(8), "WEBP")
-    };
-  }
-
-  return undefined;
+function assertImageAnchorMarker(marker: WorkbookImageAnchorMarker, label: string): void {
+  assertNonNegativeInteger(marker.column, `${label} column`);
+  assertNonNegativeInteger(marker.row, `${label} row`);
+  assertNonNegativeInteger(marker.columnOffset ?? 0, `${label} column offset`);
+  assertNonNegativeInteger(marker.rowOffset ?? 0, `${label} row offset`);
 }
 
-function startsWithAscii(data: Uint8Array, value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    if (data[index] !== value.charCodeAt(index)) {
-      return false;
-    }
+function assertNonNegativeInteger(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new WorkbookError(`Image anchor ${label} must be a non-negative integer`);
   }
-
-  return true;
 }
 
-function startsWithBytes(data: Uint8Array, bytes: number[]): boolean {
-  if (data.byteLength < bytes.length) {
-    return false;
+function assertPositiveEmu(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new WorkbookError(`${label} must be a positive EMU integer`);
   }
-
-  return bytes.every((byte, index) => data[index] === byte);
 }
 
 function validateSheetName(name: string): void {

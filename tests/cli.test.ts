@@ -184,6 +184,38 @@ test("CLI render-template accepts image files in JSON patches", async () => {
   }
 });
 
+test("CLI inserts image files", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
+
+  try {
+    const inputPath = resolve(directory, "input.xlsx");
+    const outputPath = resolve(directory, "output.xlsx");
+    const imagePath = resolve(directory, "logo.png");
+    await writeFile(inputPath, await createMinimalWorkbook());
+    await writeFile(imagePath, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 6]));
+
+    const result = runCli([
+      "insert-image",
+      inputPath,
+      outputPath,
+      "Sheet1",
+      imagePath,
+      '{"anchor":{"kind":"oneCell","from":{"column":1,"row":1},"ext":{"cx":100,"cy":200}}}'
+    ]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /xl\/media\/image1\.png/);
+
+    const workbook = await openWorkbook(new Uint8Array(await readFile(outputPath)));
+    assert.deepEqual(
+      (await workbook.images()).map((candidate) => candidate.imagePartName),
+      ["xl/media/image1.png"]
+    );
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync(
     process.execPath,

@@ -93,6 +93,16 @@ Future options:
 
 ## Open XML SDK
 
-Open XML SDK validation can catch schema-level issues. It requires the .NET SDK and a validator harness that we have not scaffolded yet.
+Open XML SDK validation can catch schema-level issues. The compatibility runner now looks for `tools/openxml-validator/OpenXmlValidator.csproj`; when both that project and the .NET SDK are available, set `IRONSHEET_RUN_OPENXML_SDK=1` to run it against a workbook.
 
-This should become a future CI job once the workbook writer exists.
+Until the harness is added, the Open XML SDK check reports a manual capability state instead of blocking local CI.
+
+## Release Preflight
+
+Run the package release preflight before publishing:
+
+```bash
+npm run release:check
+```
+
+This runs CI, workspace package dry-runs, metadata checks, validator capability reporting, and `npm publish --workspaces --dry-run --provenance --access public`.

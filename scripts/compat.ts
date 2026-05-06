@@ -221,7 +221,7 @@ function checkLibreOffice(workbookPath: string): CompatibilityCheck {
   };
 }
 
-function checkOpenXmlSdk(): CompatibilityCheck {
+function checkOpenXmlSdk(workbookPath: string): CompatibilityCheck {
   if (!commandExists("dotnet")) {
     return {
       validator: "openxml-sdk",
@@ -230,10 +230,40 @@ function checkOpenXmlSdk(): CompatibilityCheck {
     };
   }
 
+  const projectPath = resolve("tools/openxml-validator/OpenXmlValidator.csproj");
+  if (!existsSync(projectPath)) {
+    return {
+      validator: "openxml-sdk",
+      status: "manual",
+      message:
+        ".NET SDK is available, but tools/openxml-validator/OpenXmlValidator.csproj is not scaffolded yet"
+    };
+  }
+
+  if (process.env.IRONSHEET_RUN_OPENXML_SDK !== "1") {
+    return {
+      validator: "openxml-sdk",
+      status: "manual",
+      message:
+        "Open XML SDK validator harness is available. Set IRONSHEET_RUN_OPENXML_SDK=1 to run it."
+    };
+  }
+
+  const result = run("dotnet", ["run", "--project", projectPath, "--", workbookPath]);
+  if (result.status !== 0) {
+    return {
+      validator: "openxml-sdk",
+      status: "fail",
+      message: "Open XML SDK validation failed",
+      details: { stderr: result.stderr, stdout: result.stdout }
+    };
+  }
+
   return {
     validator: "openxml-sdk",
-    status: "manual",
-    message: ".NET SDK is available, but the Open XML SDK validator project is not scaffolded yet"
+    status: "pass",
+    message: "Open XML SDK validation passed",
+    details: { stdout: result.stdout }
   };
 }
 
@@ -273,7 +303,7 @@ export async function runCompatibilityChecks(workbookPath: string): Promise<Comp
     await checkIronsheetValidation(absolutePath),
     checkNumbers(absolutePath),
     checkLibreOffice(absolutePath),
-    checkOpenXmlSdk(),
+    checkOpenXmlSdk(absolutePath),
     checkExcel()
   ];
 

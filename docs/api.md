@@ -102,6 +102,7 @@ Stable mutation APIs:
 - `workbook.renameTable(tableName, nextName)`
 - `workbook.renameTableColumn(tableName, columnName, nextName)`
 - `workbook.replaceImage(imagePartName, data)`
+- `workbook.insertImage(sheetName, data, options?)`
 - `workbook.setDefinedName(name, text, options?)`
 - `workbook.deleteDefinedName(name, options?)`
 
@@ -117,6 +118,8 @@ Advanced preservation APIs:
 - `workbook.styleCell(sheetName, address, style)`
 
 These advanced APIs are intentionally narrow. They should preserve unknown XML, update only the targeted structure, and emit diagnostics when adjacent workbook features may require review.
+
+`workbook.insertImage` creates the media part, worksheet drawing part when needed, drawing relationships, content types, and picture anchor XML. Omit `options.anchor` for a default A1 one-cell anchor, or pass a one-cell/two-cell anchor with zero-based drawing coordinates and EMU offsets.
 
 ## Cell Values
 
@@ -162,6 +165,7 @@ npm run cli -- patch input.xlsx output.xlsx Sheet1 B2 "Hello"
 npm run cli -- patch-named-range input.xlsx output.xlsx RevenueRange '[["North",42000]]'
 npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["North",42000]]'
 npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
+npm run cli -- insert-image input.xlsx output.xlsx Sheet1 logo.png
 ```
 
 If validation fails, the command exits nonzero and does not write the output file.
@@ -172,7 +176,7 @@ Ironsheet should fail clearly instead of silently damaging workbooks:
 
 - Table expansion refuses to grow through occupied worksheet rows.
 - Table column append refuses to overwrite occupied cells or adjacent table ranges.
-- Existing image replacement validates bytes against the current part extension.
+- Image replacement and insertion validate bytes against the target part extension.
 - Invalid worksheet dimensions and cell refs are reported as validation issues instead of throwing.
 - XLSM macro parts are preserved byte-for-byte unless explicitly edited by a future macro API.
 
@@ -210,5 +214,13 @@ Run the strict corpus gate before release:
 ```bash
 npm run compat:corpus:strict
 ```
+
+Run release preflight before publishing packages:
+
+```bash
+npm run release:check
+```
+
+Use `npm run release:check:strict` when package versions have been moved off `0.0.0` and the release should fail on placeholder metadata.
 
 Real workbook fixtures are the next release gate. Add cleared XLSX/XLSM templates under `fixtures/corpus/workbooks/`, mark them active in `fixtures/corpus/manifest.json`, and require them to pass `ironsheet-validation` plus any available app validators.

@@ -34,11 +34,31 @@ export {
   type FormulaStructuredReference
 } from "./formula.ts";
 export {
+  appendDrawingAnchorXml,
+  assertImageBytesMatchExtension,
+  assertImageBytesMatchPartName,
+  createDrawingXml,
+  createPictureAnchorXml,
+  drawingContentType,
   drawingRelationship,
+  imageContentTypeForExtension,
+  imageExtensionForBytes,
   imageRelationship,
-  type WorkbookImage
+  nextDrawingPictureId,
+  normalizeImageExtension,
+  type WorkbookImage,
+  type WorkbookImageAnchor,
+  type WorkbookImageAnchorMarker,
+  type WorkbookImageExtension,
+  type WorkbookImageExtent,
+  type WorkbookInsertImageOptions
 } from "./images.ts";
-export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
+export {
+  OoxmlPackage,
+  relativeRelationshipTarget,
+  type PackageInspectResult,
+  type Relationship
+} from "./opc.ts";
 export {
   listWorkbookPivotCacheSources,
   retargetPivotCacheSourceXml,
@@ -119,6 +139,7 @@ export {
   deleteWorksheetConditionalFormat,
   deleteWorksheetDataValidation,
   deleteWorksheetHyperlink,
+  ensureWorksheetDrawing,
   listWorksheetAutoFilters,
   listWorksheetConditionalFormats,
   listWorksheetDataValidations,
@@ -134,6 +155,7 @@ export {
   type DeleteWorksheetConditionalFormatResult,
   type DeleteWorksheetDataValidationResult,
   type DeleteWorksheetHyperlinkResult,
+  type EnsureWorksheetDrawingResult,
   type MergeWorksheetCellsResult,
   type SetWorksheetAutoFilterResult,
   type SetWorksheetConditionalFormatResult,

@@ -208,6 +208,83 @@ test("image replacement rejects bytes that do not match the existing part type",
   );
 });
 
+test("inserts a new image into a sheet without an existing drawing", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+  const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+
+  const image = await workbook.insertImage("Sheet1", imageData, {
+    name: "Logo",
+    anchor: {
+      kind: "oneCell",
+      from: { column: 2, row: 3, columnOffset: 10, rowOffset: 20 },
+      ext: { cx: 1000, cy: 2000 }
+    }
+  });
+
+  assert.deepEqual(image, {
+    sheetName: "Sheet1",
+    sheetPartName: "xl/worksheets/sheet1.xml",
+    drawingPartName: "xl/drawings/drawing1.xml",
+    drawingRelationshipId: "rId1",
+    imageRelationshipId: "rId1",
+    target: "../media/image1.png",
+    imagePartName: "xl/media/image1.png"
+  });
+  assert.deepEqual(Array.from(await workbook.pkg.readPart("xl/media/image1.png")), [...imageData]);
+  assert.match(await workbook.pkg.readText("xl/worksheets/sheet1.xml"), /<drawing r:id="rId1"\/>/);
+  assert.match(await workbook.pkg.readText("xl/drawings/drawing1.xml"), /<xdr:oneCellAnchor>/);
+  assert.match(await workbook.pkg.readText("xl/drawings/drawing1.xml"), /<xdr:col>2<\/xdr:col>/);
+  assert.match(
+    await workbook.pkg.readText("xl/drawings/drawing1.xml"),
+    /<xdr:ext cx="1000" cy="2000"\/>/
+  );
+  assert.match(
+    await workbook.pkg.readText("[Content_Types].xml"),
+    /Extension="png" ContentType="image\/png"/
+  );
+  assert.match(await workbook.pkg.readText("[Content_Types].xml"), /drawing\+xml/);
+  assert.deepEqual(await workbook.images(), [image]);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
+test("inserts a new image into an existing drawing without disturbing chart relationships", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeDrawing: true }));
+  const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 2]);
+
+  const image = await workbook.insertImage("Sheet1", imageData, {
+    anchor: {
+      kind: "twoCell",
+      from: { column: 0, row: 0 },
+      to: { column: 1, row: 4 },
+      editAs: "oneCell"
+    }
+  });
+
+  assert.equal(image.drawingPartName, "xl/drawings/drawing1.xml");
+  assert.equal(image.imagePartName, "xl/media/image2.png");
+  assert.equal(image.target, "../media/image2.png");
+  assert.deepEqual(
+    (await workbook.images()).map((candidate) => candidate.imagePartName),
+    ["xl/media/image1.png", "xl/media/image2.png"]
+  );
+  const drawingXml = await workbook.pkg.readText("xl/drawings/drawing1.xml");
+  assert.match(drawingXml, /<xdr:twoCellAnchor editAs="oneCell">/);
+  assert.match(drawingXml, /r:id="rIdChart1"/);
+  assert.match(await workbook.pkg.readText("xl/drawings/_rels/drawing1.xml.rels"), /image2\.png/);
+  assert.deepEqual((await workbook.validate()).summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
+test("image insertion rejects bytes that do not match the requested extension", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await assert.rejects(
+    workbook.insertImage("Sheet1", new Uint8Array([0xff, 0xd8, 0xff, 0x00]), {
+      extension: "png"
+    }),
+    /expects PNG bytes/
+  );
+});
+
 test("renders template patches across cells ranges tables and images", async () => {
   const workbook = await openWorkbook(
     await createMinimalWorkbook({ includeDrawing: true, includeTable: true })

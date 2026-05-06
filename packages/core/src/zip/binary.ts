@@ -12,6 +12,10 @@ export function readUInt32LE(data: Uint8Array, offset: number): number {
   );
 }
 
+export function readUInt64LE(data: Uint8Array, offset: number): bigint {
+  return BigInt(readUInt32LE(data, offset)) | (BigInt(readUInt32LE(data, offset + 4)) << 32n);
+}
+
 export function writeUInt16LE(target: Uint8Array, offset: number, value: number): void {
   target[offset] = value & 0xff;
   target[offset + 1] = (value >>> 8) & 0xff;
