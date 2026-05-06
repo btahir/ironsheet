@@ -33,6 +33,7 @@ This repository currently implements the first vertical slice:
 - Node adapter using `node:zlib`.
 - CLI inspection, read, patch, range patch, table replacement/rename, and package diff commands.
 - Compatibility harness with ZIP integrity and optional app-level checks.
+- Runtime guard that automatically scans every core source file for Node-only imports and runtime dependencies.
 
 ## Commands
 
