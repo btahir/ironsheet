@@ -24,6 +24,10 @@ const drawingRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
 const imageRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+const pivotCacheDefinitionRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition";
+const pivotTableRelationship =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable";
 const tableRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
 const worksheetRelationship =
@@ -73,6 +77,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateStyleReferences(pkg, issues, parts);
   await validateSharedStringReferences(pkg, issues, parts);
   await validateTableParts(pkg, issues, parts);
+  await validatePivotParts(pkg, issues, parts);
   await validateCalcChain(pkg, issues, parts);
 
   return {
@@ -594,6 +599,19 @@ async function validateWorksheetRelationshipIds(
         expectedType: tableRelationship,
         missingCode: "TABLE_PART_RELATIONSHIP_MISSING",
         message: "Worksheet tablePart element points to a missing table relationship"
+      });
+    }
+
+    for (const pivotTable of findStartTags(xml, "pivotTableDefinition")) {
+      validateRelationshipId({
+        issues,
+        relationships,
+        sourcePart: part,
+        relationshipId: pivotTable.attributes["r:id"],
+        expectedType: pivotTableRelationship,
+        missingCode: "PIVOT_TABLE_RELATIONSHIP_MISSING",
+        message:
+          "Worksheet pivotTableDefinition element points to a missing pivot table relationship"
       });
     }
   }
@@ -1422,6 +1440,199 @@ async function validateTableParts(
       }
     }
   }
+}
+
+async function validatePivotParts(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  if (!pkg.hasPart("xl/workbook.xml")) {
+    return;
+  }
+
+  const workbookXml = await pkg.readText("xl/workbook.xml");
+  const sheetNames = workbookSheetNames(workbookXml);
+  const cacheIds = await validateWorkbookPivotCaches(pkg, issues, workbookXml);
+
+  for (const part of parts.filter((name) => /^xl\/pivotTables\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    const pivotTable = findFirstStartTag(xml, "pivotTableDefinition");
+    if (pivotTable === undefined) {
+      issues.push({
+        severity: "error",
+        code: "PIVOT_TABLE_ROOT_MISSING",
+        message: "Pivot table part is missing pivotTableDefinition root",
+        part
+      });
+      continue;
+    }
+
+    const cacheId = pivotTable.attributes.cacheId;
+    if (cacheId === undefined) {
+      issues.push({
+        severity: "error",
+        code: "PIVOT_TABLE_CACHE_ID_MISSING",
+        message: "Pivot table definition is missing cacheId",
+        part
+      });
+      continue;
+    }
+
+    if (!/^[0-9]+$/.test(cacheId)) {
+      issues.push({
+        severity: "error",
+        code: "PIVOT_TABLE_CACHE_ID_INVALID",
+        message: `Pivot table definition has invalid cacheId ${cacheId}`,
+        part,
+        target: cacheId
+      });
+      continue;
+    }
+
+    if (cacheIds.size > 0 && !cacheIds.has(cacheId)) {
+      issues.push({
+        severity: "warning",
+        code: "PIVOT_TABLE_CACHE_ID_UNKNOWN",
+        message: `Pivot table references missing workbook pivot cache ${cacheId}`,
+        part,
+        target: cacheId
+      });
+    }
+  }
+
+  for (const part of parts.filter((name) =>
+    /^xl\/pivotCache\/pivotCacheDefinition\d+\.xml$/.test(name)
+  )) {
+    await validatePivotCacheDefinition(pkg, issues, part, sheetNames);
+  }
+}
+
+async function validateWorkbookPivotCaches(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  workbookXml: string
+): Promise<Set<string>> {
+  const cacheIds = new Set<string>();
+  const relationshipsById = new Map(
+    (await pkg.relationshipsFor("xl/workbook.xml")).map((relationship) => [
+      relationship.id,
+      relationship
+    ])
+  );
+
+  for (const cache of findStartTags(workbookXml, "pivotCache")) {
+    const cacheId = cache.attributes.cacheId;
+    const relationshipId = cache.attributes["r:id"];
+
+    if (cacheId === undefined || relationshipId === undefined) {
+      issues.push({
+        severity: "error",
+        code: "WORKBOOK_PIVOT_CACHE_ENTRY_INVALID",
+        message: "Workbook pivotCache entry is missing cacheId or r:id",
+        part: "xl/workbook.xml"
+      });
+      continue;
+    }
+
+    if (cacheIds.has(cacheId)) {
+      issues.push({
+        severity: "warning",
+        code: "WORKBOOK_PIVOT_CACHE_ID_DUPLICATE",
+        message: `Workbook contains duplicate pivot cacheId ${cacheId}`,
+        part: "xl/workbook.xml",
+        target: cacheId
+      });
+    }
+    cacheIds.add(cacheId);
+
+    const relationship = relationshipsById.get(relationshipId);
+    if (relationship?.type !== pivotCacheDefinitionRelationship) {
+      issues.push({
+        severity: "error",
+        code: "PIVOT_CACHE_RELATIONSHIP_MISSING",
+        message: `Workbook pivotCache points to a missing pivot cache relationship ${relationshipId}`,
+        part: "xl/workbook.xml",
+        target: relationshipId
+      });
+      continue;
+    }
+
+    const target = resolveRelationshipTarget("xl/workbook.xml", relationship.target);
+    if (!/^xl\/pivotCache\/pivotCacheDefinition\d+\.xml$/.test(target)) {
+      issues.push({
+        severity: "warning",
+        code: "PIVOT_CACHE_TARGET_UNUSUAL",
+        message: `Workbook pivotCache points outside the standard pivot cache folder: ${target}`,
+        part: "xl/workbook.xml",
+        target
+      });
+    }
+  }
+
+  return cacheIds;
+}
+
+async function validatePivotCacheDefinition(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  part: string,
+  sheetNames: Set<string>
+): Promise<void> {
+  const xml = await pkg.readText(part);
+  const root = findFirstStartTag(xml, "pivotCacheDefinition");
+  if (root === undefined) {
+    issues.push({
+      severity: "error",
+      code: "PIVOT_CACHE_ROOT_MISSING",
+      message: "Pivot cache definition part is missing pivotCacheDefinition root",
+      part
+    });
+    return;
+  }
+
+  const worksheetSource = findFirstStartTag(xml, "worksheetSource");
+  if (worksheetSource === undefined) {
+    issues.push({
+      severity: "warning",
+      code: "PIVOT_CACHE_WORKSHEET_SOURCE_MISSING",
+      message: "Pivot cache definition has no worksheetSource",
+      part
+    });
+    return;
+  }
+
+  const sheet = worksheetSource.attributes.sheet;
+  if (sheet === undefined) {
+    issues.push({
+      severity: "warning",
+      code: "PIVOT_CACHE_SOURCE_SHEET_UNSPECIFIED",
+      message: "Pivot cache worksheetSource is missing sheet",
+      part
+    });
+  } else if (!sheetNames.has(sheet)) {
+    issues.push({
+      severity: "warning",
+      code: "PIVOT_CACHE_SOURCE_SHEET_MISSING",
+      message: `Pivot cache worksheetSource references missing sheet ${sheet}`,
+      part,
+      target: sheet
+    });
+  }
+
+  const ref = worksheetSource.attributes.ref;
+  if (ref === undefined) {
+    return;
+  }
+
+  validateRangeAttribute({
+    issues,
+    part,
+    ref,
+    missingCode: "PIVOT_CACHE_SOURCE_REF_MISSING",
+    invalidCode: "PIVOT_CACHE_SOURCE_REF_INVALID",
+    outOfBoundsCode: "PIVOT_CACHE_SOURCE_REF_OUT_OF_BOUNDS"
+  });
 }
 
 function parseContentTypes(xml: string): {

@@ -13,6 +13,7 @@ export type MinimalWorkbookOptions = {
   includeMacro?: boolean;
   includeMerge?: boolean;
   includeOrphanRelationshipPart?: boolean;
+  includePivotTable?: boolean;
   includeSecondTable?: boolean;
   includeTable?: boolean;
   includeTableTotals?: boolean;
@@ -45,6 +46,8 @@ export async function createMinimalWorkbook(
   ${options.includeSecondTable === true ? '<Override PartName="/xl/tables/table2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>' : ""}
   ${options.includeDrawing === true ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ""}
   ${options.includeDrawing === true ? '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>' : ""}
+  ${options.includePivotTable === true ? '<Override PartName="/xl/pivotTables/pivotTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/>' : ""}
+  ${options.includePivotTable === true ? '<Override PartName="/xl/pivotCache/pivotCacheDefinition1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>' : ""}
   ${options.includeMacro === true ? '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>' : ""}
   ${options.useSharedStrings === true ? '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>' : ""}
@@ -66,6 +69,7 @@ export async function createMinimalWorkbook(
     <sheet name="Sheet1" sheetId="1" r:id="rId1"/>
     ${options.includeHiddenSheet === true ? '<sheet name="HiddenData" sheetId="2" state="hidden" r:id="rIdHidden"/>' : ""}
   </sheets>
+  ${options.includePivotTable === true ? '<pivotCaches><pivotCache cacheId="1" r:id="rIdPivotCache1"/></pivotCaches>' : ""}
   ${options.includeDefinedName === true ? '<definedNames><definedName name="RevenueRange" comment="Template output range">Sheet1!$A$1:$B$2</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0" hidden="1">Sheet1!$1:$1</definedName></definedNames>' : ""}
 </workbook>`
     ),
@@ -79,6 +83,7 @@ export async function createMinimalWorkbook(
   ${options.includeMacro === true ? '<Relationship Id="rIdVba" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/>' : ""}
   ${options.useSharedStrings === true ? '<Relationship Id="rIdSharedStrings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' : ""}
   ${options.includeCalcChain === true ? '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/>' : ""}
+  ${options.includePivotTable === true ? '<Relationship Id="rIdPivotCache1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCache/pivotCacheDefinition1.xml"/>' : ""}
 </Relationships>`
     ),
     ...(sheetRelationships.length > 0
@@ -122,6 +127,7 @@ export async function createMinimalWorkbook(
   ${options.includeMerge === true ? '<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>' : ""}
   ${options.includeHyperlink === true ? '<hyperlinks><hyperlink ref="A1" r:id="rIdHyperlink1"/></hyperlinks>' : ""}
   ${options.includeDrawing === true ? '<drawing r:id="rIdDrawing1"/>' : ""}
+  ${options.includePivotTable === true ? '<pivotTableDefinition r:id="rIdPivotTable1"/>' : ""}
   ${options.includeTable === true ? `<tableParts count="${options.includeSecondTable === true ? "2" : "1"}"><tablePart r:id="rIdTable1"/>${options.includeSecondTable === true ? '<tablePart r:id="rIdTable2"/>' : ""}</tableParts>` : ""}
 </worksheet>`
     )
@@ -218,6 +224,23 @@ export async function createMinimalWorkbook(
     );
   }
 
+  if (options.includePivotTable === true) {
+    entries.push(
+      textPart(
+        "xl/pivotTables/pivotTable1.xml",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" name="PivotTable1" cacheId="1"/>`
+      ),
+      textPart(
+        "xl/pivotCache/pivotCacheDefinition1.xml",
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <cacheSource type="worksheet"><worksheetSource ref="A1:B2" sheet="Sheet1"/></cacheSource>
+</pivotCacheDefinition>`
+      )
+    );
+  }
+
   if (options.includeDrawing === true) {
     entries.push(
       textPart(
@@ -271,6 +294,9 @@ function sheetRelationshipsXml(options: MinimalWorkbookOptions): string {
       : undefined,
     options.includeDrawing === true
       ? '<Relationship Id="rIdDrawing1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>'
+      : undefined,
+    options.includePivotTable === true
+      ? '<Relationship Id="rIdPivotTable1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/>'
       : undefined
   ]
     .filter((relationship): relationship is string => relationship !== undefined)

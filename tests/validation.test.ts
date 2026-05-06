@@ -306,6 +306,60 @@ test("validation reports drawing chart and image relationship id gaps", async ()
   );
 });
 
+test("validation accepts coherent pivot table parts", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includePivotTable: true }));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.deepEqual(report.summary, { errors: 0, warnings: 0, infos: 0 });
+});
+
+test("validation reports pivot table and cache source issues", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includePivotTable: true }));
+  const pivotTableXml = await pkg.readText("xl/pivotTables/pivotTable1.xml");
+  pkg.setText(
+    "xl/pivotTables/pivotTable1.xml",
+    pivotTableXml.replace('cacheId="1"', 'cacheId="99"')
+  );
+  const pivotCacheXml = await pkg.readText("xl/pivotCache/pivotCacheDefinition1.xml");
+  pkg.setText(
+    "xl/pivotCache/pivotCacheDefinition1.xml",
+    pivotCacheXml.replace('ref="A1:B2" sheet="Sheet1"', 'ref="XFE1" sheet="Missing"')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.summary.warnings, 2);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "PIVOT_TABLE_CACHE_ID_UNKNOWN"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "PIVOT_CACHE_SOURCE_SHEET_MISSING"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "PIVOT_CACHE_SOURCE_REF_OUT_OF_BOUNDS"),
+    true
+  );
+});
+
+test("validation reports worksheet pivot relationship gaps", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook({ includePivotTable: true }));
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace('r:id="rIdPivotTable1"', 'r:id="rIdMissingPivot"')
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "PIVOT_TABLE_RELATIONSHIP_MISSING");
+  assert.equal(report.issues[0]?.target, "rIdMissingPivot");
+});
+
 test("validation reports chart formulas with broken references", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeDrawing: true }));
   pkg.setText(
