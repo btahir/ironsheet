@@ -20,6 +20,11 @@ export {
 export { OoxmlPackage, type PackageInspectResult, type Relationship } from "./opc.ts";
 export { parseSharedStrings } from "./shared-strings.ts";
 export {
+  parseWorkbookStyles,
+  type WorkbookCellFormat,
+  type WorkbookStyles
+} from "./styles.ts";
+export {
   findWorkbookTable,
   listWorkbookTables,
   replaceTableRows,

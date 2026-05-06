@@ -12,6 +12,7 @@ import {
 } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
+import { parseWorkbookStyles, type WorkbookStyles } from "./styles.ts";
 import { listWorkbookTables, replaceTableRows, type WorkbookTable } from "./table.ts";
 import { validateWorkbookPackage, type ValidationReport } from "./validation.ts";
 import {
@@ -272,6 +273,25 @@ export class Workbook {
 
   async definedNames(): Promise<WorkbookDefinedName[]> {
     return parseDefinedNames(await this.pkg.readText(this.workbookPart));
+  }
+
+  async styles(): Promise<WorkbookStyles> {
+    if (!this.pkg.hasPart("xl/styles.xml")) {
+      return {
+        cellStyleXfs: [],
+        cellXfs: [],
+        counts: {
+          borders: 0,
+          cellStyleXfs: 0,
+          cellXfs: 0,
+          fills: 0,
+          fonts: 0,
+          numFmts: 0
+        }
+      };
+    }
+
+    return parseWorkbookStyles(await this.pkg.readText("xl/styles.xml"));
   }
 
   async formulas(): Promise<WorkbookFormula[]> {

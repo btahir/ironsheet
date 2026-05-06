@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { diffZipPackages } from "../../core/src/index.ts";
 import {
   appendWorkbookRows,
+  inspectWorkbookStyles,
   listWorkbookFormulas,
   listWorkbookTables,
   patchWorkbookCell,
@@ -25,6 +26,7 @@ type Command =
   | "read-cell"
   | "read-range"
   | "replace-table"
+  | "styles"
   | "tables"
   | "validate"
   | "diff";
@@ -34,6 +36,7 @@ function usage(): never {
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- tables <workbook.xlsx>
   npm run cli -- formulas <workbook.xlsx>
+  npm run cli -- styles <workbook.xlsx>
   npm run cli -- validate <workbook.xlsx>
   npm run cli -- read-cell <workbook.xlsx> <sheet> <cell>
   npm run cli -- read-range <workbook.xlsx> <sheet> <range>
@@ -63,6 +66,10 @@ async function tables(path: string): Promise<void> {
 
 async function formulas(path: string): Promise<void> {
   console.log(JSON.stringify(await listWorkbookFormulas(path), null, 2));
+}
+
+async function styles(path: string): Promise<void> {
+  console.log(JSON.stringify(await inspectWorkbookStyles(path), null, 2));
 }
 
 async function validate(path: string): Promise<void> {
@@ -197,6 +204,12 @@ try {
       usage();
     }
     await formulas(path);
+  } else if (command === "styles") {
+    const [path] = args;
+    if (path === undefined) {
+      usage();
+    }
+    await styles(path);
   } else if (command === "validate") {
     const [path] = args;
     if (path === undefined) {

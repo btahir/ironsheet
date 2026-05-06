@@ -219,6 +219,36 @@ test("reads workbook defined names", async () => {
   ]);
 });
 
+test("reads workbook style metadata", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  assert.deepEqual(await workbook.styles(), {
+    cellStyleXfs: [{ numFmtId: "0", fontId: "0", fillId: "0", borderId: "0" }],
+    cellXfs: [
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0" },
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0", applyFont: "1" },
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0", applyFill: "1" },
+      { numFmtId: "0", fontId: "0", fillId: "0", borderId: "0", xfId: "0", applyBorder: "1" },
+      {
+        numFmtId: "0",
+        fontId: "0",
+        fillId: "0",
+        borderId: "0",
+        xfId: "0",
+        applyNumberFormat: "1"
+      }
+    ],
+    counts: {
+      borders: 1,
+      cellStyleXfs: 1,
+      cellXfs: 5,
+      fills: 1,
+      fonts: 1,
+      numFmts: 0
+    }
+  });
+});
+
 test("reads existing cell values and style ids", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook());
 

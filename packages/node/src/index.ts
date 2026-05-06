@@ -112,6 +112,13 @@ export async function listWorkbookTables(
   return workbook.tables();
 }
 
+export async function inspectWorkbookStyles(
+  inputPath: string
+): Promise<Awaited<ReturnType<Workbook["styles"]>>> {
+  const workbook = await readWorkbook(inputPath);
+  return workbook.styles();
+}
+
 export async function validateWorkbookFile(
   inputPath: string
 ): Promise<Awaited<ReturnType<Workbook["validate"]>>> {

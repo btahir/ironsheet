@@ -214,6 +214,24 @@ test("validation reports style count mismatches", async () => {
   assert.equal(report.issues[0]?.code, "STYLE_CELLXFS_COUNT_MISMATCH");
 });
 
+test("validation reports style counts above Excel limits", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const stylesXml = await pkg.readText("xl/styles.xml");
+  pkg.setText("xl/styles.xml", stylesXml.replace('<cellXfs count="5">', '<cellXfs count="65491">'));
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 2);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "STYLE_CELLXFS_COUNT_MISMATCH"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "STYLE_CELLXFS_COUNT_EXCEEDS_EXCEL_LIMIT"),
+    true
+  );
+});
+
 test("validation reports missing shared string indexes", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ useSharedStrings: true }));
   const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");

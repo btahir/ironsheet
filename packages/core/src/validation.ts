@@ -32,6 +32,7 @@ const tableRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
 const worksheetRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+const excelCellFormatLimit = 65_490;
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -1227,6 +1228,20 @@ async function validateStyleReferences(
       code: "STYLE_CELLXFS_COUNT_MISMATCH",
       message: `Styles declare ${declaredCount} cellXfs but contain ${actualCellXfs}`,
       part: "xl/styles.xml"
+    });
+  }
+
+  const largestCellXfsCount = Math.max(
+    actualCellXfs,
+    Number.isInteger(declaredCount) ? declaredCount : 0
+  );
+  if (largestCellXfsCount > excelCellFormatLimit) {
+    issues.push({
+      severity: "warning",
+      code: "STYLE_CELLXFS_COUNT_EXCEEDS_EXCEL_LIMIT",
+      message: `Styles contain ${largestCellXfsCount} cell format(s), which exceeds Excel's practical cell format limit`,
+      part: "xl/styles.xml",
+      target: String(largestCellXfsCount)
     });
   }
 
