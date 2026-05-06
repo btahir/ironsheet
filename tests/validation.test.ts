@@ -339,6 +339,52 @@ test("validation reports formulas that reference missing tables", async () => {
   assert.equal(report.issues[0]?.target, "MissingTable");
 });
 
+test("validation reports shared formula followers without a master", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c></row>',
+      '<row r="1"><c r="A1"><v>1</v></c><c r="B1"><f t="shared" si="9"/><v>2</v></c></row>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 1);
+  assert.equal(report.issues[0]?.code, "SHARED_FORMULA_MASTER_MISSING");
+  assert.equal(report.issues[0]?.target, "B1");
+});
+
+test("validation reports invalid shared formula group metadata", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c></row>',
+      '<row r="1"><c r="A1"><v>1</v></c><c r="B1"><f t="shared" si="abc">A1*2</f><v>2</v></c><c r="C1"><f t="shared" si="0" ref="NOPE">A1*3</f><v>3</v></c><c r="D1"><f t="shared" si="0">A1*4</f><v>4</v></c></row>'
+    )
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.errors, 3);
+  assert.equal(
+    report.issues.some((issue) => issue.code === "SHARED_FORMULA_INDEX_INVALID"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "SHARED_FORMULA_REF_INVALID"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "SHARED_FORMULA_MASTER_DUPLICATE"),
+    true
+  );
+});
+
 test("validation reports defined names with invalid local sheet ids", async () => {
   const pkg = await openPackage(await createMinimalWorkbook({ includeDefinedName: true }));
   const workbookXml = await pkg.readText("xl/workbook.xml");

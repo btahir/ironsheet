@@ -92,8 +92,11 @@ export type WorkbookFormula = {
   sheetPartName: string;
   address: string;
   formula: string;
+  formulaRef?: string;
+  formulaType?: string;
   references: FormulaReference[];
   sheetReferences: FormulaSheetReference[];
+  sharedIndex?: string;
   structuredReferences: FormulaStructuredReference[];
 };
 
@@ -287,7 +290,7 @@ export class Workbook {
         const formula = formulaTag.selfClosing
           ? ""
           : decodeXml(cellXml.slice(formulaTag.end, findElementCloseStart(cellXml, formulaTag)));
-        formulas.push({
+        const workbookFormula: WorkbookFormula = {
           sheetName: sheet.name,
           sheetPartName: sheet.partName,
           address,
@@ -295,7 +298,19 @@ export class Workbook {
           references: parseFormulaReferences(formula),
           sheetReferences: parseFormulaSheetReferences(formula),
           structuredReferences: parseFormulaStructuredReferences(formula)
-        });
+        };
+
+        if (formulaTag.attributes.t !== undefined) {
+          workbookFormula.formulaType = formulaTag.attributes.t;
+        }
+        if (formulaTag.attributes.si !== undefined) {
+          workbookFormula.sharedIndex = formulaTag.attributes.si;
+        }
+        if (formulaTag.attributes.ref !== undefined) {
+          workbookFormula.formulaRef = formulaTag.attributes.ref;
+        }
+
+        formulas.push(workbookFormula);
       }
     }
 

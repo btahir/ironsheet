@@ -128,6 +128,46 @@ test("reads workbook formula inventory with parsed dependencies", async () => {
   ]);
 });
 
+test("reads shared formula metadata from workbook formula inventory", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  const worksheetXml = await pkg.readText("xl/worksheets/sheet1.xml");
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    worksheetXml.replace(
+      '<row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Original</t></is></c></row>',
+      '<row r="1"><c r="A1"><v>1</v></c><c r="B1"><f t="shared" si="0" ref="B1:B2">A1*2</f><v>2</v></c></row><row r="2"><c r="A2"><v>2</v></c><c r="B2"><f t="shared" si="0"/><v>4</v></c></row>'
+    )
+  );
+  const workbook = await Workbook.fromPackage(pkg);
+  const formulas = await workbook.formulas();
+
+  assert.deepEqual(
+    formulas.map((formula) => ({
+      address: formula.address,
+      formula: formula.formula,
+      formulaRef: formula.formulaRef,
+      formulaType: formula.formulaType,
+      sharedIndex: formula.sharedIndex
+    })),
+    [
+      {
+        address: "B1",
+        formula: "A1*2",
+        formulaRef: "B1:B2",
+        formulaType: "shared",
+        sharedIndex: "0"
+      },
+      {
+        address: "B2",
+        formula: "",
+        formulaRef: undefined,
+        formulaType: "shared",
+        sharedIndex: "0"
+      }
+    ]
+  );
+});
+
 test("reads workbook defined names", async () => {
   const workbook = await openWorkbook(await createMinimalWorkbook({ includeDefinedName: true }));
 

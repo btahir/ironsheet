@@ -7,7 +7,14 @@ import {
   parseFormulaStructuredReferences
 } from "./formula.ts";
 import { type OoxmlPackage, type Relationship, resolveRelationshipTarget } from "./opc.ts";
-import { findElementCloseStart, findElementEnd, findFirstStartTag, findStartTags } from "./xml.ts";
+import {
+  decodeXml,
+  findElementCloseStart,
+  findElementEnd,
+  findFirstStartTag,
+  findStartTags,
+  type XmlTag
+} from "./xml.ts";
 
 const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
@@ -37,6 +44,12 @@ export type ValidationReport = {
     warnings: number;
     infos: number;
   };
+};
+
+type WorksheetFormulaEntry = {
+  address?: string;
+  formulaTag: XmlTag;
+  formulaText: string;
 };
 
 export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<ValidationReport> {
@@ -580,12 +593,10 @@ async function validateWorksheetFormulas(
   const tableNames = await workbookTableNames(pkg, parts);
   for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
     const xml = await pkg.readText(part);
-    for (const formula of findStartTags(xml, "f")) {
-      if (formula.selfClosing) {
-        continue;
-      }
-
-      const formulaText = xml.slice(formula.end, findElementCloseStart(xml, formula));
+    const formulas = worksheetFormulaEntries(xml);
+    validateSharedFormulaGroups(issues, part, formulas);
+    for (const formula of formulas) {
+      const formulaText = formula.formulaText;
       for (const reference of parseFormulaSheetReferences(formulaText)) {
         if (!sheetNames.has(reference.sheetName)) {
           issues.push({
@@ -620,6 +631,133 @@ async function validateWorksheetFormulas(
             target: reference.tableName
           });
         }
+      }
+    }
+  }
+}
+
+function worksheetFormulaEntries(xml: string): WorksheetFormulaEntry[] {
+  const formulas: WorksheetFormulaEntry[] = [];
+
+  for (const cell of findStartTags(xml, "c")) {
+    if (cell.selfClosing) {
+      continue;
+    }
+
+    const cellXml = xml.slice(cell.start, findElementEnd(xml, cell));
+    const formulaTag = findFirstStartTag(cellXml, "f");
+    if (formulaTag === undefined) {
+      continue;
+    }
+
+    formulas.push({
+      ...(cell.attributes.r === undefined ? {} : { address: cell.attributes.r }),
+      formulaTag,
+      formulaText: formulaTag.selfClosing
+        ? ""
+        : decodeXml(cellXml.slice(formulaTag.end, findElementCloseStart(cellXml, formulaTag)))
+    });
+  }
+
+  return formulas;
+}
+
+function validateSharedFormulaGroups(
+  issues: ValidationIssue[],
+  part: string,
+  formulas: WorksheetFormulaEntry[]
+): void {
+  const groups = new Map<
+    string,
+    {
+      masters: WorksheetFormulaEntry[];
+      members: WorksheetFormulaEntry[];
+    }
+  >();
+
+  for (const formula of formulas) {
+    if (formula.formulaTag.attributes.t !== "shared") {
+      continue;
+    }
+
+    const sharedIndex = formula.formulaTag.attributes.si;
+    if (sharedIndex === undefined) {
+      issues.push({
+        severity: "error",
+        code: "SHARED_FORMULA_INDEX_MISSING",
+        message: "Shared formula is missing si index",
+        part,
+        ...(formula.address === undefined ? {} : { target: formula.address })
+      });
+      continue;
+    }
+
+    if (!/^[0-9]+$/.test(sharedIndex)) {
+      issues.push({
+        severity: "error",
+        code: "SHARED_FORMULA_INDEX_INVALID",
+        message: `Shared formula has invalid si index ${sharedIndex}`,
+        part,
+        target: formula.address ?? sharedIndex
+      });
+      continue;
+    }
+
+    const ref = formula.formulaTag.attributes.ref;
+    if (ref !== undefined) {
+      try {
+        const range = parseCellRange(ref);
+        if (formula.address !== undefined && !rangeContainsAddress(range, formula.address)) {
+          issues.push({
+            severity: "warning",
+            code: "SHARED_FORMULA_REF_EXCLUDES_CELL",
+            message: `Shared formula ref ${range.ref} does not include cell ${formula.address}`,
+            part,
+            target: formula.address
+          });
+        }
+      } catch (_error) {
+        issues.push({
+          severity: "error",
+          code: "SHARED_FORMULA_REF_INVALID",
+          message: `Shared formula has invalid ref ${ref}`,
+          part,
+          target: formula.address ?? ref
+        });
+      }
+    }
+
+    const group = groups.get(sharedIndex) ?? { masters: [], members: [] };
+    if (formula.formulaText.length > 0) {
+      group.masters.push(formula);
+    } else {
+      group.members.push(formula);
+    }
+    groups.set(sharedIndex, group);
+  }
+
+  for (const [sharedIndex, group] of groups) {
+    if (group.masters.length === 0) {
+      for (const member of group.members) {
+        issues.push({
+          severity: "error",
+          code: "SHARED_FORMULA_MASTER_MISSING",
+          message: `Shared formula si ${sharedIndex} has no master formula text`,
+          part,
+          target: member.address ?? sharedIndex
+        });
+      }
+    }
+
+    if (group.masters.length > 1) {
+      for (const master of group.masters.slice(1)) {
+        issues.push({
+          severity: "error",
+          code: "SHARED_FORMULA_MASTER_DUPLICATE",
+          message: `Shared formula si ${sharedIndex} has multiple master formulas`,
+          part,
+          target: master.address ?? sharedIndex
+        });
       }
     }
   }
@@ -666,6 +804,16 @@ async function workbookTableNames(pkg: OoxmlPackage, parts: string[]): Promise<S
   }
 
   return tableNames;
+}
+
+function rangeContainsAddress(range: ReturnType<typeof parseCellRange>, address: string): boolean {
+  const cell = parseCellAddress(address);
+  return (
+    cell.column >= range.start.column &&
+    cell.column <= range.end.column &&
+    cell.row >= range.start.row &&
+    cell.row <= range.end.row
+  );
 }
 
 function sourcePartFromRelationshipPart(part: string): string | undefined {
