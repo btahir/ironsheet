@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
@@ -8,6 +10,8 @@ import {
   requiredValidatorsPassed
 } from "../packages/compat/src/index.ts";
 import { runCompatibilityChecks } from "../scripts/compat.ts";
+import { intakeFixture } from "../scripts/compat-intake.ts";
+import { createMinimalWorkbook } from "./helpers/minimal-xlsx.ts";
 
 test("compatibility reports detect failing checks", () => {
   const report = createCompatibilityReport("/tmp/workbook.xlsx", [
@@ -132,4 +136,64 @@ test("compatibility checks report missing files without throwing", async () => {
   const fileCheck = report.checks.find((check) => check.validator === "file");
 
   assert.equal(fileCheck?.status, "fail");
+});
+
+test("fixture intake copies a real workbook candidate and activates the manifest entry", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-intake-"));
+
+  try {
+    const manifestPath = resolve(directory, "manifest.json");
+    const sourcePath = resolve(directory, "source.xlsx");
+    await writeFile(sourcePath, await createMinimalWorkbook());
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          fixtures: [
+            {
+              id: "real-template",
+              path: "workbooks/real-template.xlsx",
+              description: "Real workbook candidate",
+              features: ["tables"],
+              status: "pending",
+              requiredValidators: ["file"]
+            }
+          ]
+        },
+        null,
+        2
+      )}\n`
+    );
+
+    const result = await intakeFixture({
+      activate: true,
+      fixtureId: "real-template",
+      manifestPath,
+      requiredValidators: ["file", "zip", "ironsheet"],
+      sourcePath
+    });
+
+    assert.equal(result.fixture.status, "active");
+    assert.deepEqual(result.fixture.requiredValidators, ["file", "zip", "ironsheet"]);
+    assert.equal(
+      result.report.checks.some((check) => check.status === "fail"),
+      false
+    );
+    assert.deepEqual(
+      parseCompatibilityFixtureManifest(JSON.parse(await readFile(manifestPath, "utf8"))).fixtures,
+      [
+        {
+          id: "real-template",
+          path: "workbooks/real-template.xlsx",
+          description: "Real workbook candidate",
+          features: ["tables"],
+          status: "active",
+          requiredValidators: ["file", "zip", "ironsheet"]
+        }
+      ]
+    );
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
 });

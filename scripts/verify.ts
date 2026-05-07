@@ -15,7 +15,8 @@ const optionalChecks = [
   "typecheck",
   "test",
   "runtime:check",
-  "build"
+  "build",
+  "browser:smoke"
 ] as const;
 const forbiddenScriptExtensions = new Set<string>([".js", ".mjs", ".cjs"]);
 

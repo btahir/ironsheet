@@ -15,8 +15,8 @@ Intake checklist:
 - Remove private customer data, credentials, links, tracked changes, and document properties.
 - Open once in Excel and save from Excel, not only from another library.
 - Keep the workbook representative: formulas, styles, charts, pivots, macros, hidden sheets, and layout should remain intact.
-- Run `npm run compat:check -- fixtures/corpus/workbooks/<file>`.
-- Change the fixture `status` from `pending` to `active` in `fixtures/corpus/manifest.json`.
+- Run `npm run compat:intake -- <fixture-id> /path/to/cleared-workbook.xlsx --activate`.
+- Add stricter required validators when available, for example `--require=file,zip,ironsheet,openxml-sdk`.
 - Run `npm run compat:corpus`.
 - Before release, run `npm run compat:corpus:strict` so pending fixtures fail instead of being skipped.
 

@@ -35,6 +35,14 @@ npm run compat:check -- path/to/workbook.xlsx
 
 This writes a JSON report under `compat-output/`.
 
+Intake a cleared real workbook into the default corpus and activate its manifest entry:
+
+```bash
+npm run compat:intake -- styled-table-report path/to/styled-table-report.xlsx --activate
+```
+
+Use `--require=file,zip,ironsheet,openxml-sdk` when a release fixture must require additional validators. Intake copies the source workbook to the path declared in `fixtures/corpus/manifest.json`, runs compatibility checks, writes a report under `compat-output/`, and updates the manifest only after required validators pass.
+
 Build generated smoke fixtures and run the fixture corpus:
 
 ```bash
@@ -57,7 +65,7 @@ Strict mode fails if any manifest fixture is still skipped. Use it before releas
 
 The default manifest is `fixtures/corpus/manifest.json`. It contains generated active smoke fixtures plus pending fixture slots for the real-world workbook shapes we still need to cover. `npm run compat:corpus` builds the generated fixtures first, then validates the manifest.
 
-Generated fixtures are ignored under `fixtures/corpus/workbooks/generated/`. Add cleared real workbooks under `fixtures/corpus/workbooks/`, flip the matching manifest entry to `active`, and rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
+Generated fixtures are ignored under `fixtures/corpus/workbooks/generated/`. Add cleared real workbooks with `npm run compat:intake -- <fixture-id> <path> --activate`, then rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
 
 Starter templates are ignored under `templates/generated/`. They are useful for demos and quick smoke checks, but the release bar remains real Excel-authored files in the corpus.
 

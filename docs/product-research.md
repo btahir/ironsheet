@@ -62,9 +62,9 @@ Release-critical:
 
 Next-tier:
 
-- Browser compression adapter package. Initial `@ironsheet/browser` support exists; it still needs real-browser bundler smoke tests.
-- New image insertion with controlled drawing anchors and content-type updates.
-- Pivot-cache refresh diagnostics and explicit refresh flags.
+- Browser compression adapter package with browser-targeted bundler smoke coverage.
+- New image insertion with controlled drawing anchors, content-type updates, sizing helpers, and anchor metadata.
+- Pivot-cache refresh diagnostics and explicit refresh metadata.
 - Chart cache diagnostics and targeted chart-series retargeting.
 - Style budget reporting near Excel's style limits.
 - ZIP64 read/write for very large workbooks.
@@ -91,7 +91,6 @@ Non-goals for the first paid wedge:
 
 - Add real fixtures and promote them from pending to active, then require `npm run compat:corpus:strict` before release.
 - Add stronger table collision tests for tables below the edited table, totals rows, filters, and calculated columns.
-- Expand chart and pivot diagnostics beyond direct formula/source intersections into cache freshness, refresh flags, and stale cached values.
-- Expand image insertion with richer sizing helpers, anchor parsing, and fixture coverage from Excel-authored workbooks.
+- Expand chart, pivot, and image fixture coverage from Excel-authored workbooks.
 - Add ZIP64 writing and streaming package IO before claiming true very-large-workbook support.
 - Add release changelog/version automation on top of the current package metadata, provenance, and npm dry-run preflight.

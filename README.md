@@ -183,6 +183,7 @@ These are intentional product boundaries, not hidden claims:
 - [API guide](docs/api.md)
 - [Product research](docs/product-research.md)
 - [Compatibility testing](docs/testing/compatibility.md)
+- [Changelog](CHANGELOG.md)
 
 ## Development
 
@@ -200,10 +201,22 @@ Run the CI-equivalent local gate:
 npm run ci
 ```
 
+Bundle the browser package as a browser-targeted smoke check:
+
+```bash
+npm run browser:smoke
+```
+
 Build local demo/regression workbook templates:
 
 ```bash
 npm run templates:build
+```
+
+Intake and activate a cleared real workbook fixture:
+
+```bash
+npm run compat:intake -- styled-table-report ~/fixtures/styled-table-report.xlsx --activate
 ```
 
 Build publishable JS and declaration output under each package `dist/` directory:

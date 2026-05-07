@@ -4,8 +4,8 @@ This directory is for real-world XLSX/XLSM files that exercise Ironsheet's compa
 
 The manifest starts with pending fixture slots. To activate one:
 
-1. Add the workbook under `fixtures/corpus/workbooks/`.
-2. Change its `status` in `manifest.json` from `pending` to `active`.
+1. Run `npm run compat:intake -- <fixture-id> /path/to/cleared-workbook.xlsx --activate`.
+2. Add `--require=file,zip,ironsheet,openxml-sdk` or other validators when the local release environment supports them.
 3. Run `npm run compat:corpus`.
 
 Keep proprietary or customer files out of git unless they are explicitly cleared for repository use. For private workbooks, keep the manifest entry pending here and run a private manifest path locally:
