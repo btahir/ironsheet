@@ -138,6 +138,26 @@ test("validation reports worksheet dimensions that exclude cells", async () => {
   assert.equal(report.issues[0]?.target, "B2");
 });
 
+test("validation reports worksheet child elements out of OOXML order", async () => {
+  const pkg = await openPackage(await createMinimalWorkbook());
+  pkg.setText(
+    "xl/worksheets/sheet1.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:A1"/>
+  <sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Original</t></is></c></row></sheetData>
+  <dataValidations count="1"><dataValidation type="whole" sqref="A1"/></dataValidations>
+  <conditionalFormatting sqref="A1"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>0</formula></cfRule></conditionalFormatting>
+</worksheet>`
+  );
+
+  const report = await validateWorkbookPackage(pkg);
+
+  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.issues[0]?.code, "WORKSHEET_ELEMENT_ORDER_INVALID");
+  assert.equal(report.issues[0]?.target, "conditionalFormatting");
+});
+
 test("validation reports invalid worksheet dimensions and cell refs without throwing", async () => {
   const pkg = await openPackage(await createMinimalWorkbook());
   pkg.setText(
@@ -217,7 +237,7 @@ test("validation reports invalid worksheet range attributes", async () => {
   const report = await validateWorkbookPackage(pkg);
 
   assert.equal(report.summary.errors, 6);
-  assert.equal(report.summary.warnings, 1);
+  assert.equal(report.summary.warnings, 2);
   assert.equal(
     report.issues.some((issue) => issue.code === "MERGE_CELL_COUNT_MISMATCH"),
     true
@@ -244,6 +264,10 @@ test("validation reports invalid worksheet range attributes", async () => {
   );
   assert.equal(
     report.issues.some((issue) => issue.code === "HYPERLINK_REF_INVALID"),
+    true
+  );
+  assert.equal(
+    report.issues.some((issue) => issue.code === "WORKSHEET_ELEMENT_ORDER_INVALID"),
     true
   );
 });

@@ -50,6 +50,30 @@
       "requiredValidators": ["file", "zip", "ironsheet"]
     },
     {
+      "id": "generated-cross-feature-torture",
+      "path": "workbooks/generated/cross-feature-torture.xlsm",
+      "description": "Generated cross-feature torture workbook combining macros, tables, totals rows, styles, charts, images, comments, hyperlinks, pivots, hidden sheets, validations, conditional formats, and defined names.",
+      "features": [
+        "macros",
+        "tables",
+        "totals-rows",
+        "styles",
+        "charts",
+        "drawings",
+        "images",
+        "comments",
+        "hyperlinks",
+        "pivot-tables",
+        "pivot-caches",
+        "hidden-sheets",
+        "data-validation",
+        "conditional-formatting",
+        "defined-names"
+      ],
+      "status": "active",
+      "requiredValidators": ["file", "zip", "ironsheet"]
+    },
+    {
       "id": "styled-table-report",
       "path": "workbooks/styled-table-report.xlsx",
       "description": "Styled operational report with table formulas, totals rows, frozen panes, filters, and dense style reuse.",

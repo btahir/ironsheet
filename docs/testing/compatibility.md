@@ -63,7 +63,9 @@ npm run compat:corpus:strict
 
 Strict mode fails if any manifest fixture is still skipped. Use it before release after real Excel-authored fixtures have been added and activated.
 
-The default manifest is `fixtures/corpus/manifest.json`. It contains generated active smoke fixtures plus pending fixture slots for the real-world workbook shapes we still need to cover. `npm run compat:corpus` builds the generated fixtures first, then validates the manifest.
+The default manifest is `fixtures/corpus/manifest.json`. It contains generated active smoke fixtures, a generated cross-feature torture workbook, and pending fixture slots for the real-world workbook shapes we still need to cover. `npm run compat:corpus` builds the generated fixtures first, then validates the manifest.
+
+The generated torture fixture intentionally combines macros, tables, totals rows, styles, charts, images, comments, hyperlinks, pivots, hidden sheets, validations, conditional formats, and defined names. It is still generated code, not a substitute for Excel-authored files, but it keeps broad package interactions under automatic test coverage.
 
 Generated fixtures are ignored under `fixtures/corpus/workbooks/generated/`. Add cleared real workbooks with `npm run compat:intake -- <fixture-id> <path> --activate`, then rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
 

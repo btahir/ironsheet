@@ -59,6 +59,9 @@ Release-critical:
 - Table mutation guardrails that reject unsafe growth/adjacent overwrites.
 - Validation that returns structured issues for malformed workbook XML.
 - Audit diffs that classify `changed` vs `repacked`.
+- Package mutation invariant tests for common safe-write paths.
+- Generated cross-feature torture fixture in the automatic compatibility corpus.
+- Executable README/API example coverage through public package import paths.
 
 Next-tier:
 
@@ -90,7 +93,7 @@ Non-goals for the first paid wedge:
 ## Current Gaps To Close
 
 - Add real fixtures and promote them from pending to active, then require `npm run compat:corpus:strict` before release.
-- Add stronger table collision tests for tables below the edited table, totals rows, filters, and calculated columns.
+- Keep expanding table collision tests for tables below the edited table, filters, and calculated columns.
 - Expand chart, pivot, and image fixture coverage from Excel-authored workbooks.
 - Add ZIP64 writing and streaming package IO before claiming true very-large-workbook support.
 - Add release changelog/version automation on top of the current package metadata, provenance, and npm dry-run preflight.

@@ -16,6 +16,7 @@ import {
   findElementEnd,
   findFirstStartTag,
   findStartTags,
+  tokenizeXml,
   type XmlTag
 } from "./xml.ts";
 
@@ -76,6 +77,7 @@ export async function validateWorkbookPackage(pkg: OoxmlPackage): Promise<Valida
   await validateWorksheetFormulas(pkg, issues, parts);
   await validateChartFormulas(pkg, issues, parts);
   await validateWorksheetDimensions(pkg, issues, parts);
+  await validateWorksheetElementOrder(pkg, issues, parts);
   await validateWorksheetRangeReferences(pkg, issues, parts);
   await validateStyleReferences(pkg, issues, parts);
   await validateSharedStringReferences(pkg, issues, parts);
@@ -1200,6 +1202,120 @@ function cellRangeWithinExcelBounds(range: ReturnType<typeof parseCellRange>): b
     range.end.column <= excelMaxColumn &&
     range.end.row <= excelMaxRow
   );
+}
+
+const worksheetElementOrder = new Map(
+  [
+    "sheetPr",
+    "dimension",
+    "sheetViews",
+    "sheetFormatPr",
+    "cols",
+    "sheetData",
+    "sheetCalcPr",
+    "sheetProtection",
+    "protectedRanges",
+    "scenarios",
+    "autoFilter",
+    "sortState",
+    "dataConsolidate",
+    "customSheetViews",
+    "mergeCells",
+    "phoneticPr",
+    "conditionalFormatting",
+    "dataValidations",
+    "hyperlinks",
+    "printOptions",
+    "pageMargins",
+    "pageSetup",
+    "headerFooter",
+    "rowBreaks",
+    "colBreaks",
+    "customProperties",
+    "cellWatches",
+    "ignoredErrors",
+    "smartTags",
+    "drawing",
+    "legacyDrawing",
+    "legacyDrawingHF",
+    "picture",
+    "oleObjects",
+    "controls",
+    "webPublishItems",
+    "tableParts",
+    "extLst"
+  ].map((name, index) => [name, index])
+);
+
+async function validateWorksheetElementOrder(
+  pkg: OoxmlPackage,
+  issues: ValidationIssue[],
+  parts: string[]
+): Promise<void> {
+  for (const part of parts.filter((name) => /^xl\/worksheets\/.+\.xml$/.test(name))) {
+    const xml = await pkg.readText(part);
+    let lastKnownElement:
+      | {
+          localName: string;
+          rank: number;
+        }
+      | undefined;
+
+    for (const child of worksheetDirectChildren(xml)) {
+      const rank = worksheetElementOrder.get(child.localName);
+      if (rank === undefined) {
+        continue;
+      }
+
+      if (lastKnownElement !== undefined && rank < lastKnownElement.rank) {
+        issues.push({
+          severity: "warning",
+          code: "WORKSHEET_ELEMENT_ORDER_INVALID",
+          message: `Worksheet element ${child.localName} appears after ${lastKnownElement.localName}; Excel may repair worksheet child elements that are out of OOXML schema order`,
+          part,
+          target: child.localName
+        });
+        continue;
+      }
+
+      lastKnownElement = { localName: child.localName, rank };
+    }
+  }
+}
+
+function worksheetDirectChildren(xml: string): XmlTag[] {
+  const worksheet = findFirstStartTag(xml, "worksheet");
+  if (worksheet === undefined || worksheet.selfClosing) {
+    return [];
+  }
+
+  const closeStart = findElementCloseStart(xml, worksheet);
+  const children: XmlTag[] = [];
+  let depth = 0;
+
+  for (const token of tokenizeXml(xml, { start: worksheet.end })) {
+    const tokenStart = token.kind === "start" ? token.tag.start : token.start;
+    if (tokenStart >= closeStart) {
+      break;
+    }
+
+    if (token.kind === "start") {
+      if (depth === 0) {
+        children.push(token.tag);
+      }
+
+      if (!token.tag.selfClosing) {
+        depth += 1;
+      }
+      continue;
+    }
+
+    if (token.kind === "end" && depth > 0) {
+      depth -= 1;
+    }
+  }
+
+  return children;
 }
 
 async function validateWorksheetRangeReferences(

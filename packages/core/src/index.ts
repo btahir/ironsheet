@@ -15,7 +15,12 @@ export {
 } from "./comments.ts";
 export { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts";
 export type { Diagnostic, DiagnosticSeverity } from "./diagnostics.ts";
-export { diffZipPackages, type PackageDiff, type PackageEntryDiff } from "./diff.ts";
+export {
+  diffZipPackages,
+  type PackageDiff,
+  type PackageDiffStatus,
+  type PackageEntryDiff
+} from "./diff.ts";
 export { IronsheetError, PackageError, WorkbookError, WorksheetError, ZipError } from "./errors.ts";
 export {
   excelMaxColumn,

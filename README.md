@@ -147,8 +147,8 @@ Core workbook capabilities:
 - Safe-by-default CLI mutation reports with validation, diagnostics, and content-vs-repack package diffs.
 - Style inspection and deduped cell format creation.
 - Template manifest, public template preflight, and template render APIs.
-- Semantic validation for relationships, dimensions, hyperlinks, merged cells, styles, shared strings, formulas, tables, pivots, charts, calc chains, defined names, and content types.
-- Compatibility corpus with generated XLSX/XLSM/dashboard/pivot/large-sheet fixtures plus optional Numbers, LibreOffice, Open XML SDK, and Excel checks.
+- Semantic validation for relationships, worksheet element order, dimensions, hyperlinks, merged cells, styles, shared strings, formulas, tables, pivots, charts, calc chains, defined names, and content types.
+- Compatibility corpus with generated XLSX/XLSM/dashboard/pivot/large-sheet/cross-feature torture fixtures plus optional Numbers, LibreOffice, Open XML SDK, and Excel checks.
 
 Runtime split:
 
@@ -167,6 +167,8 @@ Runtime split:
 - Table expansion refuses occupied rows, and table column append refuses adjacent occupied cells or overlapping table ranges.
 - Image replacement and insertion validate bytes against the target media type.
 - Invalid worksheet dimensions and cell refs are reported as validation issues instead of crashing validation.
+- Mutation invariant tests assert common edits change only the expected OOXML package parts.
+- README/API examples are covered by executable tests through the public package import paths.
 - Safe writes validate the final workbook and suppress output when validation errors are found.
 - Core runtime code has a guard against Node-only imports and runtime dependencies.
 

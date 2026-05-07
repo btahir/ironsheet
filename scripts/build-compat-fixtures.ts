@@ -78,6 +78,31 @@ export const generatedCompatibilityFixtures: GeneratedCompatibilityFixture[] = [
       styledTableBody: true,
       tableRows: Array.from({ length: 1024 }, (_, index) => [`Row ${index + 1}`, index + 1])
     }
+  },
+  {
+    id: "generated-cross-feature-torture",
+    path: "workbooks/generated/cross-feature-torture.xlsm",
+    options: {
+      includeComment: true,
+      includeConditionalFormatting: true,
+      includeDataValidation: true,
+      includeDefinedName: true,
+      includeDrawing: true,
+      includeHiddenSheet: true,
+      includeHyperlink: true,
+      includeMacro: true,
+      includePivotTable: true,
+      includeSecondTable: true,
+      includeTable: true,
+      includeTableTotals: true,
+      styledTableBody: true,
+      tableRows: [
+        ["North", 1200],
+        ["South", 980],
+        ["Enterprise", 4300],
+        ["Expansion", 2750]
+      ]
+    }
   }
 ];
 
