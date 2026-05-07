@@ -2,6 +2,23 @@
 
 Ironsheet is a preservation-first XLSX/XLSM engine. The stable path is: open an existing workbook, make a narrow mutation, validate the result, inspect the package diff, then write only if the workbook still passes validation.
 
+The API is designed around a simple contract:
+
+1. Open the workbook bytes without eagerly normalizing everything.
+2. Mutate only the workbook structures you targeted.
+3. Validate package, workbook, and worksheet invariants.
+4. Return diagnostics and a package diff before committing the output file.
+
+## Start Here
+
+| Need | Use | First API |
+| --- | --- | --- |
+| Fill an Excel-authored report template from Node. | `@ironsheet/node` | `renderWorkbookTemplateSafely` |
+| Make a custom safe edit in Node. | `@ironsheet/node` | `mutateWorkbookFile` |
+| Edit workbook bytes in a browser workflow. | `@ironsheet/browser` | `openWorkbookFromBlob`, `writeWorkbookToBlob` |
+| Inspect, validate, diff, or patch from CI. | `@ironsheet/cli` | `validate`, `diff`, `render-template-safe` |
+| Build advanced OOXML tooling. | `@ironsheet/core` | `Workbook`, `OoxmlPackage`, validators |
+
 ## Packages
 
 - `@ironsheet/core`: runtime-neutral ZIP, OPC, XML, OOXML workbook model, validators, streaming XML helpers, and lossless mutation primitives.
@@ -49,6 +66,18 @@ type WorkbookSafeWriteReport = {
 
 Safe writes suppress output when validation errors are present unless `allowValidationErrors` is explicitly enabled.
 
+Read the report as a write receipt:
+
+```ts
+if (report.wrote) {
+  console.log("validated output written", report.diff.summary);
+} else {
+  console.error("output suppressed", report.validation.summary);
+}
+```
+
+`diff.summary.changed` means uncompressed workbook content changed. `diff.summary.repacked` means the uncompressed content appears unchanged, but the ZIP container bytes changed. This distinction is useful in CI because compression noise should not look like a semantic workbook edit.
+
 ## Template Rendering
 
 Use template rendering when your workbook is authored in Excel and JavaScript only fills named anchors.
@@ -88,6 +117,15 @@ npm run templates:build
 ```
 
 The generated workbooks are written under `templates/generated/` and ignored by git. They cover styled reports, macro-enabled models, dashboards with images/charts, pivot-source workbooks, and larger export sheets. Use them for examples, demos, and smoke tests. They are not a substitute for the real Excel-authored compatibility corpus.
+
+## API Conventions
+
+- Workbook mutation methods change the in-memory workbook. Node and browser adapters decide how bytes are read and written.
+- Addresses and ranges use Excel A1 notation, for example `B2` and `A1:C10`.
+- Sheet names, defined names, and table names are case-sensitive unless Excel itself treats the underlying structure differently.
+- Safe helpers refuse to write when validation errors are present. Pass `allowValidationErrors` only for debugging or fixture capture.
+- Template rendering is transactional at the preflight stage: missing anchors fail before any mutation is applied.
+- The core package has no Node imports. Runtime-specific file IO and compression belong in adapters.
 
 ## Core Workbook Methods
 

@@ -1,0 +1,59 @@
+<svg width="1200" height="420" viewBox="0 0 1200 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Ironsheet safe write report</title>
+  <desc id="desc">A safe write report combines diagnostics, validation issues, and package diffs to show whether Ironsheet wrote the output workbook.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-16%" width="120%" height="132%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="420" rx="28" fill="#f8fafc"/>
+  <rect x="52" y="44" width="1096" height="332" rx="24" fill="#eef6f7"/>
+
+  <g filter="url(#shadow)">
+    <rect x="88" y="84" width="247" height="252" rx="18" fill="#ffffff" stroke="#d8e4ea"/>
+    <text x="116" y="128" fill="#17324d" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="21" font-weight="800">Preflight</text>
+    <circle cx="117" cy="164" r="9" fill="#0f766e"/>
+    <text x="139" y="170" fill="#425b6b" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">named ranges exist</text>
+    <circle cx="117" cy="205" r="9" fill="#0f766e"/>
+    <text x="139" y="211" fill="#425b6b" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">table growth is legal</text>
+    <circle cx="117" cy="246" r="9" fill="#0f766e"/>
+    <text x="139" y="252" fill="#425b6b" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">image bytes match part</text>
+    <rect x="112" y="282" width="170" height="30" rx="15" fill="#e0f6ee"/>
+    <text x="197" y="302" text-anchor="middle" fill="#0f6b3f" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">targets: 5/5</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="360" y="84" width="247" height="252" rx="18" fill="#ffffff" stroke="#d8e4ea"/>
+    <text x="388" y="128" fill="#17324d" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="21" font-weight="800">Validation</text>
+    <rect x="388" y="152" width="178" height="58" rx="14" fill="#e1f7eb" stroke="#b9e6cc"/>
+    <text x="477" y="188" text-anchor="middle" fill="#0f6b3f" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="800">0 errors</text>
+    <text x="388" y="244" fill="#425b6b" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">relationships resolve</text>
+    <text x="388" y="273" fill="#425b6b" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">worksheet order is legal</text>
+    <text x="388" y="302" fill="#425b6b" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">styles stay under limits</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="632" y="84" width="247" height="252" rx="18" fill="#ffffff" stroke="#d8e4ea"/>
+    <text x="660" y="128" fill="#17324d" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="21" font-weight="800">Package diff</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">
+      <rect x="660" y="154" width="184" height="30" rx="8" fill="#fff3d9"/>
+      <text x="675" y="174" fill="#805a12">changed sheet1.xml</text>
+      <rect x="660" y="198" width="184" height="30" rx="8" fill="#e8f0ff"/>
+      <text x="675" y="218" fill="#27548a">repacked workbook.xml</text>
+      <rect x="660" y="242" width="184" height="30" rx="8" fill="#edf2f7"/>
+      <text x="675" y="262" fill="#557083">unchanged macros</text>
+      <rect x="660" y="286" width="184" height="30" rx="8" fill="#edf2f7"/>
+      <text x="675" y="306" fill="#557083">unchanged charts</text>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="904" y="84" width="247" height="252" rx="18" fill="#17324d"/>
+    <text x="932" y="128" fill="#ffffff" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="21" font-weight="800">Write gate</text>
+    <rect x="932" y="154" width="182" height="54" rx="14" fill="#d7fff2" fill-opacity="0.18" stroke="#9be7d1" stroke-opacity="0.45"/>
+    <text x="1023" y="188" text-anchor="middle" fill="#d7fff2" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="23" font-weight="800">wrote: true</text>
+    <text x="932" y="244" fill="#dbeafe" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">No hidden overwrite.</text>
+    <text x="932" y="273" fill="#dbeafe" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">No silent corruption.</text>
+    <text x="932" y="302" fill="#dbeafe" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">Caller gets the proof.</text>
+  </g>
+</svg>

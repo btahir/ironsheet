@@ -1,0 +1,91 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Ironsheet workbook mutation pipeline</title>
+  <desc id="desc">Excel-authored templates pass through Ironsheet for preflight, precise mutation, validation, and package diffing before a safe XLSX or XLSM output is written.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f3f7fb"/>
+    </linearGradient>
+    <linearGradient id="engine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#113f67"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#226a7a"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="520" rx="28" fill="#f7fafc"/>
+  <rect x="36" y="34" width="1128" height="452" rx="24" fill="#eef5f8"/>
+  <path d="M60 443 C220 372 315 434 456 360 C619 275 726 336 885 251 C995 192 1076 188 1140 212" stroke="#d4e6ec" stroke-width="38" stroke-linecap="round"/>
+
+  <g filter="url(#shadow)">
+    <rect x="80" y="92" width="285" height="320" rx="22" fill="url(#panel)" stroke="#d7e4ea"/>
+    <rect x="104" y="116" width="237" height="36" rx="10" fill="#e8f1f5"/>
+    <text x="122" y="139" fill="#17324d" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="17" font-weight="700">Excel-authored template</text>
+    <rect x="104" y="176" width="237" height="154" rx="12" fill="#ffffff" stroke="#d5e0e6"/>
+    <g stroke="#d5e0e6" stroke-width="1">
+      <path d="M104 207 H341 M104 238 H341 M104 269 H341 M104 300 H341"/>
+      <path d="M143 176 V330 M182 176 V330 M221 176 V330 M260 176 V330 M299 176 V330"/>
+    </g>
+    <rect x="143" y="207" width="78" height="31" fill="#dff3ed"/>
+    <rect x="221" y="238" width="78" height="31" fill="#e6eefb"/>
+    <rect x="182" y="269" width="117" height="31" fill="#fff2d7"/>
+    <text x="118" y="363" fill="#557083" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">RevenueRange</text>
+    <text x="118" y="386" fill="#557083" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">RevenueTable</text>
+  </g>
+
+  <path d="M390 250 H471" stroke="#226a7a" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="471" y="74" width="258" height="356" rx="26" fill="url(#engine)"/>
+    <text x="600" y="132" text-anchor="middle" fill="#ffffff" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="29" font-weight="800">Ironsheet</text>
+    <text x="600" y="161" text-anchor="middle" fill="#d7fff6" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">lossless TypeScript engine</text>
+    <g fill="#ffffff" fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.22">
+      <rect x="507" y="196" width="186" height="42" rx="12"/>
+      <rect x="507" y="252" width="186" height="42" rx="12"/>
+      <rect x="507" y="308" width="186" height="42" rx="12"/>
+    </g>
+    <g fill="#ffffff" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="16" font-weight="700">
+      <text x="600" y="223" text-anchor="middle">preflight anchors</text>
+      <text x="600" y="279" text-anchor="middle">mutate only targets</text>
+      <text x="600" y="335" text-anchor="middle">validate and diff</text>
+    </g>
+    <path d="M547 382 C574 401 626 401 653 382" stroke="#d7fff6" stroke-width="5" stroke-linecap="round"/>
+    <path d="M648 373 L662 380 L649 389" stroke="#d7fff6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <path d="M729 250 H810" stroke="#226a7a" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="835" y="92" width="285" height="320" rx="22" fill="url(#panel)" stroke="#d7e4ea"/>
+    <rect x="859" y="116" width="237" height="36" rx="10" fill="#e8f1f5"/>
+    <text x="878" y="139" fill="#17324d" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="17" font-weight="700">Validated workbook</text>
+    <g font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15">
+      <rect x="860" y="178" width="236" height="46" rx="12" fill="#e1f7eb" stroke="#b9e6cc"/>
+      <text x="880" y="207" fill="#0f6b3f" font-weight="700">0 validation errors</text>
+      <rect x="860" y="240" width="236" height="46" rx="12" fill="#e8f0ff" stroke="#cbdafe"/>
+      <text x="880" y="269" fill="#27548a" font-weight="700">macros preserved</text>
+      <rect x="860" y="302" width="236" height="46" rx="12" fill="#fff3d9" stroke="#f1d38d"/>
+      <text x="880" y="331" fill="#805a12" font-weight="700">diff proves changes</text>
+    </g>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#557083">
+      <text x="862" y="377">changed: xl/worksheets/sheet1.xml</text>
+      <text x="862" y="399">unchanged: xl/vbaProject.bin</text>
+    </g>
+  </g>
+
+  <g font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="15" font-weight="700">
+    <rect x="84" y="432" width="148" height="38" rx="19" fill="#ffffff" stroke="#d7e4ea"/>
+    <text x="158" y="456" text-anchor="middle" fill="#17324d">XLSX / XLSM</text>
+    <rect x="249" y="432" width="145" height="38" rx="19" fill="#ffffff" stroke="#d7e4ea"/>
+    <text x="321" y="456" text-anchor="middle" fill="#17324d">real templates</text>
+    <rect x="806" y="432" width="154" height="38" rx="19" fill="#ffffff" stroke="#d7e4ea"/>
+    <text x="883" y="456" text-anchor="middle" fill="#17324d">safe writes</text>
+    <rect x="977" y="432" width="143" height="38" rx="19" fill="#ffffff" stroke="#d7e4ea"/>
+    <text x="1048" y="456" text-anchor="middle" fill="#17324d">CI gates</text>
+  </g>
+</svg>
