@@ -23,6 +23,16 @@ export {
 } from "./diff.ts";
 export { IronsheetError, PackageError, WorkbookError, WorksheetError, ZipError } from "./errors.ts";
 export {
+  diffWorkbooks,
+  type DiffWorkbooksOptions,
+  type WorkbookCellDiff,
+  type WorkbookCellDiffKind,
+  type WorkbookCellDiffSide,
+  type WorkbookNameListDiff,
+  type WorkbookSemanticDiff
+} from "./workbook-diff.ts";
+export {
+  breakFormulaSheetReferences,
   excelMaxColumn,
   excelMaxRow,
   formulaReferenceWithinExcelBounds,
@@ -32,12 +42,21 @@ export {
   renameFormulaSheetReferences,
   renameFormulaStructuredReferenceColumn,
   renameFormulaStructuredReferenceTable,
+  shiftFormulaRowReferences,
   type FormulaCellReference,
   type FormulaRangeReference,
   type FormulaReference,
+  type FormulaRowEdit,
   type FormulaSheetReference,
   type FormulaStructuredReference
 } from "./formula.ts";
+export {
+  deleteWorksheetRows,
+  insertWorksheetRows,
+  mapRangeRefThroughEdit,
+  mapRowThroughEdit,
+  type WorksheetRowEditResult
+} from "./rows.ts";
 export {
   appendDrawingAnchorXml,
   assertImageBytesMatchExtension,
@@ -77,13 +96,25 @@ export {
 } from "./pivot.ts";
 export { parseSharedStrings } from "./shared-strings.ts";
 export {
+  ensureWorkbookBorder,
   ensureWorkbookCellFormat,
+  ensureWorkbookFill,
+  ensureWorkbookFont,
   ensureWorkbookNumberFormat,
+  ensureWorkbookStyleComponents,
   excelCellFormatLimit,
   excelCellFormatWarningThreshold,
+  normalizeStyleColor,
   parseWorkbookStyles,
+  type WorkbookAlignmentInput,
+  type WorkbookBorderEdgeInput,
+  type WorkbookBorderInput,
+  type WorkbookBorderStyleInput,
+  type WorkbookCellAlignment,
   type WorkbookCellFormat,
   type WorkbookCellStyleInput,
+  type WorkbookFillInput,
+  type WorkbookFontInput,
   type WorkbookNumberFormat,
   type WorkbookStyles
 } from "./styles.ts";
@@ -134,6 +165,7 @@ export {
   type CellPatch,
   type FormulaValue,
   applyCellStyle,
+  applyCellStyles,
   appendRows,
   createRowsXml,
   patchCell,
@@ -141,6 +173,7 @@ export {
   patchRange,
   readCell,
   readRange,
+  readWorksheetCells,
   removeCellsInRange,
   type ReadCellResult,
   type ReadRangeResult,

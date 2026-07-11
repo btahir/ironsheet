@@ -2145,3 +2145,164 @@ test("named range writes conservatively invalidate stale calculation chains", as
     true
   );
 });
+
+test("styles cells with authored fonts, fills, borders, and alignment", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  const styleId = await workbook.styleCell("Sheet1", "A1", {
+    alignment: { horizontal: "center", wrapText: true },
+    border: { all: { style: "thin", color: "444444" } },
+    fill: "1F4E79",
+    font: { bold: true, color: "#FFFFFF", name: "Aptos", size: 12 },
+    numberFormat: "$#,##0.00"
+  });
+
+  const styles = await workbook.styles();
+  assert.equal(styles.counts.fonts, 2);
+  assert.equal(styles.counts.fills, 2);
+  assert.equal(styles.counts.borders, 2);
+  assert.equal(styles.counts.numFmts, 1);
+
+  const format = styles.cellXfs[Number.parseInt(styleId, 10)];
+  assert.ok(format);
+  assert.equal(format.fontId, "1");
+  assert.equal(format.fillId, "1");
+  assert.equal(format.borderId, "1");
+  assert.equal(format.numFmtId, "164");
+  assert.equal(format.applyFont, "1");
+  assert.equal(format.applyFill, "1");
+  assert.equal(format.applyBorder, "1");
+  assert.equal(format.applyNumberFormat, "1");
+  assert.equal(format.applyAlignment, "1");
+  assert.deepEqual(format.alignment, { horizontal: "center", wrapText: "1" });
+
+  const stylesEntry = parseZip(await workbook.write()).entries.find(
+    (entry) => entry.name === "xl/styles.xml"
+  );
+  assert.ok(stylesEntry);
+  const stylesXml = textDecoder.decode(await readEntryData(stylesEntry, nodeCompressionAdapter));
+  assert.match(
+    stylesXml,
+    /<font><b\/><sz val="12"\/><color rgb="FFFFFFFF"\/><name val="Aptos"\/><\/font>/
+  );
+  assert.match(
+    stylesXml,
+    /<patternFill patternType="solid"><fgColor rgb="FF1F4E79"\/><bgColor indexed="64"\/><\/patternFill>/
+  );
+  assert.match(stylesXml, /<left style="thin"><color rgb="FF444444"\/><\/left>/);
+  assert.match(stylesXml, /<alignment horizontal="center" wrapText="1"\/>/);
+
+  const validation = await workbook.validate();
+  assert.equal(validation.summary.errors, 0);
+});
+
+test("dedupes authored fonts, fills, and borders across style calls", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  const first = await workbook.styleCell("Sheet1", "B1", {
+    fill: "FF1F4E79",
+    font: { bold: true }
+  });
+  const second = await workbook.styleCell("Sheet1", "C1", {
+    fill: "#1F4E79",
+    font: { bold: true }
+  });
+
+  assert.equal(first, second);
+  const styles = await workbook.styles();
+  assert.equal(styles.counts.fonts, 2);
+  assert.equal(styles.counts.fills, 2);
+});
+
+test("styleRange styles many cells with one deduped style record", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+  await workbook.patchRange("Sheet1", "D1", [
+    ["Region", "Amount", "Note"],
+    ["North", 42, "x"],
+    ["South", 31, "y"]
+  ]);
+
+  const before = (await workbook.styles()).counts.cellXfs;
+  const styleIds = await workbook.styleRange("Sheet1", "D1:F3", {
+    fill: "EEF2F7",
+    font: { bold: true }
+  });
+
+  assert.equal(styleIds.length, 1);
+  const styles = await workbook.styles();
+  assert.equal(styles.counts.cellXfs, before + 1);
+
+  for (const address of ["D1", "E2", "F3"]) {
+    const cell = await workbook.readCell("Sheet1", address);
+    assert.equal(cell?.styleId, styleIds[0]);
+  }
+
+  const validation = await workbook.validate();
+  assert.equal(validation.summary.errors, 0);
+});
+
+test("styleRange preserves distinct base styles per cell group", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+  await workbook.styleCell("Sheet1", "A2", { numberFormat: "0.00%" });
+
+  const styleIds = await workbook.styleRange("Sheet1", "A1:A2", { font: { italic: true } });
+
+  assert.equal(styleIds.length, 2);
+  const styles = await workbook.styles();
+  const formats = styleIds.map((id) => styles.cellXfs[Number.parseInt(id, 10)]);
+  assert.ok(formats.every((format) => format?.applyFont === "1"));
+  assert.equal(formats.filter((format) => format?.numFmtId === "164").length, 1);
+});
+
+test("styleRange refuses ranges beyond the supported cell budget", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await assert.rejects(
+    workbook.styleRange("Sheet1", "A1:Z100000", { font: { bold: true } }),
+    /at most/
+  );
+});
+
+test("clearRange removes cell values, styles, and stale formulas", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook({ includeCalcChain: true }));
+  await workbook.patchRange("Sheet1", "D1", [
+    [10, 20],
+    [{ formula: "D1+E1", result: 30 }, "note"]
+  ]);
+
+  await workbook.clearRange("Sheet1", "D1:E2");
+
+  for (const address of ["D1", "E1", "D2", "E2"]) {
+    assert.equal(await workbook.readCell("Sheet1", address), undefined);
+  }
+
+  const outputZip = parseZip(await workbook.write());
+  assert.equal(
+    outputZip.entries.some((entry) => entry.name === "xl/calcChain.xml"),
+    false
+  );
+  assert.equal((await workbook.validate()).summary.errors, 0);
+});
+
+test("clearRange with keepStyles preserves cell formatting", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+  await workbook.patchCell("Sheet1", "D1", 42);
+  const styleId = await workbook.styleCell("Sheet1", "D1", { font: { bold: true } });
+
+  await workbook.clearRange("Sheet1", "D1", { keepStyles: true });
+
+  assert.deepEqual(await workbook.readCell("Sheet1", "D1"), {
+    address: "D1",
+    value: null,
+    styleId
+  });
+});
+
+test("clearCell clears a single cell", async () => {
+  const workbook = await openWorkbook(await createMinimalWorkbook());
+
+  await workbook.clearCell("Sheet1", "A1");
+
+  assert.equal(await workbook.readCell("Sheet1", "A1"), undefined);
+  assert.equal((await workbook.validate()).summary.errors, 0);
+});

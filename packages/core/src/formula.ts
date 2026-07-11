@@ -355,6 +355,189 @@ function applyTextReplacements(source: string, replacements: TextReplacement[]):
   return result + source.slice(offset);
 }
 
+export type FormulaRowEdit = {
+  count: number;
+  mode: "insert" | "delete";
+  sheetName: string;
+  startRow: number;
+};
+
+export function shiftFormulaRowReferences(
+  formula: string,
+  edit: FormulaRowEdit,
+  options: { defaultSheetName?: string } = {}
+): string {
+  const targetSheet = edit.sheetName.toLowerCase();
+  const scrubbed = stripDoubleQuotedStrings(formula);
+  const pattern =
+    /(?:(?<sheet>'(?:(?:'')|[^'])+'|[A-Za-z_][A-Za-z0-9_ .]*)!)?(?<first>\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6})(?::(?<second>\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6}))?/g;
+  const replacements: TextReplacement[] = [];
+
+  for (const match of scrubbed.matchAll(pattern)) {
+    const raw = match[0];
+    const startIndex = match.index ?? 0;
+    const endIndex = startIndex + raw.length;
+    if (
+      !isReferenceBoundaryBefore(scrubbed, startIndex) ||
+      !isReferenceBoundaryAfter(scrubbed, endIndex)
+    ) {
+      continue;
+    }
+
+    const rawSheetToken = match.groups?.sheet;
+    if (rawSheetToken !== undefined && startIndex > 0 && scrubbed[startIndex - 1] === "]") {
+      continue;
+    }
+
+    const firstAddress = match.groups?.first;
+    if (firstAddress === undefined) {
+      continue;
+    }
+
+    const secondAddress = match.groups?.second;
+    if (rawSheetToken === undefined && secondAddress === undefined && scrubbed[endIndex] === "(") {
+      continue;
+    }
+
+    const referenceSheet =
+      rawSheetToken === undefined ? options.defaultSheetName : unquoteSheetName(rawSheetToken);
+    if (referenceSheet === undefined || referenceSheet.toLowerCase() !== targetSheet) {
+      continue;
+    }
+
+    const addressLength =
+      firstAddress.length + (secondAddress === undefined ? 0 : secondAddress.length + 1);
+    const addressStart = endIndex - addressLength;
+    const rewritten = shiftAddressTokens(firstAddress, secondAddress, edit);
+    if (rewritten !== formula.slice(addressStart, endIndex)) {
+      replacements.push({ start: addressStart, end: endIndex, text: rewritten });
+    }
+  }
+
+  return applyTextReplacements(formula, replacements);
+}
+
+function shiftAddressTokens(
+  firstAddress: string,
+  secondAddress: string | undefined,
+  edit: FormulaRowEdit
+): string {
+  const first = splitAddressToken(firstAddress);
+  if (first === undefined) {
+    return secondAddress === undefined ? firstAddress : `${firstAddress}:${secondAddress}`;
+  }
+
+  if (secondAddress === undefined) {
+    const shifted = shiftRow(first.row, edit, "cell");
+    return shifted === undefined ? "#REF!" : formatAddressToken(first, shifted);
+  }
+
+  const second = splitAddressToken(secondAddress);
+  if (second === undefined) {
+    return `${firstAddress}:${secondAddress}`;
+  }
+
+  const startShifted = shiftRow(first.row, edit, "rangeStart");
+  const endShifted = shiftRow(second.row, edit, "rangeEnd");
+  if (
+    startShifted === undefined ||
+    endShifted === undefined ||
+    (edit.mode === "delete" && endShifted < startShifted)
+  ) {
+    return "#REF!";
+  }
+
+  return `${formatAddressToken(first, startShifted)}:${formatAddressToken(second, endShifted)}`;
+}
+
+function shiftRow(
+  row: number,
+  edit: FormulaRowEdit,
+  position: "cell" | "rangeStart" | "rangeEnd"
+): number | undefined {
+  if (edit.mode === "insert") {
+    return row >= edit.startRow ? row + edit.count : row;
+  }
+
+  const deletedEnd = edit.startRow + edit.count - 1;
+  if (row < edit.startRow) {
+    return row;
+  }
+
+  if (row > deletedEnd) {
+    return row - edit.count;
+  }
+
+  if (position === "cell") {
+    return undefined;
+  }
+
+  return position === "rangeStart" ? edit.startRow : edit.startRow - 1;
+}
+
+type AddressToken = {
+  columnAbsolute: boolean;
+  columnLetters: string;
+  row: number;
+  rowAbsolute: boolean;
+};
+
+function splitAddressToken(token: string): AddressToken | undefined {
+  const match = /^(\$?)([A-Za-z]{1,3})(\$?)([1-9][0-9]{0,6})$/.exec(token);
+  if (match === null) {
+    return undefined;
+  }
+
+  const [, columnMarker, columnLetters, rowMarker, rowDigits] = match;
+  if (columnLetters === undefined || rowDigits === undefined) {
+    return undefined;
+  }
+
+  return {
+    columnAbsolute: columnMarker === "$",
+    columnLetters,
+    row: Number.parseInt(rowDigits, 10),
+    rowAbsolute: rowMarker === "$"
+  };
+}
+
+function formatAddressToken(token: AddressToken, row: number): string {
+  return `${token.columnAbsolute ? "$" : ""}${token.columnLetters}${token.rowAbsolute ? "$" : ""}${row}`;
+}
+
+export function breakFormulaSheetReferences(formula: string, sheetName: string): string {
+  const target = sheetName.toLowerCase();
+  const scrubbed = stripDoubleQuotedStrings(formula);
+  const pattern =
+    /(?<sheet>'(?:(?:'')|[^'])+'|[A-Za-z_][A-Za-z0-9_ .]*)!(?<first>\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6})(?::(?<second>\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6}))?/g;
+  const replacements: TextReplacement[] = [];
+
+  for (const match of scrubbed.matchAll(pattern)) {
+    const raw = match[0];
+    const startIndex = match.index ?? 0;
+    const endIndex = startIndex + raw.length;
+    if (
+      !isReferenceBoundaryBefore(scrubbed, startIndex) ||
+      !isReferenceBoundaryAfter(scrubbed, endIndex)
+    ) {
+      continue;
+    }
+
+    const rawSheetToken = match.groups?.sheet;
+    if (rawSheetToken === undefined || (startIndex > 0 && scrubbed[startIndex - 1] === "]")) {
+      continue;
+    }
+
+    if (unquoteSheetName(rawSheetToken).toLowerCase() !== target) {
+      continue;
+    }
+
+    replacements.push({ start: startIndex, end: endIndex, text: "#REF!" });
+  }
+
+  return applyTextReplacements(formula, replacements);
+}
+
 export function parseFormulaReferences(formula: string): FormulaReference[] {
   const references = new Map<string, FormulaReference>();
   const scrubbed = stripDoubleQuotedStrings(formula);

@@ -168,6 +168,11 @@ What works today:
 - Preserve unknown workbook XML, styles, drawings, charts, pivots, comments, hyperlinks, merged cells, defined names, data validations, conditional formats, images, and XLSM macro parts.
 - Inspect sheets, tables, named ranges, formulas, styles, images, comments, charts, pivots, relationships, content types, and package-level diagnostics.
 - Patch cells, cell batches, ranges, named ranges, table rows, table columns, worksheet visibility, sheet names, table names, table column names, images, hyperlinks, merged cells, styles, filters, validations, and conditional formats.
+- Author cell styles with deduplicated fonts, fills, borders, alignment, and number formats, for single cells or whole ranges without style explosion.
+- Insert and delete rows with Excel-equivalent reference rewriting: formulas, defined names, merges, hyperlinks, validations, conditional formats, comment anchors, and tables below the edit all shift; dead references become `#REF!`.
+- Add, copy, and delete worksheets with cascade part cleanup, scoped defined-name handling, and `#REF!` breaking for formulas that used a deleted sheet.
+- Clear cells or ranges, with or without preserving formatting.
+- Diff two workbooks semantically: cell-level adds/changes/removals plus sheet, defined-name, and table changes, alongside the package-level ZIP diff.
 - Retarget formulas, defined names, chart formulas, and pivot-cache sources during supported sheet/table/column rename flows.
 - Validate relationships, worksheet element order, dimensions, hyperlinks, merged cells, styles, shared strings, formulas, tables, pivots, charts, calc chains, defined names, and content types.
 - Run a compatibility corpus with generated XLSX, XLSM, dashboard, pivot, large-sheet, cross-feature torture fixtures, plus optional Numbers, LibreOffice, Open XML SDK, and Excel checks.

@@ -2,7 +2,7 @@
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { readFile } from "node:fs/promises";
-import { diffZipPackages } from "@ironsheet/core";
+import { diffWorkbooks, diffZipPackages } from "@ironsheet/core";
 import {
   inspectWorkbookTemplate,
   inspectWorkbookStyles,
@@ -42,10 +42,17 @@ import type {
 
 type Command =
   | "inspect"
+  | "add-sheet"
   | "append-rows"
   | "append-table-column"
   | "auto-filters"
+  | "clear-range"
   | "comments"
+  | "copy-sheet"
+  | "delete-rows"
+  | "delete-sheet"
+  | "insert-rows"
+  | "style-range"
   | "conditional-formats"
   | "delete-auto-filter"
   | "delete-conditional-format"
@@ -90,7 +97,8 @@ type Command =
   | "template-manifest"
   | "unmerge-cells"
   | "validate"
-  | "diff";
+  | "diff"
+  | "diff-cells";
 
 function usage(): never {
   console.error(`usage:
@@ -113,6 +121,13 @@ function usage(): never {
   npm run cli -- read-named-range <workbook.xlsx> <name> [sheet]
   npm run cli -- patch <input.xlsx> <output.xlsx> <sheet> <cell> <value>
   npm run cli -- style-cell <input.xlsx> <output.xlsx> <sheet> <cell> <jsonStyle>
+  npm run cli -- style-range <input.xlsx> <output.xlsx> <sheet> <range> <jsonStyle>
+  npm run cli -- clear-range <input.xlsx> <output.xlsx> <sheet> <range> [keepStyles]
+  npm run cli -- insert-rows <input.xlsx> <output.xlsx> <sheet> <beforeRow> [count]
+  npm run cli -- delete-rows <input.xlsx> <output.xlsx> <sheet> <startRow> [count]
+  npm run cli -- add-sheet <input.xlsx> <output.xlsx> <name>
+  npm run cli -- copy-sheet <input.xlsx> <output.xlsx> <sheet> <newName>
+  npm run cli -- delete-sheet <input.xlsx> <output.xlsx> <sheet>
   npm run cli -- patch-range <input.xlsx> <output.xlsx> <sheet> <startCell> <jsonRows>
   npm run cli -- patch-named-range <input.xlsx> <output.xlsx> <name> <jsonRows> [sheet]
   npm run cli -- append-rows <input.xlsx> <output.xlsx> <sheet> <jsonRows>
@@ -144,6 +159,7 @@ function usage(): never {
   npm run cli -- retarget-chart <input.xlsx> <output.xlsx> <jsonRetargets>
   npm run cli -- retarget-pivot <input.xlsx> <output.xlsx> <jsonRetargets>
   npm run cli -- diff <before.xlsx> <after.xlsx>
+  npm run cli -- diff-cells <before.xlsx> <after.xlsx>
 
 value examples:
   hello
@@ -244,6 +260,12 @@ async function diff(beforePath: string, afterPath: string): Promise<void> {
   console.log(JSON.stringify(diffZipPackages(before, after), null, 2));
 }
 
+async function diffCells(beforePath: string, afterPath: string): Promise<void> {
+  const before = await readWorkbook(beforePath);
+  const after = await readWorkbook(afterPath);
+  console.log(JSON.stringify(await diffWorkbooks(before, after), null, 2));
+}
+
 async function safeMutate(
   inputPath: string,
   outputPath: string,
@@ -296,6 +318,102 @@ async function styleCellCommand(
     outputPath,
     (workbook) => workbook.styleCell(sheetName, address, parseStyle(rawStyle)),
     `styled ${sheetName}!${address}`
+  );
+}
+
+async function styleRangeCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rangeRef: string,
+  rawStyle: string
+): Promise<void> {
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.styleRange(sheetName, rangeRef, parseStyle(rawStyle)),
+    `styled ${sheetName}!${rangeRef}`
+  );
+}
+
+async function clearRangeCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rangeRef: string,
+  keepStyles: boolean
+): Promise<void> {
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.clearRange(sheetName, rangeRef, { keepStyles }),
+    `cleared ${sheetName}!${rangeRef}`
+  );
+}
+
+async function insertRowsCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  beforeRow: number,
+  count: number
+): Promise<void> {
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.insertRows(sheetName, beforeRow, count),
+    `inserted ${count} row(s) before ${sheetName} row ${beforeRow}`
+  );
+}
+
+async function deleteRowsCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  startRow: number,
+  count: number
+): Promise<void> {
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.deleteRows(sheetName, startRow, count),
+    `deleted ${count} row(s) from ${sheetName} row ${startRow}`
+  );
+}
+
+async function addSheetCommand(inputPath: string, outputPath: string, name: string): Promise<void> {
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.addSheet(name),
+    `added sheet ${name}`
+  );
+}
+
+async function copySheetCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  nextName: string
+): Promise<void> {
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.copySheet(sheetName, nextName),
+    `copied sheet ${sheetName} to ${nextName}`
+  );
+}
+
+async function deleteSheetCommand(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string
+): Promise<void> {
+  await safeMutate(
+    inputPath,
+    outputPath,
+    (workbook) => workbook.deleteSheet(sheetName),
+    `deleted sheet ${sheetName}`
   );
 }
 
@@ -1298,6 +1416,12 @@ try {
       usage();
     }
     await diff(beforePath, afterPath);
+  } else if (command === "diff-cells") {
+    const [beforePath, afterPath] = args;
+    if (beforePath === undefined || afterPath === undefined) {
+      usage();
+    }
+    await diffCells(beforePath, afterPath);
   } else if (command === "patch") {
     const [inputPath, outputPath, sheetName, address, rawValue] = args;
     if (
@@ -1345,6 +1469,92 @@ try {
       usage();
     }
     await styleCellCommand(inputPath, outputPath, sheetName, address, rawStyle);
+  } else if (command === "style-range") {
+    const [inputPath, outputPath, sheetName, rangeRef, rawStyle] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      rangeRef === undefined ||
+      rawStyle === undefined
+    ) {
+      usage();
+    }
+    await styleRangeCommand(inputPath, outputPath, sheetName, rangeRef, rawStyle);
+  } else if (command === "clear-range") {
+    const [inputPath, outputPath, sheetName, rangeRef, keepStyles] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      rangeRef === undefined
+    ) {
+      usage();
+    }
+    await clearRangeCommand(
+      inputPath,
+      outputPath,
+      sheetName,
+      rangeRef,
+      keepStyles === "keepStyles"
+    );
+  } else if (command === "insert-rows") {
+    const [inputPath, outputPath, sheetName, beforeRow, count] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      beforeRow === undefined
+    ) {
+      usage();
+    }
+    await insertRowsCommand(
+      inputPath,
+      outputPath,
+      sheetName,
+      Number.parseInt(beforeRow, 10),
+      count === undefined ? 1 : Number.parseInt(count, 10)
+    );
+  } else if (command === "delete-rows") {
+    const [inputPath, outputPath, sheetName, startRow, count] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      startRow === undefined
+    ) {
+      usage();
+    }
+    await deleteRowsCommand(
+      inputPath,
+      outputPath,
+      sheetName,
+      Number.parseInt(startRow, 10),
+      count === undefined ? 1 : Number.parseInt(count, 10)
+    );
+  } else if (command === "add-sheet") {
+    const [inputPath, outputPath, name] = args;
+    if (inputPath === undefined || outputPath === undefined || name === undefined) {
+      usage();
+    }
+    await addSheetCommand(inputPath, outputPath, name);
+  } else if (command === "copy-sheet") {
+    const [inputPath, outputPath, sheetName, nextName] = args;
+    if (
+      inputPath === undefined ||
+      outputPath === undefined ||
+      sheetName === undefined ||
+      nextName === undefined
+    ) {
+      usage();
+    }
+    await copySheetCommand(inputPath, outputPath, sheetName, nextName);
+  } else if (command === "delete-sheet") {
+    const [inputPath, outputPath, sheetName] = args;
+    if (inputPath === undefined || outputPath === undefined || sheetName === undefined) {
+      usage();
+    }
+    await deleteSheetCommand(inputPath, outputPath, sheetName);
   } else if (command === "append-rows") {
     const [inputPath, outputPath, sheetName, rawRows] = args;
     if (

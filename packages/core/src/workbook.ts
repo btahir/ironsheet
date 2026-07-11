@@ -1,4 +1,4 @@
-import { type CellRange, parseCellAddress, parseCellRange } from "./address.ts";
+import { type CellRange, formatCellAddress, parseCellAddress, parseCellRange } from "./address.ts";
 import {
   listWorkbookCharts,
   retargetWorkbookChartFormulas,
@@ -15,11 +15,15 @@ import { parseDefinedNames, type WorkbookDefinedName } from "./defined-names.ts"
 import { PackageError, WorkbookError } from "./errors.ts";
 import { rewriteFormulaElements } from "./formula-rewrite.ts";
 import {
+  breakFormulaSheetReferences,
+  excelMaxRow,
   parseFormulaReferences,
   parseFormulaSheetReferences,
   parseFormulaStructuredReferences,
   renameFormulaSheetReferences,
+  shiftFormulaRowReferences,
   type FormulaReference,
+  type FormulaRowEdit,
   type FormulaSheetReference,
   type FormulaStructuredReference
 } from "./formula.ts";
@@ -47,6 +51,7 @@ import {
 import {
   normalizePartName,
   type OoxmlPackage,
+  relationshipPartName,
   relativeRelationshipTarget,
   type Relationship,
   resolveRelationshipTarget
@@ -57,10 +62,11 @@ import {
   type PivotCacheSourceRetarget,
   type WorkbookPivotCacheSource
 } from "./pivot.ts";
+import { deleteWorksheetRows, insertWorksheetRows, mapRangeRefThroughEdit } from "./rows.ts";
 import { parseSharedStrings } from "./shared-strings.ts";
 import {
   ensureWorkbookCellFormat,
-  ensureWorkbookNumberFormat,
+  ensureWorkbookStyleComponents,
   excelCellFormatLimit,
   excelCellFormatWarningThreshold,
   parseWorkbookStyles,
@@ -82,6 +88,7 @@ import { validateWorkbookPackage, type ValidationReport } from "./validation.ts"
 import {
   appendRows,
   applyCellStyle,
+  applyCellStyles,
   deleteWorksheetAutoFilter,
   deleteWorksheetConditionalFormat,
   deleteWorksheetDataValidation,
@@ -98,6 +105,8 @@ import {
   patchRange,
   readCell,
   readRange,
+  readWorksheetCells,
+  removeCellsInRange,
   setWorksheetAutoFilter,
   setWorksheetConditionalFormat,
   setWorksheetDataValidation,
@@ -129,6 +138,11 @@ const calcChainRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
 const hyperlinkRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+
+const maxStyleRangeCells = 100_000;
+
+const worksheetContentType =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
 
 type MutationImpactOptions = {
   operation: "cell" | "range" | "appendRows" | "table";
@@ -456,6 +470,82 @@ export class Workbook {
     });
   }
 
+  async readSheetCells(sheetName: string): Promise<ReadCellResult[]> {
+    const sheet = this.sheet(sheetName);
+    return readWorksheetCells(await this.pkg.readText(sheet.partName), {
+      sharedStrings: await this.sharedStrings()
+    });
+  }
+
+  async clearCell(
+    sheetName: string,
+    address: string,
+    options: { keepStyles?: boolean } = {}
+  ): Promise<void> {
+    return this.clearRange(sheetName, address, options);
+  }
+
+  async clearRange(
+    sheetName: string,
+    rangeRef: string,
+    options: { keepStyles?: boolean } = {}
+  ): Promise<void> {
+    const sheet = this.sheet(sheetName);
+    const xml = await this.pkg.readText(sheet.partName);
+    const range = parseCellRange(rangeRef);
+    const inRange = (row: number, column: number): boolean =>
+      row >= range.start.row &&
+      row <= range.end.row &&
+      column >= range.start.column &&
+      column <= range.end.column;
+
+    let formulaCleared = false;
+    const clearedCells: Array<{ address: string; hasFormula: boolean }> = [];
+    for (const tag of findStartTags(xml, "c")) {
+      const cellRef = tag.attributes.r;
+      if (cellRef === undefined) {
+        continue;
+      }
+
+      const parsed = parseCellAddress(cellRef);
+      if (!inRange(parsed.row, parsed.column)) {
+        continue;
+      }
+
+      const hasFormula =
+        !tag.selfClosing &&
+        findFirstStartTag(xml.slice(tag.start, findElementEnd(xml, tag)), "f") !== undefined;
+      formulaCleared = formulaCleared || hasFormula;
+      clearedCells.push({ address: parsed.address, hasFormula });
+    }
+
+    const result =
+      options.keepStyles === true
+        ? patchCells(
+            xml,
+            clearedCells.map((cell) => ({ address: cell.address, value: null }))
+          )
+        : removeCellsInRange(xml, {
+            startRow: range.start.row,
+            endRow: range.end.row,
+            startColumn: range.start.column,
+            endColumn: range.end.column
+          });
+    this.pkg.setText(sheet.partName, result.xml);
+
+    if (formulaCleared) {
+      await this.forceRecalculateOnOpen();
+    } else {
+      await this.forceRecalculateIfFormulaDependenciesTouched(sheet.partName, [range]);
+    }
+
+    await this.recordMutationImpactDiagnostics({
+      operation: "range",
+      sheetPartName: sheet.partName,
+      affectedRanges: [range]
+    });
+  }
+
   async appendRows(
     sheetName: string,
     rows: CellInput[][],
@@ -480,6 +570,171 @@ export class Workbook {
       sheetPartName: sheet.partName,
       affectedRanges: result.affectedRanges
     });
+  }
+
+  async insertRows(sheetName: string, beforeRow: number, count = 1): Promise<void> {
+    await this.applyRowEdit(sheetName, {
+      count,
+      mode: "insert",
+      sheetName,
+      startRow: beforeRow
+    });
+  }
+
+  async deleteRows(sheetName: string, startRow: number, count = 1): Promise<void> {
+    await this.applyRowEdit(sheetName, {
+      count,
+      mode: "delete",
+      sheetName,
+      startRow
+    });
+  }
+
+  private async applyRowEdit(sheetName: string, edit: FormulaRowEdit): Promise<void> {
+    const sheet = this.sheet(sheetName);
+    const tables = (await this.tables()).filter(
+      (table) => table.worksheetPartName === sheet.partName
+    );
+    const editEnd = edit.startRow + edit.count - 1;
+
+    for (const table of tables) {
+      const tableRange = parseCellRange(table.ref);
+      const intersectsDelete =
+        edit.mode === "delete" &&
+        edit.startRow <= tableRange.end.row &&
+        editEnd >= tableRange.start.row;
+      const insertsInside =
+        edit.mode === "insert" &&
+        edit.startRow > tableRange.start.row &&
+        edit.startRow <= tableRange.end.row;
+      if (intersectsDelete || insertsInside) {
+        throw new WorkbookError(
+          `Row ${edit.mode} at ${edit.startRow} overlaps table ${table.name} (${table.ref}); use the table APIs to resize tables`
+        );
+      }
+    }
+
+    const xml = await this.pkg.readText(sheet.partName);
+    const result =
+      edit.mode === "insert"
+        ? insertWorksheetRows(xml, edit.startRow, edit.count)
+        : deleteWorksheetRows(xml, edit.startRow, edit.count);
+    this.pkg.setText(sheet.partName, result.xml);
+
+    if (result.removedHyperlinkRelationshipIds.length > 0) {
+      const relationshipIds = new Set(result.removedHyperlinkRelationshipIds);
+      await this.pkg.removeRelationships(sheet.partName, (relationship) =>
+        relationshipIds.has(relationship.id)
+      );
+    }
+
+    for (const table of tables) {
+      const tableRange = parseCellRange(table.ref);
+      if (tableRange.start.row < edit.startRow) {
+        continue;
+      }
+
+      const tableXml = await this.pkg.readText(table.partName);
+      const shifted = shiftTablePartRows(tableXml, edit);
+      if (shifted !== tableXml) {
+        this.pkg.setText(table.partName, shifted);
+      }
+    }
+
+    await this.shiftCommentRefs(sheet.partName, edit);
+    await this.shiftRowFormulaReferences(sheet.partName, edit);
+    await this.forceRecalculateOnOpen();
+
+    if (result.removedFormulaCells > 0) {
+      this.addDiagnostic({
+        severity: "info",
+        code: "ROW_DELETE_REMOVED_FORMULAS",
+        message: `Deleted ${result.removedFormulaCells} formula cell(s) with row(s) ${edit.startRow}-${editEnd}`,
+        part: sheet.partName
+      });
+    }
+
+    const relationships = await this.pkg.relationshipsFor(sheet.partName);
+    if (relationships.some((relationship) => relationship.type.endsWith("/drawing"))) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "ROW_EDIT_DRAWING_ANCHORS_UNCHANGED",
+        message: `Sheet ${sheetName} has drawings; row ${edit.mode} does not move drawing anchors, review image and chart positions`,
+        part: sheet.partName
+      });
+    }
+
+    const pivotSources = await this.pivotCacheSources();
+    if (pivotSources.some((source) => source.sheet?.toLowerCase() === sheetName.toLowerCase())) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "ROW_EDIT_PIVOT_SOURCE_REVIEW",
+        message: `Pivot caches source data from ${sheetName}; verify pivot source ranges after row ${edit.mode}`,
+        part: sheet.partName
+      });
+    }
+
+    await this.recordMutationImpactDiagnostics({
+      operation: "range",
+      sheetPartName: sheet.partName,
+      affectedRanges: [parseCellRange(`A${edit.startRow}:XFD${Math.min(excelMaxRow, editEnd + 1)}`)]
+    });
+  }
+
+  private async shiftCommentRefs(sheetPartName: string, edit: FormulaRowEdit): Promise<void> {
+    const relationships = await this.pkg.relationshipsFor(sheetPartName);
+    const commentsRelationship = relationships.find(
+      (relationship) => relationship.type === worksheetCommentsRelationship
+    );
+    if (commentsRelationship === undefined) {
+      return;
+    }
+
+    const commentsPartName = resolveRelationshipTarget(sheetPartName, commentsRelationship.target);
+    if (!this.pkg.hasPart(commentsPartName)) {
+      return;
+    }
+
+    const xml = await this.pkg.readText(commentsPartName);
+    const next = shiftCommentRefsXml(xml, edit);
+    if (next !== xml) {
+      this.pkg.setText(commentsPartName, next);
+      this.addDiagnostic({
+        severity: "warning",
+        code: "ROW_EDIT_COMMENT_ANCHORS_REVIEW",
+        message:
+          "Comment cell references were shifted, but legacy VML note anchors are preserved as-is; review note positions",
+        part: commentsPartName
+      });
+    }
+  }
+
+  private async shiftRowFormulaReferences(
+    editedSheetPartName: string,
+    edit: FormulaRowEdit
+  ): Promise<void> {
+    const tables = await this.tables();
+    const editedSheetTableParts = new Set(
+      tables
+        .filter((table) => table.worksheetPartName === editedSheetPartName)
+        .map((table) => table.partName)
+    );
+
+    for (const partName of this.pkg.listParts().filter((part) => part.endsWith(".xml"))) {
+      const defaultSheetName =
+        partName === editedSheetPartName || editedSheetTableParts.has(partName)
+          ? edit.sheetName
+          : undefined;
+      const xml = await this.pkg.readText(partName);
+      const nextXml = rewriteFormulaElements(xml, (formula) =>
+        shiftFormulaRowReferences(formula, edit, {
+          ...(defaultSheetName === undefined ? {} : { defaultSheetName })
+        })
+      );
+      if (nextXml !== xml) {
+        this.pkg.setText(partName, nextXml);
+      }
+    }
   }
 
   async renderTemplate(patch: WorkbookTemplatePatch): Promise<WorkbookTemplateRenderResult> {
@@ -1078,16 +1333,9 @@ export class Workbook {
   }
 
   async ensureCellStyle(style: WorkbookCellStyleInput): Promise<string> {
-    let stylesXml = await this.readOrCreateStylesXml();
-    const styleInput = { ...style };
-    if (styleInput.numberFormat !== undefined) {
-      const numberFormat = ensureWorkbookNumberFormat(stylesXml, styleInput.numberFormat);
-      stylesXml = numberFormat.xml;
-      styleInput.numFmtId = numberFormat.numFmtId;
-      styleInput.applyNumberFormat = "1";
-    }
-
-    const result = ensureWorkbookCellFormat(stylesXml, cellFormatFromStyleInput(styleInput));
+    const stylesXml = await this.readOrCreateStylesXml();
+    const components = ensureWorkbookStyleComponents(stylesXml, style);
+    const result = ensureWorkbookCellFormat(components.xml, components.format);
     this.pkg.setText("xl/styles.xml", result.xml);
     if (result.created) {
       const count = parseWorkbookStyles(result.xml).counts.cellXfs;
@@ -1119,6 +1367,72 @@ export class Workbook {
     const result = applyCellStyle(sheetXml, address, styleId);
     this.pkg.setText(sheet.partName, result.xml);
     return styleId;
+  }
+
+  async styleRange(
+    sheetName: string,
+    rangeRef: string,
+    style: WorkbookCellStyleInput
+  ): Promise<string[]> {
+    const sheet = this.sheet(sheetName);
+    const range = parseCellRange(rangeRef);
+    const cellCount =
+      (range.end.row - range.start.row + 1) * (range.end.column - range.start.column + 1);
+    if (cellCount > maxStyleRangeCells) {
+      throw new WorkbookError(
+        `Range ${range.ref} covers ${cellCount} cells; styleRange supports at most ${maxStyleRangeCells}`
+      );
+    }
+
+    const sheetXml = await this.pkg.readText(sheet.partName);
+    const existingStyleIds = new Map<string, string>();
+    for (const tag of findStartTags(sheetXml, "c")) {
+      const cellRef = tag.attributes.r;
+      const styleId = tag.attributes.s;
+      if (cellRef === undefined || styleId === undefined) {
+        continue;
+      }
+
+      const parsed = parseCellAddress(cellRef);
+      if (
+        parsed.row >= range.start.row &&
+        parsed.row <= range.end.row &&
+        parsed.column >= range.start.column &&
+        parsed.column <= range.end.column
+      ) {
+        existingStyleIds.set(parsed.address, styleId);
+      }
+    }
+
+    const groups = new Map<string | undefined, string[]>();
+    for (let row = range.start.row; row <= range.end.row; row += 1) {
+      for (let column = range.start.column; column <= range.end.column; column += 1) {
+        const address = formatCellAddress(column, row);
+        const baseStyleId = existingStyleIds.get(address);
+        const group = groups.get(baseStyleId);
+        if (group === undefined) {
+          groups.set(baseStyleId, [address]);
+        } else {
+          group.push(address);
+        }
+      }
+    }
+
+    const patches: Array<{ address: string; styleId: string }> = [];
+    const styleIds = new Set<string>();
+    for (const [baseStyleId, addresses] of groups) {
+      const baseStyle =
+        baseStyleId === undefined ? {} : await this.cellFormatForStyleId(baseStyleId);
+      const styleId = await this.ensureCellStyle({ ...baseStyle, ...style });
+      styleIds.add(styleId);
+      for (const address of addresses) {
+        patches.push({ address, styleId });
+      }
+    }
+
+    const result = applyCellStyles(sheetXml, patches);
+    this.pkg.setText(sheet.partName, result.xml);
+    return [...styleIds];
   }
 
   async replaceTableRows(tableName: string, rows: CellInput[][]): Promise<WorkbookTable> {
@@ -1183,6 +1497,250 @@ export class Workbook {
     });
 
     return table;
+  }
+
+  async addSheet(name: string): Promise<WorkbookSheet> {
+    validateSheetName(name);
+    this.assertSheetNameAvailable(name);
+
+    const partName = this.nextWorksheetPartName();
+    this.pkg.addTextPart(
+      partName,
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1"/><sheetData/></worksheet>'
+    );
+    await this.pkg.upsertContentTypeOverride(partName, worksheetContentType);
+    return this.registerSheet(name, partName);
+  }
+
+  async copySheet(sheetName: string, nextName: string): Promise<WorkbookSheet> {
+    validateSheetName(nextName);
+    this.assertSheetNameAvailable(nextName);
+
+    const source = this.sheet(sheetName);
+    let xml = await this.pkg.readText(source.partName);
+    const strippedElements: string[] = [];
+    for (const localName of [
+      "drawing",
+      "legacyDrawing",
+      "legacyDrawingHF",
+      "picture",
+      "tableParts",
+      "pivotTableDefinition"
+    ]) {
+      const stripped = removeXmlElements(xml, localName);
+      if (stripped !== xml) {
+        strippedElements.push(localName);
+        xml = stripped;
+      }
+    }
+
+    const partName = this.nextWorksheetPartName();
+    this.pkg.addTextPart(partName, xml);
+    await this.pkg.upsertContentTypeOverride(partName, worksheetContentType);
+
+    for (const relationship of await this.pkg.relationshipsFor(source.partName)) {
+      if (relationship.type === hyperlinkRelationship) {
+        await this.pkg.upsertRelationship(partName, relationship);
+      }
+    }
+
+    if (strippedElements.length > 0) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "SHEET_COPY_FEATURES_NOT_COPIED",
+        message: `Copied sheet ${nextName} without ${strippedElements.join(", ")}; tables, drawings, comments, and pivot tables are not duplicated`,
+        part: partName
+      });
+    }
+
+    const copied = await this.registerSheet(nextName, partName, {
+      ...(source.state === undefined ? {} : { state: source.state })
+    });
+    return copied;
+  }
+
+  async deleteSheet(sheetName: string): Promise<void> {
+    const sheet = this.sheet(sheetName);
+    if (
+      !this.sheets().some(
+        (candidate) => candidate.name !== sheetName && candidate.state === undefined
+      )
+    ) {
+      throw new WorkbookError("Workbook must keep at least one visible worksheet");
+    }
+
+    const workbookXml = await this.pkg.readText(this.workbookPart);
+    const sheetTags = findStartTags(workbookXml, "sheet");
+    const sheetIndex = sheetTags.findIndex(
+      (candidate) => candidate.attributes["r:id"] === sheet.relationshipId
+    );
+    const sheetTag = sheetTags[sheetIndex];
+    if (sheetTag === undefined) {
+      throw new WorkbookError(`Workbook XML is missing sheet ${sheetName}`);
+    }
+
+    const sheetEnd = sheetTag.selfClosing ? sheetTag.end : findElementEnd(workbookXml, sheetTag);
+    let nextWorkbookXml = `${workbookXml.slice(0, sheetTag.start)}${workbookXml.slice(sheetEnd)}`;
+    nextWorkbookXml = removeScopedDefinedNames(nextWorkbookXml, sheetIndex);
+    nextWorkbookXml = clampActiveTab(nextWorkbookXml, this.sheets().length - 1);
+    this.pkg.setText(this.workbookPart, nextWorkbookXml);
+
+    await this.pkg.removeRelationships(
+      this.workbookPart,
+      (relationship) => relationship.id === sheet.relationshipId
+    );
+
+    const partsToDelete = await this.collectSheetPartsForDeletion(sheet.partName);
+    for (const partName of partsToDelete) {
+      this.pkg.deletePart(partName);
+      this.pkg.deletePart(relationshipPartName(partName));
+      await this.pkg.removeContentTypeOverride(partName);
+    }
+
+    this.sheetsByName.delete(sheetName);
+
+    for (const partName of this.pkg.listParts().filter((part) => part.endsWith(".xml"))) {
+      const xml = await this.pkg.readText(partName);
+      const nextXml = rewriteFormulaElements(xml, (formula) =>
+        breakFormulaSheetReferences(formula, sheetName)
+      );
+      if (nextXml !== xml) {
+        this.pkg.setText(partName, nextXml);
+        this.addDiagnostic({
+          severity: "warning",
+          code: "SHEET_DELETE_BROKE_FORMULAS",
+          message: `Formulas referencing deleted sheet ${sheetName} now contain #REF!`,
+          part: partName
+        });
+      }
+    }
+
+    const pivotSources = await this.pivotCacheSources();
+    if (pivotSources.some((source) => source.sheet?.toLowerCase() === sheetName.toLowerCase())) {
+      this.addDiagnostic({
+        severity: "warning",
+        code: "SHEET_DELETE_PIVOT_SOURCE_BROKEN",
+        message: `Pivot caches source data from deleted sheet ${sheetName}; pivots need a new source`,
+        part: this.workbookPart
+      });
+    }
+
+    await this.forceRecalculateOnOpen();
+  }
+
+  private assertSheetNameAvailable(name: string): void {
+    const duplicate = this.sheets().find(
+      (candidate) => candidate.name.toLowerCase() === name.toLowerCase()
+    );
+    if (duplicate !== undefined) {
+      throw new WorkbookError(`Sheet name ${name} is already used by ${duplicate.name}`);
+    }
+  }
+
+  private nextWorksheetPartName(): string {
+    let index = 1;
+    while (this.pkg.hasPart(`xl/worksheets/sheet${index}.xml`)) {
+      index += 1;
+    }
+
+    return `xl/worksheets/sheet${index}.xml`;
+  }
+
+  private async registerSheet(
+    name: string,
+    partName: string,
+    options: { state?: WorkbookSheetState } = {}
+  ): Promise<WorkbookSheet> {
+    const relationshipId = await this.pkg.nextRelationshipId(this.workbookPart);
+    await this.pkg.upsertRelationship(this.workbookPart, {
+      id: relationshipId,
+      type: worksheetRelationship,
+      target: relativeRelationshipTarget(this.workbookPart, partName)
+    });
+
+    const workbookXml = await this.pkg.readText(this.workbookPart);
+    const sheetTags = findStartTags(workbookXml, "sheet");
+    const lastSheetTag = sheetTags.at(-1);
+    if (lastSheetTag === undefined) {
+      throw new WorkbookError("Workbook XML is missing a sheets container");
+    }
+
+    const sheetId = String(
+      Math.max(0, ...sheetTags.map((tag) => Number.parseInt(tag.attributes.sheetId ?? "0", 10))) + 1
+    );
+    const stateAttribute = options.state === undefined ? "" : ` state="${options.state}"`;
+    const sheetXml = `<${lastSheetTag.name} name="${escapeXmlAttribute(name)}" sheetId="${sheetId}"${stateAttribute} r:id="${relationshipId}"/>`;
+    const insertionPoint = lastSheetTag.selfClosing
+      ? lastSheetTag.end
+      : findElementEnd(workbookXml, lastSheetTag);
+    this.pkg.setText(
+      this.workbookPart,
+      `${workbookXml.slice(0, insertionPoint)}${sheetXml}${workbookXml.slice(insertionPoint)}`
+    );
+
+    const sheet: WorkbookSheet = {
+      name,
+      id: sheetId,
+      relationshipId,
+      partName,
+      ...(options.state === undefined ? {} : { state: options.state })
+    };
+    this.sheetsByName.set(name, sheet);
+    return sheet;
+  }
+
+  private async collectSheetPartsForDeletion(sheetPartName: string): Promise<Set<string>> {
+    const toDelete = new Set<string>([sheetPartName]);
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      for (const partName of [...toDelete]) {
+        for (const relationship of await this.pkg.relationshipsFor(partName)) {
+          if (relationship.targetMode === "External") {
+            continue;
+          }
+
+          const target = resolveRelationshipTarget(partName, relationship.target);
+          if (!this.pkg.hasPart(target) || toDelete.has(target)) {
+            continue;
+          }
+
+          if (!(await this.partReferencedOutside(target, toDelete))) {
+            toDelete.add(target);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    return toDelete;
+  }
+
+  private async partReferencedOutside(target: string, excluded: Set<string>): Promise<boolean> {
+    for (const relationship of await this.pkg.rootRelationships()) {
+      if (resolveRelationshipTarget("", relationship.target) === target) {
+        return true;
+      }
+    }
+
+    for (const partName of this.pkg.listParts()) {
+      if (excluded.has(partName) || partName.endsWith(".rels")) {
+        continue;
+      }
+
+      for (const relationship of await this.pkg.relationshipsFor(partName)) {
+        if (relationship.targetMode === "External") {
+          continue;
+        }
+
+        if (resolveRelationshipTarget(partName, relationship.target) === target) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   async renameSheet(sheetName: string, nextName: string): Promise<WorkbookSheet> {
@@ -1993,21 +2551,127 @@ export class Workbook {
   }
 }
 
-function cellFormatFromStyleInput(style: WorkbookCellStyleInput): WorkbookCellFormat {
-  return {
-    ...(style.applyAlignment === undefined ? {} : { applyAlignment: style.applyAlignment }),
-    ...(style.applyBorder === undefined ? {} : { applyBorder: style.applyBorder }),
-    ...(style.applyFill === undefined ? {} : { applyFill: style.applyFill }),
-    ...(style.applyFont === undefined ? {} : { applyFont: style.applyFont }),
-    ...(style.applyNumberFormat === undefined
-      ? {}
-      : { applyNumberFormat: style.applyNumberFormat }),
-    ...(style.borderId === undefined ? {} : { borderId: style.borderId }),
-    ...(style.fillId === undefined ? {} : { fillId: style.fillId }),
-    ...(style.fontId === undefined ? {} : { fontId: style.fontId }),
-    ...(style.numFmtId === undefined ? {} : { numFmtId: style.numFmtId }),
-    ...(style.xfId === undefined ? {} : { xfId: style.xfId })
-  };
+function removeXmlElements(xml: string, localName: string): string {
+  let nextXml = xml;
+  const tags = findStartTags(nextXml, localName).sort((left, right) => right.start - left.start);
+  for (const tag of tags) {
+    const end = tag.selfClosing ? tag.end : findElementEnd(nextXml, tag);
+    nextXml = `${nextXml.slice(0, tag.start)}${nextXml.slice(end)}`;
+  }
+
+  return nextXml;
+}
+
+function removeScopedDefinedNames(workbookXml: string, deletedSheetIndex: number): string {
+  let nextXml = workbookXml;
+  const tags = findStartTags(nextXml, "definedName")
+    .map((tag) => ({
+      end: tag.selfClosing ? tag.end : findElementEnd(nextXml, tag),
+      tag
+    }))
+    .sort((left, right) => right.tag.start - left.tag.start);
+
+  for (const { end, tag } of tags) {
+    const localSheetId = tag.attributes.localSheetId;
+    if (localSheetId === undefined) {
+      continue;
+    }
+
+    const index = Number.parseInt(localSheetId, 10);
+    if (!Number.isInteger(index) || index < deletedSheetIndex) {
+      continue;
+    }
+
+    if (index === deletedSheetIndex) {
+      nextXml = `${nextXml.slice(0, tag.start)}${nextXml.slice(end)}`;
+      continue;
+    }
+
+    nextXml = `${nextXml.slice(0, tag.start)}${upsertAttributes(tag.raw, {
+      localSheetId: String(index - 1)
+    })}${nextXml.slice(tag.end)}`;
+  }
+
+  return nextXml;
+}
+
+function clampActiveTab(workbookXml: string, remainingSheetCount: number): string {
+  const view = findFirstStartTag(workbookXml, "workbookView");
+  if (view === undefined) {
+    return workbookXml;
+  }
+
+  const activeTab = Number.parseInt(view.attributes.activeTab ?? "0", 10);
+  if (!Number.isInteger(activeTab) || activeTab < remainingSheetCount) {
+    return workbookXml;
+  }
+
+  return `${workbookXml.slice(0, view.start)}${upsertAttributes(view.raw, {
+    activeTab: String(Math.max(0, remainingSheetCount - 1))
+  })}${workbookXml.slice(view.end)}`;
+}
+
+function shiftTablePartRows(xml: string, edit: FormulaRowEdit): string {
+  let nextXml = xml;
+  for (const localName of ["table", "autoFilter"]) {
+    const tag = findFirstStartTag(nextXml, localName);
+    if (tag === undefined) {
+      continue;
+    }
+
+    const ref = tag.attributes.ref;
+    if (ref === undefined) {
+      continue;
+    }
+
+    const mapped = mapRangeRefThroughEdit(ref, edit);
+    if (mapped === undefined || mapped === ref) {
+      continue;
+    }
+
+    nextXml = `${nextXml.slice(0, tag.start)}${upsertAttributes(tag.raw, {
+      ref: mapped
+    })}${nextXml.slice(tag.end)}`;
+  }
+
+  return nextXml;
+}
+
+function shiftCommentRefsXml(xml: string, edit: FormulaRowEdit): string {
+  let nextXml = xml;
+  const comments = findStartTags(nextXml, "comment")
+    .map((tag) => {
+      const ref = tag.attributes.ref;
+      if (ref === undefined) {
+        return undefined;
+      }
+
+      const mapped = mapRangeRefThroughEdit(ref, edit);
+      if (mapped === ref) {
+        return undefined;
+      }
+
+      return {
+        end: tag.selfClosing ? tag.end : findElementEnd(nextXml, tag),
+        mapped,
+        tag
+      };
+    })
+    .filter((comment) => comment !== undefined)
+    .sort((left, right) => right.tag.start - left.tag.start);
+
+  for (const comment of comments) {
+    if (comment.mapped === undefined) {
+      nextXml = `${nextXml.slice(0, comment.tag.start)}${nextXml.slice(comment.end)}`;
+      continue;
+    }
+
+    nextXml = `${nextXml.slice(0, comment.tag.start)}${upsertAttributes(comment.tag.raw, {
+      ref: comment.mapped
+    })}${nextXml.slice(comment.tag.end)}`;
+  }
+
+  return nextXml;
 }
 
 function formulaReferenceRange(reference: FormulaReference): CellRange {

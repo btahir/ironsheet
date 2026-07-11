@@ -256,6 +256,40 @@ export function readRange(
   };
 }
 
+export function readWorksheetCells(
+  xml: string,
+  options: { sharedStrings?: string[] } = {}
+): ReadCellResult[] {
+  const sharedStrings = options.sharedStrings ?? [];
+  const cells: ReadCellResult[] = [];
+
+  for (const tag of findStartTags(xml, "c")) {
+    const address = tag.attributes.r;
+    if (address === undefined) {
+      continue;
+    }
+
+    const raw = tag.selfClosing ? tag.raw : xml.slice(tag.start, findElementEnd(xml, tag));
+    const result: ReadCellResult = {
+      address: address.toUpperCase(),
+      value: readCellValue(raw, sharedStrings)
+    };
+
+    if (tag.attributes.s !== undefined) {
+      result.styleId = tag.attributes.s;
+    }
+
+    const formula = readTagText(raw, "f");
+    if (formula !== undefined) {
+      result.formula = formula;
+    }
+
+    cells.push(result);
+  }
+
+  return cells;
+}
+
 export function patchCell(xml: string, address: string, value: CellInput): PatchCellResult {
   const parsedAddress = parseCellAddress(address);
   const existing = findCellElement(xml, parsedAddress.address);
@@ -339,6 +373,26 @@ export function applyCellStyle(xml: string, address: string, styleId: string): P
     xml: updateDimension(styled, parsedAddress.address),
     formulaChanged: false,
     affectedRanges: [parseCellRange(parsedAddress.address)]
+  };
+}
+
+export function applyCellStyles(
+  xml: string,
+  patches: Array<{ address: string; styleId: string }>
+): PatchCellResult {
+  let nextXml = xml;
+  const affectedRanges: CellRange[] = [];
+
+  for (const patch of patches) {
+    const result = applyCellStyle(nextXml, patch.address, patch.styleId);
+    nextXml = result.xml;
+    affectedRanges.push(...result.affectedRanges);
+  }
+
+  return {
+    xml: nextXml,
+    formulaChanged: false,
+    affectedRanges
   };
 }
 

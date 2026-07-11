@@ -147,6 +147,7 @@ Stable read APIs:
 
 - `workbook.readCell(sheetName, address)`
 - `workbook.readRange(sheetName, ref)`
+- `workbook.readSheetCells(sheetName)`
 - `workbook.readNamedRange(name, options?)`
 
 Stable mutation APIs:
@@ -156,9 +157,16 @@ Stable mutation APIs:
 - `workbook.patchRange(sheetName, startAddress, values)`
 - `workbook.patchNamedRange(name, values, options?)`
 - `workbook.appendRows(sheetName, rows, options?)`
+- `workbook.clearCell(sheetName, address, options?)`
+- `workbook.clearRange(sheetName, ref, options?)`
+- `workbook.insertRows(sheetName, beforeRow, count?)`
+- `workbook.deleteRows(sheetName, startRow, count?)`
 - `workbook.replaceTableRows(tableName, rows)`
 - `workbook.appendTableColumn(tableName, columnName, values?)`
 - `workbook.removeRightmostTableColumn(tableName, columnName)`
+- `workbook.addSheet(name)`
+- `workbook.copySheet(sheetName, nextName)`
+- `workbook.deleteSheet(sheetName)`
 - `workbook.renameSheet(sheetName, nextName)`
 - `workbook.renameTable(tableName, nextName)`
 - `workbook.renameTableColumn(tableName, columnName, nextName)`
@@ -166,6 +174,8 @@ Stable mutation APIs:
 - `workbook.insertImage(sheetName, data, options?)`
 - `workbook.setDefinedName(name, text, options?)`
 - `workbook.deleteDefinedName(name, options?)`
+- `workbook.styleCell(sheetName, address, style)`
+- `workbook.styleRange(sheetName, ref, style)`
 
 Advanced preservation APIs:
 
@@ -176,11 +186,57 @@ Advanced preservation APIs:
 - `workbook.setDataValidation(sheetName, dataValidation)`
 - `workbook.setHyperlink(sheetName, ref, target, options?)`
 - `workbook.mergeCells(sheetName, ref)`
-- `workbook.styleCell(sheetName, address, style)`
 
 These advanced APIs are intentionally narrow. They should preserve unknown XML, update only the targeted structure, and emit diagnostics when adjacent workbook features may require review.
 
 `workbook.insertImage` creates the media part, worksheet drawing part when needed, drawing relationships, content types, and picture anchor XML. Omit `options.anchor` for a default A1 one-cell anchor, or pass a one-cell/two-cell anchor with zero-based drawing coordinates and EMU offsets.
+
+## Styling
+
+`styleCell` and `styleRange` author fonts, fills, borders, alignment, and number formats. Records are deduplicated: styling a whole range with one style adds one `xf` record per distinct base style, not one per cell.
+
+```ts
+await workbook.styleRange("Sheet1", "A1:D1", {
+  font: { bold: true, color: "FFFFFF", name: "Aptos", size: 12 },
+  fill: "1F4E79",
+  border: { bottom: { style: "medium", color: "0B2942" } },
+  alignment: { horizontal: "center", wrapText: true },
+  numberFormat: "$#,##0.00"
+});
+```
+
+Colors accept `RRGGBB`, `#RRGGBB`, or `AARRGGBB` hex. Existing cell styles are preserved and merged: setting only `font` on a currency cell keeps its number format. Providing `font`, `fill`, or `border` replaces that component wholesale rather than merging attribute-by-attribute.
+
+## Structural Row Edits
+
+`insertRows` and `deleteRows` shift rows the way Excel does:
+
+- Row elements, cell references, shared/array formula anchors, merged cells, hyperlinks, data validations, conditional formats, auto filters, comment anchors, and the sheet dimension all shift.
+- Formulas across the whole workbook are rewritten, including cross-sheet references and defined names. References into deleted rows become `#REF!`; ranges shrink or grow like Excel.
+- Tables entirely below an insertion shift. Edits that overlap a table range are refused; use the table APIs to resize tables.
+- Deleting rows that would orphan a surviving shared or array formula group is refused with a clear error.
+- Drawings and pivot sources are not rewritten; Ironsheet emits review diagnostics instead of guessing.
+
+## Sheet Lifecycle
+
+- `addSheet(name)` creates an empty worksheet with correct content types and relationships.
+- `copySheet(name, nextName)` duplicates cells, styles, merges, validations, and external hyperlinks. Tables, drawings, comments, and pivot tables are intentionally not duplicated; a diagnostic lists what was skipped.
+- `deleteSheet(name)` removes the sheet and cascade-deletes parts only it references, drops sheet-scoped defined names, reindexes surviving scoped names, breaks formulas that referenced the sheet with `#REF!`, and keeps at least one visible sheet.
+
+## Semantic Workbook Diff
+
+`diffWorkbooks(before, after)` compares two open workbooks cell-by-cell:
+
+```ts
+import { diffWorkbooks } from "@ironsheet/core";
+
+const diff = await diffWorkbooks(before, after);
+// diff.cells: [{ sheetName, address, kind: "added" | "changed" | "removed", changed: ["value", "style"], before, after }]
+// diff.sheets, diff.definedNames, diff.tables: added/removed/changed name lists
+// diff.summary: { addedCells, changedCells, removedCells, truncated }
+```
+
+Use it in CI to prove a render changed exactly what it should have. The package-level `diffZipPackages` answers "which parts changed"; `diffWorkbooks` answers "which cells and what about them".
 
 ## Cell Values
 
@@ -218,6 +274,7 @@ npm run cli -- validate workbook.xlsx
 npm run cli -- template-manifest workbook.xlsx
 npm run cli -- preflight-template workbook.xlsx @patch.json
 npm run cli -- diff before.xlsx after.xlsx
+npm run cli -- diff-cells before.xlsx after.xlsx
 ```
 
 Mutating commands use safe writes by default and print a `WorkbookSafeWriteReport`:
@@ -228,6 +285,13 @@ npm run cli -- patch-named-range input.xlsx output.xlsx RevenueRange '[["North",
 npm run cli -- replace-table input.xlsx output.xlsx RevenueTable '[["North",42000]]'
 npm run cli -- replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
 npm run cli -- insert-image input.xlsx output.xlsx Sheet1 logo.png
+npm run cli -- style-range input.xlsx output.xlsx Sheet1 A1:D1 '{"font":{"bold":true},"fill":"1F4E79"}'
+npm run cli -- clear-range input.xlsx output.xlsx Sheet1 A10:D20
+npm run cli -- insert-rows input.xlsx output.xlsx Sheet1 5 2
+npm run cli -- delete-rows input.xlsx output.xlsx Sheet1 5 2
+npm run cli -- add-sheet input.xlsx output.xlsx Report
+npm run cli -- copy-sheet input.xlsx output.xlsx Sheet1 "Sheet1 Copy"
+npm run cli -- delete-sheet input.xlsx output.xlsx Scratch
 ```
 
 If validation fails, the command exits nonzero and does not write the output file.

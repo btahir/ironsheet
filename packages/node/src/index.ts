@@ -152,6 +152,85 @@ export async function styleWorkbookCell(
   await writeWorkbook(workbook, outputPath);
 }
 
+export async function styleWorkbookRange(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rangeRef: string,
+  style: WorkbookCellStyleInput
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.styleRange(sheetName, rangeRef, style);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function clearWorkbookRange(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  rangeRef: string,
+  options: { keepStyles?: boolean } = {}
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.clearRange(sheetName, rangeRef, options);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function insertWorkbookRows(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  beforeRow: number,
+  count = 1
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.insertRows(sheetName, beforeRow, count);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function deleteWorkbookRows(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  startRow: number,
+  count = 1
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.deleteRows(sheetName, startRow, count);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function addWorkbookSheet(
+  inputPath: string,
+  outputPath: string,
+  name: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.addSheet(name);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function copyWorkbookSheet(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string,
+  nextName: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.copySheet(sheetName, nextName);
+  await writeWorkbook(workbook, outputPath);
+}
+
+export async function deleteWorkbookSheet(
+  inputPath: string,
+  outputPath: string,
+  sheetName: string
+): Promise<void> {
+  const workbook = await readWorkbook(inputPath);
+  await workbook.deleteSheet(sheetName);
+  await writeWorkbook(workbook, outputPath);
+}
+
 export async function appendWorkbookRows(
   inputPath: string,
   outputPath: string,
