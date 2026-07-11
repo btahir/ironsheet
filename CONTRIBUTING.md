@@ -1,0 +1,76 @@
+# Contributing to Ironsheet
+
+Thanks for helping us move fast and break no spreadsheets. Ironsheet is a preservation-first OOXML workbook engine: the top priority is lossless mutation of real Excel workbooks, ahead of broad feature checklists.
+
+## Development Setup
+
+Requirements: Node.js >= 18 and npm. There are zero runtime dependencies; everything else installs as dev tooling.
+
+```bash
+npm ci
+npm run verify
+```
+
+`npm run verify` is the fast local gate. It enforces repository guard rules (TypeScript-only scripts, no planning docs in commits) and then runs formatting, lint, typecheck, and the test suite.
+
+Optional: install the repo git hooks with `npm run hooks:install`.
+
+## Test Commands
+
+```bash
+npm test                    # full test suite (Node built-in test runner via tsx)
+npm run typecheck           # tsc --noEmit
+npm run ci                  # verify + compat corpus; run before handing work back
+npm run compat:corpus       # build generated fixtures and run compatibility checks
+npm run compat:check -- path/to/workbook.xlsx   # compat report for one workbook
+```
+
+Tests live in `tests/*.test.ts` and use the Node built-in test runner (`node:test` with `node:assert/strict`). Add or update tests with every behavior change.
+
+## Formatting and Lint
+
+Biome handles both formatting and linting:
+
+```bash
+npm run format        # write formatting fixes
+npm run format:check  # check only
+npm run lint          # lint
+```
+
+## Implementation Rules
+
+- Use TypeScript for implementation, scripts, tests, fixtures, and tooling logic. JavaScript files under `scripts/` are rejected by `npm run verify`.
+- Keep runtime code dependency-light and justify every dependency.
+- Do not import Node built-ins from runtime-neutral core packages (`@ironsheet/core` must stay browser-compatible). Runtime-specific IO and compression belong in `@ironsheet/node` and `@ironsheet/browser`.
+- Prefer structured parsers and typed models over ad hoc string manipulation.
+- Treat diagnostics, validation, and compatibility fixtures as first-class product surfaces.
+
+## Commit Conventions
+
+- Use conventional-commit style prefixes, matching the existing history: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
+- Use `npm run commit:safe -- "feat: short description"` for local commits. It stages your changes, keeps planning docs out of the commit, runs `npm run ci`, and only commits if everything passes.
+- Do not commit `IRONSHEET_SPEC.md`; it is intentionally ignored planning material.
+
+## How the Compat Corpus Works
+
+The compatibility corpus is the regression gate that keeps Ironsheet honest about real workbooks:
+
+- `fixtures/corpus/manifest.json` lists fixtures with a `status` (`active` or `pending`) and the validators each fixture must pass (`requiredValidators`).
+- `npm run compat:fixtures` generates smoke workbooks into `fixtures/corpus/workbooks/generated/` (they are gitignored and rebuilt from TypeScript).
+- `npm run compat:corpus` runs every active fixture through the validator stack in `scripts/compat.ts`: file existence, ZIP integrity, Ironsheet semantic validation, and optional external validators (LibreOffice, Numbers, Excel, Open XML SDK).
+- External validators are opt-in via environment variables, for example `IRONSHEET_RUN_LIBREOFFICE=1` or `IRONSHEET_RUN_OPENXML_SDK=1` (requires the .NET 8 SDK; the harness lives in `tools/openxml-validator/`).
+- Reports are written to `compat-output/` as JSON.
+- `npm run compat:corpus:strict` is the release gate and fails on skipped required validators.
+- Real Excel-authored fixtures go through `npm run compat:intake`; see `docs/api.md` for the fixture intake flow.
+
+## Pull Request Expectations
+
+- Run `npm run ci` locally before opening or updating a PR; it must pass.
+- Keep PRs focused: one behavior change or feature per PR.
+- Include tests for behavior changes and update `docs/api.md` when the public API changes.
+- Preservation regressions are release blockers. If your change touches workbook mutation, explain in the PR how you verified that untouched workbook parts are preserved (package diffs, compat corpus, or new fixtures).
+- Fill in the pull request template, including how you tested the change.
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the Apache License 2.0 (see `LICENSE`).

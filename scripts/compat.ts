@@ -222,11 +222,20 @@ function checkLibreOffice(workbookPath: string): CompatibilityCheck {
 }
 
 function checkOpenXmlSdk(workbookPath: string): CompatibilityCheck {
+  if (process.env.IRONSHEET_RUN_OPENXML_SDK !== "1") {
+    return {
+      validator: "openxml-sdk",
+      status: "skip",
+      message:
+        "Open XML SDK validation is not enabled. Set IRONSHEET_RUN_OPENXML_SDK=1 to run the validator in tools/openxml-validator."
+    };
+  }
+
   if (!commandExists("dotnet")) {
     return {
       validator: "openxml-sdk",
       status: "skip",
-      message: ".NET SDK is not installed; Open XML SDK validation is unavailable"
+      message: "IRONSHEET_RUN_OPENXML_SDK=1 is set, but the .NET SDK (`dotnet`) is not installed"
     };
   }
 
@@ -234,18 +243,8 @@ function checkOpenXmlSdk(workbookPath: string): CompatibilityCheck {
   if (!existsSync(projectPath)) {
     return {
       validator: "openxml-sdk",
-      status: "manual",
-      message:
-        ".NET SDK is available, but tools/openxml-validator/OpenXmlValidator.csproj is not scaffolded yet"
-    };
-  }
-
-  if (process.env.IRONSHEET_RUN_OPENXML_SDK !== "1") {
-    return {
-      validator: "openxml-sdk",
-      status: "manual",
-      message:
-        "Open XML SDK validator harness is available. Set IRONSHEET_RUN_OPENXML_SDK=1 to run it."
+      status: "fail",
+      message: `Open XML SDK validator project is missing: ${projectPath}`
     };
   }
 

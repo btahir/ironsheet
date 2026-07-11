@@ -8,6 +8,8 @@ type PackageJson = {
   name?: string;
   version?: string;
   private?: boolean;
+  license?: string;
+  repository?: string | { type?: string; url?: string; directory?: string };
   main?: string;
   types?: string;
   exports?: Record<string, unknown>;
@@ -84,6 +86,8 @@ function assertDirectory(path: string, message: string): void {
 }
 
 function assertWorkspaceMetadata(): void {
+  assertFile("LICENSE", "LICENSE file is missing at the repository root");
+
   const packages = packageDirs.map((dir) => ({
     dir,
     json: readJson<PackageJson>(join(dir, "package.json"))
@@ -97,6 +101,14 @@ function assertWorkspaceMetadata(): void {
 
     if (json.private === true) {
       fail(`${json.name} must not be private when preparing publishable packages`);
+    }
+
+    if (json.license !== "Apache-2.0") {
+      fail(`${json.name} must be licensed Apache-2.0, found ${json.license ?? "no license field"}`);
+    }
+
+    if (json.repository === undefined) {
+      fail(`${json.name} must define a repository field`);
     }
 
     if (json.version === undefined || json.version.length === 0) {

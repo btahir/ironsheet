@@ -3,8 +3,26 @@
   "version": "0.0.0",
   "type": "module",
   "description": "Node.js IO, compression, and safe-write adapter for Ironsheet workbooks.",
-  "license": "UNLICENSED",
-  "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "typescript", "node"],
+  "license": "Apache-2.0",
+  "author": "Ironsheet contributors",
+  "homepage": "https://github.com/ironsheet/ironsheet#readme",
+  "bugs": "https://github.com/ironsheet/ironsheet/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ironsheet/ironsheet.git",
+    "directory": "packages/node"
+  },
+  "keywords": [
+    "excel",
+    "xlsx",
+    "xlsm",
+    "ooxml",
+    "spreadsheet",
+    "template",
+    "lossless",
+    "typescript",
+    "node"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

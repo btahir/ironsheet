@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Move fast and break no spreadsheets.",
+  "license": "Apache-2.0",
   "workspaces": ["packages/*"],
   "scripts": {
     "ci": "npm run verify && npm run compat:corpus",

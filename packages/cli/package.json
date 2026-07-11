@@ -3,8 +3,16 @@
   "version": "0.0.0",
   "type": "module",
   "description": "Safe command-line workbook inspection, validation, and XLSX/XLSM edits for Ironsheet.",
-  "license": "UNLICENSED",
-  "keywords": ["xlsx", "xlsm", "excel", "ooxml", "spreadsheet", "cli"],
+  "license": "Apache-2.0",
+  "author": "Ironsheet contributors",
+  "homepage": "https://github.com/ironsheet/ironsheet#readme",
+  "bugs": "https://github.com/ironsheet/ironsheet/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ironsheet/ironsheet.git",
+    "directory": "packages/cli"
+  },
+  "keywords": ["excel", "xlsx", "xlsm", "ooxml", "spreadsheet", "template", "lossless", "cli"],
   "main": "./dist/cli.js",
   "types": "./dist/cli.d.ts",
   "exports": {
