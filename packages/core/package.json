@@ -1,15 +1,15 @@
 {
   "name": "@ironsheet/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "Lossless TypeScript OOXML workbook engine for editing real XLSX and XLSM files.",
   "license": "Apache-2.0",
   "author": "Ironsheet contributors",
-  "homepage": "https://github.com/ironsheet/ironsheet#readme",
-  "bugs": "https://github.com/ironsheet/ironsheet/issues",
+  "homepage": "https://github.com/btahir/ironsheet#readme",
+  "bugs": "https://github.com/btahir/ironsheet/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ironsheet/ironsheet.git",
+    "url": "git+https://github.com/btahir/ironsheet.git",
     "directory": "packages/core"
   },
   "keywords": [
@@ -32,5 +32,8 @@
     }
   },
   "files": ["dist", "src"],
-  "sideEffects": false
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  }
 }
