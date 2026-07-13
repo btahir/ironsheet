@@ -96,4 +96,4 @@ Non-goals for the first paid wedge:
 - Keep expanding table collision tests for tables below the edited table, filters, and calculated columns.
 - Expand chart, pivot, and image fixture coverage from Excel-authored workbooks.
 - Add ZIP64 writing and streaming package IO before claiming true very-large-workbook support.
-- Add release changelog/version automation on top of the current package metadata, provenance, and npm dry-run preflight.
+- Add release changelog/version automation on top of the current package metadata and dependency-ordered npm dry-run preflight.

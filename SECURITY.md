@@ -4,10 +4,13 @@
 
 Please do not report security vulnerabilities through public GitHub issues.
 
-Instead, use one of these private channels:
+Use GitHub private vulnerability reporting:
 
-- Email: security@ironsheet.dev
-- GitHub private vulnerability reporting: use "Report a vulnerability" under the repository's Security tab (GitHub security advisories)
+- Open the repository's **Security** tab.
+- Select **Advisories**, then **Report a vulnerability**.
+- Start a private draft security advisory with the details below.
+
+If the private reporting button is unavailable, do not open a public issue or include exploit details in a public discussion. Contact the repository owner privately first.
 
 Include as much of the following as you can:
 

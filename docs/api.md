@@ -347,6 +347,6 @@ Run release preflight before publishing packages:
 npm run release:check
 ```
 
-Use `npm run release:check:strict` when package versions have been moved off `0.0.0` and the release should fail on placeholder metadata.
+Use `npm run release:check:strict` for an actual release candidate. It also rejects placeholder versions, pending corpus fixtures, missing npm authentication, and failing package dry-runs.
 
-Real workbook fixtures are the next release gate. Add cleared XLSX/XLSM templates under `fixtures/corpus/workbooks/`, mark them active in `fixtures/corpus/manifest.json`, and require them to pass `ironsheet-validation` plus any available app validators.
+Add cleared XLSX/XLSM templates under `fixtures/corpus/workbooks/`, mark them active in `fixtures/corpus/manifest.json`, and require them to pass `ironsheet-validation` plus any available app validators before running the strict release preflight.

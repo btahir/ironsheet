@@ -18,6 +18,17 @@ type PackageJson = {
   dependencies?: Record<string, string>;
 };
 
+type PackageLock = {
+  packages?: Record<
+    string,
+    {
+      name?: string;
+      version?: string;
+      dependencies?: Record<string, string>;
+    }
+  >;
+};
+
 type Capability = {
   name: string;
   status: "available" | "manual" | "missing";
@@ -25,6 +36,13 @@ type Capability = {
 };
 
 const releaseMode = process.argv.includes("--release");
+const publishOrder = [
+  "@ironsheet/core",
+  "@ironsheet/node",
+  "@ironsheet/browser",
+  "@ironsheet/compat",
+  "@ironsheet/cli"
+] as const;
 const packageDirs = readdirSync("packages", { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .map((entry) => join("packages", entry.name))
@@ -38,6 +56,7 @@ function run(command: string, args: string[]): void {
   });
 
   if (result.status !== 0) {
+    console.error(`release: command failed: ${command} ${args.join(" ")}`);
     process.exit(result.status ?? 1);
   }
 }
@@ -87,6 +106,7 @@ function assertDirectory(path: string, message: string): void {
 
 function assertWorkspaceMetadata(): void {
   assertFile("LICENSE", "LICENSE file is missing at the repository root");
+  const packageLock = readJson<PackageLock>("package-lock.json");
 
   const packages = packageDirs.map((dir) => ({
     dir,
@@ -95,6 +115,9 @@ function assertWorkspaceMetadata(): void {
   const workspaceVersions = new Map(packages.map(({ json }) => [json.name, json.version] as const));
 
   for (const { dir, json } of packages) {
+    assertFile(join(dir, "README.md"), `${dir}/README.md is missing`);
+    assertFile(join(dir, "LICENSE"), `${dir}/LICENSE is missing`);
+
     if (json.name === undefined || !json.name.startsWith("@ironsheet/")) {
       fail(`${dir}/package.json must use an @ironsheet/* package name`);
     }
@@ -117,6 +140,13 @@ function assertWorkspaceMetadata(): void {
 
     if (releaseMode && json.version === "0.0.0") {
       fail(`${json.name} still has placeholder version 0.0.0`);
+    }
+
+    const lockedPackage = packageLock.packages?.[dir];
+    if (lockedPackage?.name !== json.name || lockedPackage.version !== json.version) {
+      fail(
+        `${json.name} package-lock metadata is stale; expected ${json.version}, found ${lockedPackage?.version ?? "no version"}`
+      );
     }
 
     if (json.main === undefined || json.types === undefined) {
@@ -155,8 +185,23 @@ function assertWorkspaceMetadata(): void {
           `${json.name} depends on ${dependency}@${version}, expected workspace version ${workspaceVersion}`
         );
       }
+
+      if (lockedPackage.dependencies?.[dependency] !== version) {
+        fail(
+          `${json.name} package-lock dependency ${dependency}@${lockedPackage.dependencies?.[dependency] ?? "missing"}, expected ${version}`
+        );
+      }
     }
   }
+}
+
+function assertNpmAuthentication(): void {
+  const identity = output("npm", ["whoami"]);
+  if (identity.length === 0) {
+    fail("npm authentication is required for a release; run npm login and retry");
+  }
+
+  console.log(`release: npm identity: ${identity}`);
 }
 
 function validatorCapabilities(): Capability[] {
@@ -206,14 +251,25 @@ function validatorCapabilities(): Capability[] {
   return capabilities;
 }
 
-run("npm", ["run", "ci"]);
+if (releaseMode) {
+  run("npm", ["run", "verify"]);
+  run("npm", ["run", "compat:corpus:strict"]);
+} else {
+  run("npm", ["run", "ci"]);
+}
 run("npm", ["run", "pack:check"]);
 assertWorkspaceMetadata();
+
+if (releaseMode) {
+  assertNpmAuthentication();
+}
 
 console.log("release: validator capability report");
 for (const capability of validatorCapabilities()) {
   console.log(`release: ${capability.name}: ${capability.status} - ${capability.message}`);
 }
 
-run("npm", ["publish", "--workspaces", "--dry-run", "--provenance", "--access", "public"]);
+for (const packageName of publishOrder) {
+  run("npm", ["publish", "--workspace", packageName, "--dry-run", "--access", "public"]);
+}
 console.log(releaseMode ? "release: strict preflight passed" : "release: preflight passed");

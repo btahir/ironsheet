@@ -120,7 +120,8 @@ When the .NET SDK is unavailable, the Open XML SDK check is skipped instead of b
 Run the package release preflight before publishing:
 
 ```bash
-npm run release:check
+npm login
+npm run release:check:strict
 ```
 
-This runs CI, workspace package dry-runs, metadata checks, validator capability reporting, and `npm publish --workspaces --dry-run --provenance --access public`.
+The strict preflight runs repository verification, rejects pending or failing corpus fixtures, checks publishable metadata and npm authentication, reports available external validators, and performs dependency-ordered workspace publish dry-runs. Publishing remains a local, manual operation and does not request npm provenance.

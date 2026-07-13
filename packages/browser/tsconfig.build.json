@@ -5,7 +5,7 @@
     "declaration": true,
     "declarationMap": true,
     "emitDeclarationOnly": false,
-    "lib": ["ES2023", "DOM"],
+    "lib": ["ES2022", "DOM"],
     "noEmit": false,
     "outDir": "dist",
     "paths": {

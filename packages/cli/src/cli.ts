@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
 import process from "node:process";
 import { readFile } from "node:fs/promises";
 import { diffWorkbooks, diffZipPackages } from "@ironsheet/core";
@@ -100,8 +101,8 @@ type Command =
   | "diff"
   | "diff-cells";
 
-function usage(): never {
-  console.error(`usage:
+function usageText(): string {
+  return `usage:
   npm run cli -- inspect <workbook.xlsx>
   npm run cli -- tables <workbook.xlsx>
   npm run cli -- formulas <workbook.xlsx>
@@ -165,7 +166,11 @@ value examples:
   hello
   123
   true
-  =SUM(A1:A3)`);
+  =SUM(A1:A3)`.replaceAll("npm run cli --", "ironsheet");
+}
+
+function usage(): never {
+  console.error(usageText());
   process.exit(2);
 }
 
@@ -1305,10 +1310,20 @@ function parseJsonCell(value: unknown): CellInput {
   throw new Error(`Unsupported table cell value ${JSON.stringify(value)}`);
 }
 
-const [command, ...args] = process.argv.slice(2) as [Command | undefined, ...string[]];
+const packageManifest = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+) as { version: string };
+const [command, ...args] = process.argv.slice(2) as [
+  Command | "--help" | "-h" | "--version" | "-v" | undefined,
+  ...string[]
+];
 
 try {
-  if (command === "inspect") {
+  if (command === "--help" || command === "-h") {
+    console.log(usageText());
+  } else if (command === "--version" || command === "-v") {
+    console.log(packageManifest.version);
+  } else if (command === "inspect") {
     const [path] = args;
     if (path === undefined) {
       usage();

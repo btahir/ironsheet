@@ -60,8 +60,32 @@ The compatibility corpus is the regression gate that keeps Ironsheet honest abou
 - `npm run compat:corpus` runs every active fixture through the validator stack in `scripts/compat.ts`: file existence, ZIP integrity, Ironsheet semantic validation, and optional external validators (LibreOffice, Numbers, Excel, Open XML SDK).
 - External validators are opt-in via environment variables, for example `IRONSHEET_RUN_LIBREOFFICE=1` or `IRONSHEET_RUN_OPENXML_SDK=1` (requires the .NET 8 SDK; the harness lives in `tools/openxml-validator/`).
 - Reports are written to `compat-output/` as JSON.
-- `npm run compat:corpus:strict` is the release gate and fails on skipped required validators.
+- `npm run compat:corpus:strict` is the release gate and fails while any corpus fixture is pending or failing.
 - Real Excel-authored fixtures go through `npm run compat:intake`; see `docs/api.md` for the fixture intake flow.
+
+## Publishing
+
+Releases are prepared and published locally. GitHub Actions is intentionally not part of the release path.
+
+Authenticate first, then run the strict preflight:
+
+```bash
+npm login
+npm whoami
+npm run release:check:strict
+```
+
+Publish the workspaces in dependency order so a package never appears before the packages it requires:
+
+```bash
+npm publish --workspace @ironsheet/core --access public
+npm publish --workspace @ironsheet/node --access public
+npm publish --workspace @ironsheet/browser --access public
+npm publish --workspace @ironsheet/compat --access public
+npm publish --workspace @ironsheet/cli --access public
+```
+
+The local release path does not request npm provenance because provenance attestations require a supported cloud CI publisher.
 
 ## Pull Request Expectations
 

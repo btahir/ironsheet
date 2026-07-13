@@ -8,6 +8,23 @@ import test from "node:test";
 import { openPackage, openWorkbook } from "../packages/node/src/index.ts";
 import { createMinimalWorkbook } from "./helpers/minimal-xlsx.ts";
 
+test("CLI help uses the installed binary name and exits successfully", () => {
+  const result = runCli(["--help"]);
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /ironsheet inspect/);
+  assert.doesNotMatch(result.stdout, /npm run cli/);
+  assert.equal(result.stderr, "");
+});
+
+test("CLI version matches the published package version", () => {
+  const result = runCli(["--version"]);
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.trim(), "0.1.0");
+  assert.equal(result.stderr, "");
+});
+
 test("CLI validate exits successfully for valid workbooks", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "ironsheet-cli-"));
 

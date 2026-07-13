@@ -136,9 +136,17 @@ const args = process.argv.slice(2);
 const manifestPath = args.find((arg) => arg !== "--strict") ?? "fixtures/corpus/manifest.json";
 const strict = args.includes("--strict") || process.env.IRONSHEET_STRICT_CORPUS === "1";
 const report = await runCorpus(manifestPath, { strict });
-console.log(JSON.stringify(report, null, 2));
-await writeCorpusReport(report);
+const reportPath = await writeCorpusReport(report);
+console.log(
+  `compat: corpus ${report.summary.passed} passed, ${report.summary.failed} failed, ${report.summary.skipped} pending (${report.summary.total} total)`
+);
 
 if (report.summary.failed > 0 || (report.strict && report.summary.skipped > 0)) {
+  for (const fixture of report.fixtures.filter((fixture) => fixture.status !== "pass")) {
+    const label = fixture.status === "skip" ? "pending" : fixture.status;
+    console.error(`compat: ${label}: ${fixture.id} - ${fixture.message}`);
+  }
+
+  console.error(`compat: corpus gate failed; see ${reportPath}`);
   process.exit(1);
 }

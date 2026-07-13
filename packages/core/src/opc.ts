@@ -165,7 +165,7 @@ export class OoxmlPackage {
     }
 
     let nextXml = xml;
-    for (const removal of removals.toReversed()) {
+    for (const removal of removals.slice().reverse()) {
       const end = removal.tag.selfClosing ? removal.tag.end : findElementEnd(nextXml, removal.tag);
       nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(end)}`;
     }

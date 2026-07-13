@@ -735,7 +735,7 @@ export function deleteWorksheetDataValidation(
   }
 
   let nextXml = xml;
-  for (const removal of removals.toReversed()) {
+  for (const removal of removals.slice().reverse()) {
     nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
   }
 
@@ -806,7 +806,7 @@ export function deleteWorksheetConditionalFormat(
   }
 
   let nextXml = xml;
-  for (const removal of removals.toReversed()) {
+  for (const removal of removals.slice().reverse()) {
     nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
   }
 
@@ -855,7 +855,7 @@ export function deleteWorksheetAutoFilter(xml: string): DeleteWorksheetAutoFilte
   }
 
   let nextXml = xml;
-  for (const removal of removals.toReversed()) {
+  for (const removal of removals.slice().reverse()) {
     nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
   }
 
@@ -937,7 +937,7 @@ export function unmergeWorksheetCells(xml: string, ref: string): UnmergeWorkshee
   }
 
   let nextXml = xml;
-  for (const removal of removals.toReversed()) {
+  for (const removal of removals.slice().reverse()) {
     nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
   }
 
@@ -1049,7 +1049,7 @@ export function deleteWorksheetHyperlink(xml: string, ref: string): DeleteWorksh
   }
 
   let nextXml = xml;
-  for (const removal of removals.toReversed()) {
+  for (const removal of removals.slice().reverse()) {
     nextXml = `${nextXml.slice(0, removal.tag.start)}${nextXml.slice(removal.end)}`;
   }
 

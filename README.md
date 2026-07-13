@@ -45,7 +45,7 @@ Use it when the workbook is the product: finance models, board reports, operatio
 
 ## Quickstart
 
-Status: Ironsheet is an active MVP. The package names below are the intended public import paths; local development currently runs from this monorepo.
+Ironsheet 0.1 is an active MVP. For Node.js applications, install the safe-write adapter and start from an existing Excel-authored workbook:
 
 ```bash
 npm install @ironsheet/node
@@ -215,6 +215,7 @@ npm run verify
 npm run ci
 npm run build
 npm run release:check
+npm run release:check:strict
 npm run brand:assets
 ```
 
