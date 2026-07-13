@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-import { rmSync } from "node:fs";
+import { chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
@@ -21,4 +21,8 @@ for (const packageName of packages) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+if (process.platform !== "win32") {
+  chmodSync(join("packages", "cli", "dist", "cli.js"), 0o755);
 }

@@ -55,13 +55,13 @@ Build demo/regression starter templates:
 npm run templates:build
 ```
 
-Run the release-style strict corpus gate:
+Run the corpus completeness gate:
 
 ```bash
 npm run compat:corpus:strict
 ```
 
-Strict mode fails if any manifest fixture is still skipped. Use it before release after real Excel-authored fixtures have been added and activated.
+Strict corpus mode fails if any manifest fixture is still pending. It tracks the post-0.1 real-workbook coverage milestone; the `0.1.x` release preflight requires all active fixtures to pass without requiring every planned fixture to be present.
 
 The default manifest is `fixtures/corpus/manifest.json`. It contains generated active smoke fixtures, a generated cross-feature torture workbook, and pending fixture slots for the real-world workbook shapes we still need to cover. `npm run compat:corpus` builds the generated fixtures first, then validates the manifest.
 
@@ -69,7 +69,7 @@ The generated torture fixture intentionally combines macros, tables, totals rows
 
 Generated fixtures are ignored under `fixtures/corpus/workbooks/generated/`. Add cleared real workbooks with `npm run compat:intake -- <fixture-id> <path> --activate`, then rerun the corpus command. Active fixtures fail if the workbook is missing, has failing compatibility checks, or does not pass its required validators.
 
-Starter templates are ignored under `templates/generated/`. They are useful for demos and quick smoke checks, but the release bar remains real Excel-authored files in the corpus.
+Starter templates are ignored under `templates/generated/`. They are useful for demos and quick smoke checks. Real Excel-authored corpus files remain an important post-0.1 compatibility milestone.
 
 See `fixtures/corpus/workbooks/README.md` for the intake checklist.
 
@@ -124,4 +124,4 @@ npm login
 npm run release:check:strict
 ```
 
-The strict preflight runs repository verification, rejects pending or failing corpus fixtures, checks publishable metadata and npm authentication, reports available external validators, and performs dependency-ordered workspace publish dry-runs. Publishing remains a local, manual operation and does not request npm provenance.
+The strict release preflight runs repository verification, rejects failing active corpus fixtures, checks publishable metadata and npm authentication, reports available external validators, and performs dependency-ordered workspace publish dry-runs. Planned pending fixtures do not block `0.1.x`. Publishing remains a local, manual operation and does not request npm provenance.

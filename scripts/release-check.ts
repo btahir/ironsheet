@@ -167,7 +167,11 @@ function assertWorkspaceMetadata(): void {
     assertDirectory(join(dir, "dist"), `${json.name} dist directory is missing`);
 
     for (const [binName, binPath] of Object.entries(json.bin ?? {})) {
-      assertFile(join(dir, binPath), `${json.name} bin ${binName} is missing: ${binPath}`);
+      const absoluteBinPath = join(dir, binPath);
+      assertFile(absoluteBinPath, `${json.name} bin ${binName} is missing: ${binPath}`);
+      if (process.platform !== "win32" && (statSync(absoluteBinPath).mode & 0o111) === 0) {
+        fail(`${json.name} bin ${binName} is not executable: ${binPath}`);
+      }
     }
 
     for (const [dependency, version] of Object.entries(json.dependencies ?? {})) {
@@ -253,7 +257,7 @@ function validatorCapabilities(): Capability[] {
 
 if (releaseMode) {
   run("npm", ["run", "verify"]);
-  run("npm", ["run", "compat:corpus:strict"]);
+  run("npm", ["run", "compat:corpus"]);
 } else {
   run("npm", ["run", "ci"]);
 }

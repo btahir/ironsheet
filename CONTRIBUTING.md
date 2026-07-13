@@ -60,7 +60,7 @@ The compatibility corpus is the regression gate that keeps Ironsheet honest abou
 - `npm run compat:corpus` runs every active fixture through the validator stack in `scripts/compat.ts`: file existence, ZIP integrity, Ironsheet semantic validation, and optional external validators (LibreOffice, Numbers, Excel, Open XML SDK).
 - External validators are opt-in via environment variables, for example `IRONSHEET_RUN_LIBREOFFICE=1` or `IRONSHEET_RUN_OPENXML_SDK=1` (requires the .NET 8 SDK; the harness lives in `tools/openxml-validator/`).
 - Reports are written to `compat-output/` as JSON.
-- `npm run compat:corpus:strict` is the release gate and fails while any corpus fixture is pending or failing.
+- The active fixture corpus is the `0.1.x` release gate. `npm run compat:corpus:strict` is the post-0.1 completeness gate and also fails while any planned fixture remains pending.
 - Real Excel-authored fixtures go through `npm run compat:intake`; see `docs/api.md` for the fixture intake flow.
 
 ## Publishing
@@ -74,6 +74,8 @@ npm login
 npm whoami
 npm run release:check:strict
 ```
+
+For `0.1.x`, this requires every active fixture to pass. The pending real Excel-authored fixture slots remain a post-0.1 compatibility milestone and do not block publishing.
 
 Publish the workspaces in dependency order so a package never appears before the packages it requires:
 

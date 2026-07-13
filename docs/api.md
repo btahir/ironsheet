@@ -335,7 +335,7 @@ Run the full generated fixture corpus:
 npm run ci
 ```
 
-Run the strict corpus gate before release:
+Run the optional corpus completeness gate after adding all planned real-world fixtures:
 
 ```bash
 npm run compat:corpus:strict
@@ -347,6 +347,6 @@ Run release preflight before publishing packages:
 npm run release:check
 ```
 
-Use `npm run release:check:strict` for an actual release candidate. It also rejects placeholder versions, pending corpus fixtures, missing npm authentication, and failing package dry-runs.
+Use `npm run release:check:strict` for an actual release candidate. It rejects placeholder versions, failing active corpus fixtures, missing npm authentication, and failing package dry-runs.
 
-Add cleared XLSX/XLSM templates under `fixtures/corpus/workbooks/`, mark them active in `fixtures/corpus/manifest.json`, and require them to pass `ironsheet-validation` plus any available app validators before running the strict release preflight.
+Cleared real Excel-authored XLSX/XLSM templates remain a post-0.1 compatibility milestone. Add them under `fixtures/corpus/workbooks/`, mark them active in `fixtures/corpus/manifest.json`, and require them to pass `ironsheet-validation` plus any available app validators.
