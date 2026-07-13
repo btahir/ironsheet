@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/ironsheet-hero.svg" alt="Ironsheet safe workbook mutation pipeline" width="920">
+  <img src="docs/assets/brand/ironsheet-opengraph.png" alt="Ironsheet — lossless XLSX and XLSM editing for TypeScript" width="880">
 </p>
 
 <h1 align="center">Ironsheet</h1>
@@ -9,7 +9,8 @@
 </p>
 
 <p align="center">
-  The lossless TypeScript engine for editing real XLSX and XLSM files without breaking formulas, styles, charts, pivots, macros, or layout.
+  The lossless TypeScript engine for editing real XLSX and XLSM files<br>
+  without breaking formulas, styles, charts, pivots, macros, or layout.
 </p>
 
 <p align="center">
@@ -17,6 +18,7 @@
   <img alt="TypeScript 5.9" src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Node 18 or newer" src="https://img.shields.io/badge/Node-%3E%3D18-43853d?style=flat-square&logo=node.js&logoColor=white">
   <img alt="XLSX and XLSM" src="https://img.shields.io/badge/XLSX%20%2B%20XLSM-preservation--first-b7791f?style=flat-square">
+  <img alt="License Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-6b7280?style=flat-square">
 </p>
 
 <p align="center">
@@ -29,6 +31,10 @@
   <a href="#capabilities">Capabilities</a>
   &nbsp;|&nbsp;
   <a href="#development">Development</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/ironsheet-hero.svg" alt="Ironsheet safe workbook mutation pipeline" width="920">
 </p>
 
 ## The Promise
@@ -209,6 +215,7 @@ npm run verify
 npm run ci
 npm run build
 npm run release:check
+npm run brand:assets
 ```
 
 Useful local workflows:
