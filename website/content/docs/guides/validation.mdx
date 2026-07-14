@@ -1,0 +1,77 @@
+---
+title: Validation
+description: Failure rules, semantic validation, and the compatibility gates behind every Ironsheet release.
+---
+
+Ironsheet fails clearly instead of silently damaging workbooks. This guide
+covers the rules that govern when a mutation is refused, what
+`workbook.validate()` checks, and the compatibility gates the project itself
+runs before publishing.
+
+## Failure rules
+
+- Table expansion refuses to grow through occupied worksheet rows.
+- Table column append refuses to overwrite occupied cells or adjacent table ranges.
+- Image replacement and insertion validate bytes against the target part extension.
+- Invalid worksheet dimensions and cell refs are reported as validation issues instead of throwing.
+- XLSM macro parts are preserved byte-for-byte unless explicitly edited by a future macro API.
+
+<Callout title="Fail loudly" type="warn">
+  Unsupported structures should produce targeted errors or warnings, not
+  corrupted output. If Ironsheet can't safely apply an edit, it refuses the
+  edit — it does not fall back to a best-effort rewrite.
+</Callout>
+
+## Validation
+
+`workbook.validate()` (and the `validateWorkbookFile` helper in
+`@ironsheet/node`) checks relationships, worksheet element order,
+dimensions, hyperlinks, merged cells, styles, shared strings, formulas,
+tables, pivots, charts, calc chains, defined names, and content types.
+
+This is the same validator the safe-write flow uses to decide whether output
+bytes may be written — running it yourself gives you the identical
+diagnostics before you commit to a mutation:
+
+```ts
+import { validateWorkbookFile } from "@ironsheet/node";
+
+const validation = await validateWorkbookFile("workbook.xlsx");
+console.log(validation.summary);
+if (validation.issues.length > 0) {
+  console.log(validation.issues);
+}
+```
+
+## Compatibility gates
+
+The Ironsheet repository itself runs a layered set of compatibility gates
+before a release:
+
+```bash
+# Fast local gate
+npm run verify
+
+# Full generated fixture corpus
+npm run ci
+
+# Optional corpus completeness gate, once all planned real-world fixtures are added
+npm run compat:corpus:strict
+
+# Release preflight
+npm run release:check
+
+# Stricter gate for an actual release candidate
+npm run release:check:strict
+```
+
+`npm run release:check:strict` rejects placeholder versions, failing active
+corpus fixtures, missing npm authentication, and failing package dry-runs.
+
+The corpus itself covers generated XLSX, XLSM, dashboard, pivot, large-sheet,
+and cross-feature torture fixtures, plus optional Numbers, LibreOffice, Open
+XML SDK, and Excel checks. Cleared real Excel-authored XLSX/XLSM templates
+remain a post-0.1 compatibility milestone — they are added under
+`fixtures/corpus/workbooks/`, marked active in `fixtures/corpus/manifest.json`,
+and required to pass `ironsheet-validation` plus any available app
+validators.

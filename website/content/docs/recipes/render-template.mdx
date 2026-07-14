@@ -1,0 +1,72 @@
+---
+title: Render a template
+description: Fill named ranges and tables in an Excel-authored template transactionally, with an explicit preflight step first.
+---
+
+Fill an Excel-authored template through its named anchors — a defined name
+and a table, in this case — in one transactional patch. This recipe shows
+the explicit preflight step alongside the render so you can see exactly what
+Ironsheet resolves before it touches a byte of the workbook.
+
+```ts title="render-template.ts"
+import { preflightWorkbookTemplate, renderWorkbookTemplateSafely } from "@ironsheet/node";
+
+const templatePath = "template.xlsx";
+const reportPath = "report.xlsx";
+
+const patch = {
+  names: [
+    {
+      name: "RevenueRange",
+      values: [
+        ["Name", "Amount"],
+        ["North", 42000]
+      ]
+    }
+  ],
+  tables: [
+    {
+      tableName: "RevenueTable",
+      rows: [
+        ["North", 42000],
+        ["South", 31500],
+        ["West", 28750]
+      ]
+    }
+  ]
+};
+
+// Preflight resolves every anchor without mutating anything, so a bad
+// patch fails before any cell changes.
+const preflight = await preflightWorkbookTemplate(templatePath, patch);
+console.log("preflight counts", preflight.counts);
+
+const report = await renderWorkbookTemplateSafely(templatePath, reportPath, patch);
+
+if (!report.wrote) {
+  throw new Error(`Output suppressed: ${report.validation.summary.errors} validation error(s)`);
+}
+
+console.log("wrote", reportPath);
+console.log("validation summary", report.validation.summary);
+console.log("package diff summary", report.diff.summary);
+```
+
+## What the report shows
+
+- `preflight.counts` — how many of each target type (names, tables, cells, ranges, images) resolved. Compare this against what your patch declared before you commit to a render, especially for user-supplied patches.
+- `report.wrote` — `false` means either preflight failed to resolve a target (a missing table or named range) or the rendered workbook failed validation. Either way, `report.xlsx` was not written.
+- `report.diff.summary` — proves the render touched only `RevenueRange` and `RevenueTable`, not the rest of the template's layout, styles, charts, or macros.
+
+<Callout title="All-or-nothing rendering" type="warn">
+  Template rendering preflights every target before applying any mutation.
+  If `RevenueTable` existed but `RevenueRange` did not, neither target would
+  be written — not even the one that resolved successfully. Design patches
+  so a template author can tell, from `preflight.counts` alone, whether a
+  render will fully succeed.
+</Callout>
+
+## Related
+
+- [Template rendering](/docs/guides/template-rendering) — the full transactional-preflight explanation and starter templates.
+- [Table replace](/docs/recipes/table-replace) — resizing a table body directly instead of through a template patch.

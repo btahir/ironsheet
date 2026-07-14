@@ -29,7 +29,10 @@
     "compat:corpus:strict": "npm run compat:fixtures && tsx scripts/compat-corpus.ts --strict",
     "brand:assets": "tsx scripts/build-brand-assets.ts",
     "templates:build": "tsx scripts/build-templates.ts",
-    "hooks:install": "git config core.hooksPath .githooks"
+    "hooks:install": "git config core.hooksPath .githooks",
+    "docs:api": "tsx scripts/docs-api.ts",
+    "docs:dev": "npm --prefix website run dev",
+    "docs:build": "npm run docs:api && npm --prefix website run build"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
@@ -37,6 +40,9 @@
     "esbuild": "^0.28.0",
     "favipack": "^0.2.0",
     "tsx": "^4.20.6",
+    "typedoc": "0.28.20",
+    "typedoc-plugin-frontmatter": "1.3.1",
+    "typedoc-plugin-markdown": "4.12.0",
     "typescript": "^5.9.3"
   },
   "engines": {

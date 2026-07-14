@@ -1,0 +1,130 @@
+---
+title: Workbook API
+description: API conventions, cell values, and the full stable Workbook method surface.
+---
+
+The stable path is intentionally boring:
+
+```ts
+import { mutateWorkbookFile } from "@ironsheet/node";
+
+const report = await mutateWorkbookFile("template.xlsx", "report.xlsx", async (workbook) => {
+  await workbook.patchCell("Summary", "B2", "Q1");
+  await workbook.patchNamedRange("RevenueRange", [["North", 42000]]);
+  await workbook.replaceTableRows("RevenueTable", [["North", 42000]]);
+});
+
+if (!report.wrote) {
+  throw new Error("Ironsheet refused to write an invalid workbook");
+}
+```
+
+Browser code uses the same workbook engine — see [Browser usage](/docs/guides/browser).
+
+## API conventions
+
+- Workbook mutation methods change the in-memory workbook. Node and browser adapters decide how bytes are read and written.
+- Addresses and ranges use Excel A1 notation, for example `B2` and `A1:C10`.
+- Sheet names, defined names, and table names are case-sensitive unless Excel itself treats the underlying structure differently.
+- Safe helpers refuse to write when validation errors are present. Pass `allowValidationErrors` only for debugging or fixture capture.
+- Template rendering is transactional at the preflight stage: missing anchors fail before any mutation is applied.
+- The core package has no Node imports. Runtime-specific file IO and compression belong in the adapter packages.
+
+## Cell values
+
+```ts
+type CellInput =
+  | string
+  | number
+  | boolean
+  | Date
+  | null
+  | { formula: string; result?: string | number | boolean | Date | null };
+```
+
+Formula edits mark the workbook for recalculation and remove stale
+`xl/calcChain.xml`. Named-range and table mutations also force
+recalculation, because formulas may reference defined names or structured
+references that are not direct cell references.
+
+<Callout title="Ironsheet does not evaluate formulas" type="warn">
+  Ironsheet preserves formulas, rewrites supported references on structural
+  edits, and marks the workbook for recalculation when needed — it does not
+  compute formula results itself. Excel (or another spreadsheet app)
+  recalculates on open.
+</Callout>
+
+## Core workbook methods
+
+### Stable inspection
+
+- `workbook.inspect()`
+- `workbook.validate()`
+- `workbook.diagnostics()`
+- `workbook.preflightTemplatePatch(patch)`
+- `workbook.sheets()`
+- `workbook.tables()`
+- `workbook.definedNames()`
+- `workbook.namedRanges(name?)`
+- `workbook.formulas()`
+- `workbook.images(sheetName?)`
+- `workbook.styles()`
+
+### Stable read APIs
+
+- `workbook.readCell(sheetName, address)`
+- `workbook.readRange(sheetName, ref)`
+- `workbook.readSheetCells(sheetName)`
+- `workbook.readNamedRange(name, options?)`
+
+### Stable mutation APIs
+
+- `workbook.patchCell(sheetName, address, value)`
+- `workbook.patchCells(sheetName, patches)`
+- `workbook.patchRange(sheetName, startAddress, values)`
+- `workbook.patchNamedRange(name, values, options?)`
+- `workbook.appendRows(sheetName, rows, options?)`
+- `workbook.clearCell(sheetName, address, options?)`
+- `workbook.clearRange(sheetName, ref, options?)`
+- `workbook.insertRows(sheetName, beforeRow, count?)`
+- `workbook.deleteRows(sheetName, startRow, count?)`
+- `workbook.replaceTableRows(tableName, rows)`
+- `workbook.appendTableColumn(tableName, columnName, values?)`
+- `workbook.removeRightmostTableColumn(tableName, columnName)`
+- `workbook.addSheet(name)`
+- `workbook.copySheet(sheetName, nextName)`
+- `workbook.deleteSheet(sheetName)`
+- `workbook.renameSheet(sheetName, nextName)`
+- `workbook.renameTable(tableName, nextName)`
+- `workbook.renameTableColumn(tableName, columnName, nextName)`
+- `workbook.replaceImage(imagePartName, data)`
+- `workbook.insertImage(sheetName, data, options?)`
+- `workbook.setDefinedName(name, text, options?)`
+- `workbook.deleteDefinedName(name, options?)`
+- `workbook.styleCell(sheetName, address, style)`
+- `workbook.styleRange(sheetName, ref, style)`
+
+### Advanced preservation APIs
+
+- `workbook.retargetChartFormulas(retargets)`
+- `workbook.retargetPivotCacheSources(retargets)`
+- `workbook.setAutoFilter(sheetName, autoFilter)`
+- `workbook.setConditionalFormat(sheetName, conditionalFormat)`
+- `workbook.setDataValidation(sheetName, dataValidation)`
+- `workbook.setHyperlink(sheetName, ref, target, options?)`
+- `workbook.mergeCells(sheetName, ref)`
+
+These advanced APIs are intentionally narrow. They preserve unknown XML,
+update only the targeted structure, and emit diagnostics when adjacent
+workbook features may require review.
+
+`workbook.insertImage` creates the media part, worksheet drawing part when
+needed, drawing relationships, content types, and picture anchor XML. Omit
+`options.anchor` for a default A1 one-cell anchor, or pass a one-cell or
+two-cell anchor with zero-based drawing coordinates and EMU offsets.
+
+## Related
+
+- [Styling](/docs/guides/styling) — `styleCell` and `styleRange` in depth.
+- [Rows and sheets](/docs/guides/rows-and-sheets) — structural edits and sheet lifecycle.
+- [Diffs](/docs/guides/diffs) — semantic and package-level diffing.

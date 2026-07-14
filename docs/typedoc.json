@@ -1,0 +1,25 @@
+{
+  "$schema": "https://typedoc-plugin-markdown.org/schema.json",
+  "entryPoints": ["../packages/core", "../packages/node", "../packages/browser"],
+  "entryPointStrategy": "packages",
+  "tsconfig": "../tsconfig.json",
+  "out": "../website/content/docs/api-reference",
+  "cleanOutputDir": false,
+  "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./typedoc-title-plugin.mjs"],
+  "readme": "./api-landing.md",
+  "mergeReadme": true,
+  "packageOptions": {
+    "readme": "none"
+  },
+  "githubPages": false,
+  "hidePageHeader": true,
+  "hideBreadcrumbs": true,
+  "useCodeBlocks": true,
+  "useHTMLEncodedBrackets": true,
+  "excludeScopesInPaths": true,
+  "expandObjects": false,
+  "entryFileName": "index",
+  "kindSortOrder": ["Function", "Class", "Interface", "TypeAlias", "Variable", "Enum"],
+  "sort": ["kind", "alphabetical"],
+  "gitRevision": "main"
+}

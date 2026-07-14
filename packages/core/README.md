@@ -8,6 +8,10 @@
 
 <p align="center"><strong>Move fast and break no spreadsheets.</strong></p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ironsheet/core"><img alt="npm version" src="https://img.shields.io/npm/v/%40ironsheet%2Fcore?style=flat-square&label=npm"></a>
+</p>
+
 The runtime-neutral workbook engine at the heart of [Ironsheet](https://github.com/btahir/ironsheet) — the lossless TypeScript engine for editing real XLSX and XLSM files without breaking formulas, styles, charts, pivots, macros, or layout.
 
 This package is **dependency-free and browser-compatible**. It contains the ZIP/OPC/XML primitives, validators, and lossless mutation APIs. Runtime-specific file IO and compression live in the adapter packages:

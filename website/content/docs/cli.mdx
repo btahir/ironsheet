@@ -1,0 +1,95 @@
+---
+title: CLI
+description: Inspect, validate, diff, and safely mutate workbooks from the terminal with the ironsheet CLI.
+---
+
+`@ironsheet/cli` exposes JSON-first inspection, validation, preflight,
+diffing, and safe workbook mutation commands — built for CI and scripting,
+not interactive use.
+
+```bash
+npm install -g @ironsheet/cli
+# or run without installing:
+npx @ironsheet/cli inspect workbook.xlsx
+```
+
+The installed binary is `ironsheet`. During Ironsheet repo development
+(working in the monorepo itself, not consuming the published package), run
+commands through `npm run cli --` instead:
+
+```bash
+npm run cli -- inspect workbook.xlsx
+```
+
+The rest of this page uses the `ironsheet` binary form; substitute
+`npm run cli --` if you are working inside the Ironsheet repo.
+
+## Read-only commands
+
+These commands never write a file — they print a JSON report to stdout:
+
+```bash
+ironsheet inspect workbook.xlsx
+ironsheet validate workbook.xlsx
+ironsheet template-manifest workbook.xlsx
+ironsheet preflight-template workbook.xlsx @patch.json
+ironsheet diff before.xlsx after.xlsx
+ironsheet diff-cells before.xlsx after.xlsx
+```
+
+- `inspect` — full package and workbook inspection report.
+- `validate` — the same semantic validator the safe-write flow uses.
+- `template-manifest` — lists the named anchors (cells, ranges, names, tables, images) a template exposes.
+- `preflight-template` — resolves a patch file's targets against a template without mutating it.
+- `diff` — package-level ZIP diff between two workbooks.
+- `diff-cells` — semantic, cell-by-cell workbook diff between two workbooks.
+
+`@patch.json` syntax reads the patch body from a JSON file on disk rather
+than an inline argument.
+
+## Mutating commands
+
+Mutating commands use safe writes by default and print a
+`WorkbookSafeWriteReport` as JSON:
+
+```bash
+ironsheet render-template-safe template.xlsx output.xlsx @patch.json
+ironsheet patch input.xlsx output.xlsx Sheet1 B2 "Hello"
+ironsheet patch-named-range input.xlsx output.xlsx RevenueRange '[["North",42000]]'
+ironsheet replace-table input.xlsx output.xlsx RevenueTable '[["North",42000]]'
+ironsheet replace-image input.xlsx output.xlsx xl/media/image1.png logo.png
+ironsheet insert-image input.xlsx output.xlsx Sheet1 logo.png
+ironsheet style-range input.xlsx output.xlsx Sheet1 A1:D1 '{"font":{"bold":true},"fill":"1F4E79"}'
+ironsheet clear-range input.xlsx output.xlsx Sheet1 A10:D20
+ironsheet insert-rows input.xlsx output.xlsx Sheet1 5 2
+ironsheet delete-rows input.xlsx output.xlsx Sheet1 5 2
+ironsheet add-sheet input.xlsx output.xlsx Report
+ironsheet copy-sheet input.xlsx output.xlsx Sheet1 "Sheet1 Copy"
+ironsheet delete-sheet input.xlsx output.xlsx Scratch
+```
+
+<Callout title="Exit behavior" type="warn">
+  If validation fails, a mutating command exits nonzero and does **not**
+  write the output file. The JSON report is still printed to stdout so CI
+  can inspect `validation.summary` and `diagnostics` to see why the write
+  was suppressed.
+</Callout>
+
+## Wiring into CI
+
+Because every command emits JSON, a CI job can pipe output straight into
+`jq` or a script:
+
+```bash
+ironsheet render-template-safe template.xlsx output.xlsx @patch.json > report.json
+if [ "$(jq '.wrote' report.json)" != "true" ]; then
+  echo "template render failed validation" >&2
+  exit 1
+fi
+```
+
+## Related
+
+- [Safe writes](/docs/guides/safe-writes) — the `WorkbookSafeWriteReport` shape these commands print.
+- [Template rendering](/docs/guides/template-rendering) — what `render-template-safe` and `preflight-template` resolve before writing.
+- [Validation](/docs/guides/validation) — what `validate` checks.

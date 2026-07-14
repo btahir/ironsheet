@@ -1,0 +1,147 @@
+---
+title: Getting started
+description: Install an Ironsheet adapter and make your first validation-gated edit.
+---
+
+Ironsheet 0.1 is an active MVP. For Node.js applications, install the
+safe-write adapter and start from an existing Excel-authored workbook —
+Ironsheet edits the file you already have rather than generating a new one
+from scratch.
+
+<Steps>
+
+<Step>
+
+### Install the Node adapter
+
+```bash
+npm install @ironsheet/node
+```
+
+`@ironsheet/node` bundles the runtime-neutral `@ironsheet/core` engine with
+filesystem IO, zlib compression, safe writes, and template render helpers.
+It is the package most Node applications want.
+
+</Step>
+
+<Step>
+
+### Render a template safely
+
+`renderWorkbookTemplateSafely` fills named anchors — cells, ranges, named
+ranges, tables, and images — in an Excel-authored template in one
+transactional patch:
+
+```ts title="render.ts"
+import { renderWorkbookTemplateSafely } from "@ironsheet/node";
+
+const report = await renderWorkbookTemplateSafely("template.xlsm", "output.xlsm", {
+  names: [
+    {
+      name: "RevenueRange",
+      values: [
+        ["Region", "Amount"],
+        ["North", 42000]
+      ]
+    }
+  ],
+  tables: [
+    {
+      tableName: "RevenueTable",
+      rows: [
+        ["North", 42000],
+        ["South", 31500]
+      ]
+    }
+  ],
+  images: [
+    {
+      imagePartName: "xl/media/image1.png",
+      data: await fetchLogoBytes()
+    }
+  ]
+});
+
+if (!report.wrote) {
+  throw new Error(`Workbook failed validation: ${report.validation.summary.errors} error(s)`);
+}
+
+console.log(report.diff.summary);
+```
+
+Safe renders preflight every target before applying changes. If a named
+range, table, cell, range, or image is missing, Ironsheet fails before
+touching the workbook — no partial writes.
+
+</Step>
+
+<Step>
+
+### Read the safe-write report
+
+Every safe write returns a `WorkbookSafeWriteReport` — treat it as a write
+receipt rather than a side effect you can ignore:
+
+```ts
+type WorkbookSafeWriteReport = {
+  diagnostics: Diagnostic[];
+  diff: PackageDiff;
+  validation: ValidationReport;
+  wrote: boolean;
+};
+```
+
+```ts
+if (report.wrote) {
+  console.log("validated output written", report.diff.summary);
+} else {
+  console.error("output suppressed", report.validation.summary);
+}
+```
+
+<Callout title="Validation-gated writes" type="warn">
+  Safe writes suppress output when validation errors are present. Ironsheet
+  will not produce a corrupt file — `report.wrote` is `false` and no output
+  bytes are written unless you explicitly opt in with `allowValidationErrors`,
+  which is intended for debugging or fixture capture only.
+</Callout>
+
+`report.diff.summary` distinguishes a real content edit (`changed`) from pure
+compression noise (`repacked`) — see [Safe writes](/docs/guides/safe-writes)
+for the full breakdown.
+
+</Step>
+
+</Steps>
+
+## Custom edits and other runtimes
+
+For a custom edit instead of a template fill, use `mutateWorkbookFile` — the
+same validation-gated flow, but with direct access to the workbook's mutation
+methods:
+
+```ts
+import { mutateWorkbookFile } from "@ironsheet/node";
+
+const report = await mutateWorkbookFile("template.xlsx", "report.xlsx", async (workbook) => {
+  await workbook.patchCell("Summary", "B2", "Q1");
+  await workbook.patchNamedRange("RevenueRange", [["North", 42000]]);
+  await workbook.replaceTableRows("RevenueTable", [["North", 42000]]);
+});
+
+if (!report.wrote) {
+  throw new Error("Ironsheet refused to write an invalid workbook");
+}
+```
+
+Working in a browser instead of Node? See the [Browser guide](/docs/guides/browser)
+for `@ironsheet/browser`, which adapts the same workbook engine to `Blob`,
+`File`, and `ArrayBuffer`.
+
+## Where to next
+
+<Cards>
+  <Card title="Guides" href="/docs/guides" description="Safe writes, template rendering, the full workbook API, styling, rows and sheets, diffs, validation, and browser usage." />
+  <Card title="CLI" href="/docs/cli" description="Run the same safe-write flows from the terminal for CI and scripting." />
+  <Card title="Recipes" href="/docs/recipes" description="Complete, copy-paste examples for common workbook tasks." />
+</Cards>

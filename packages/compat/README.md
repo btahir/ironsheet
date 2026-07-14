@@ -8,6 +8,10 @@
 
 <p align="center"><strong>Move fast and break no spreadsheets.</strong></p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ironsheet/compat"><img alt="npm version" src="https://img.shields.io/npm/v/%40ironsheet%2Fcompat?style=flat-square&label=npm"></a>
+</p>
+
 Compatibility report types and fixture-manifest utilities for [Ironsheet](https://github.com/btahir/ironsheet) workbook QA — the lossless TypeScript engine for editing real XLSX and XLSM files.
 
 This is a support package for the Ironsheet compatibility corpus (generated XLSX/XLSM, dashboard, pivot, large-sheet, and cross-feature torture fixtures, plus optional Numbers, LibreOffice, Open XML SDK, and Excel checks). Most users do not need to install it directly.

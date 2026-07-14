@@ -1,0 +1,59 @@
+---
+title: Replace table rows
+description: Swap an Excel table's body rows while Ironsheet resizes the table range, filter range, and worksheet cells for you.
+---
+
+`replaceTableRows` swaps the body rows of an existing Excel table. Ironsheet
+resizes the table range, the auto-filter range, and the underlying worksheet
+cells together, so the table stays structurally valid however many rows you
+add or remove.
+
+```ts title="table-replace.ts"
+import { mutateWorkbookFile, readWorkbook } from "@ironsheet/node";
+
+const inputPath = "input.xlsx";
+const outputPath = "replaced.xlsx";
+
+const report = await mutateWorkbookFile(inputPath, outputPath, async (workbook) => {
+  await workbook.replaceTableRows("RevenueTable", [
+    ["North", 42000],
+    ["South", 31500],
+    ["West", 28750],
+    ["Enterprise", 61200]
+  ]);
+});
+
+if (!report.wrote) {
+  throw new Error(`Output suppressed: ${report.validation.summary.errors} validation error(s)`);
+}
+
+console.log("wrote", outputPath);
+console.log("package diff summary", report.diff.summary);
+
+// Read the table back from the written file to confirm the resized range.
+const workbook = await readWorkbook(outputPath);
+const tables = await workbook.tables();
+console.log("tables after replace", tables);
+```
+
+This example replaces a 2-row table with a 4-row table — the table range,
+filter range, and sheet dimension all grow to match, without you computing
+new A1 references by hand.
+
+## What the report shows
+
+- `report.diff.summary` — the table's worksheet part and its `xl/tables/table1.xml` part (or equivalent) show up as `changed`; parts outside the table are unaffected.
+- `workbook.tables()` on the written file — read the table back to confirm its `ref` (the table's range) grew to fit four rows instead of two, along with any other table metadata you care to check.
+
+<Callout title="Table expansion has limits" type="warn">
+  Table expansion refuses to grow through occupied worksheet rows — if there
+  is data directly below the table that would be overwritten by growing the
+  table range, the mutation is refused rather than silently overwriting
+  that data. Clear the space below the table first if you need to grow it
+  past its current bounds.
+</Callout>
+
+## Related
+
+- [Workbook API](/docs/guides/workbook-api) — the full mutation method list, including `appendTableColumn` and `removeRightmostTableColumn`.
+- [Render a template](/docs/recipes/render-template) — filling a table through a named-anchor patch instead of calling `replaceTableRows` directly.

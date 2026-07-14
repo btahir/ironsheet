@@ -1,0 +1,50 @@
+---
+title: Safe cell patch
+description: Patch a couple of cells and only write output when the mutated workbook still passes validation.
+---
+
+Open a workbook, patch a few cells, and let `mutateWorkbookFile` decide
+whether the output is safe to write. This is the smallest possible safe
+edit and the pattern every other recipe builds on.
+
+```ts title="safe-cell-patch.ts"
+import { mutateWorkbookFile, readWorkbookCell } from "@ironsheet/node";
+
+const inputPath = "template.xlsx";
+const outputPath = "patched.xlsx";
+
+// mutateWorkbookFile is the recommended safe-write flow: it validates the
+// mutated workbook and returns a package diff before committing bytes.
+const report = await mutateWorkbookFile(inputPath, outputPath, async (workbook) => {
+  await workbook.patchCell("Sheet1", "A1", "Updated by Ironsheet");
+  await workbook.patchCell("Sheet1", "B2", 42000);
+});
+
+if (!report.wrote) {
+  throw new Error(`Output suppressed: ${report.validation.summary.errors} validation error(s)`);
+}
+
+console.log("wrote", outputPath);
+console.log("validation summary", report.validation.summary);
+console.log("package diff summary", report.diff.summary);
+console.log("A1 is now", await readWorkbookCell(outputPath, "Sheet1", "A1"));
+```
+
+## What the report tells you
+
+- `report.wrote` — `false` means Ironsheet refused to write `output.xlsx` because the mutated workbook failed validation. The two `patchCell` calls above still ran in memory, but nothing hit disk.
+- `report.validation.summary` — error and warning counts from the same validator `workbook.validate()` runs. Check this first when `wrote` is `false`.
+- `report.diff.summary` — the package-level diff. For a two-cell patch like this, expect `changed` to reflect the worksheet part that now contains your edits, and everything else in the ZIP to come back `unchanged`.
+- `readWorkbookCell` reads the value straight back out of the file you just wrote — a quick way to confirm the patch landed where you expect.
+
+<Callout title="Only the targeted structures move" type="info">
+  Because Ironsheet preserves untouched ZIP entries by default, patching two
+  cells in `Sheet1` does not touch styles, charts, pivots, or any other
+  sheet in the workbook — the diff summary should confirm that directly
+  instead of you having to take it on faith.
+</Callout>
+
+## Related
+
+- [Safe writes](/docs/guides/safe-writes) — the full `WorkbookSafeWriteReport` reference.
+- [Inspect and validate](/docs/recipes/inspect-and-validate) — read a workbook back out without mutating it.

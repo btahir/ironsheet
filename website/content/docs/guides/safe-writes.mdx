@@ -1,0 +1,90 @@
+---
+title: Safe writes
+description: The recommended Node flow — mutate, validate, diff, and only write when the workbook still passes validation.
+---
+
+Ironsheet's stable path is intentionally boring: open an existing workbook,
+make a narrow mutation, validate the result, inspect the package diff, then
+write only if the workbook still passes validation.
+
+1. Open the workbook bytes without eagerly normalizing everything.
+2. Mutate only the workbook structures you targeted.
+3. Validate package, workbook, and worksheet invariants.
+4. Return diagnostics and a package diff before committing the output file.
+
+## Recommended Node flow
+
+```ts
+import { mutateWorkbookFile } from "@ironsheet/node";
+
+const report = await mutateWorkbookFile("template.xlsm", "output.xlsm", async (workbook) => {
+  await workbook.patchNamedRange("RevenueRange", [
+    ["Region", "Amount"],
+    ["North", 42000]
+  ]);
+
+  await workbook.replaceTableRows("RevenueTable", [
+    ["North", 42000],
+    ["South", 31500]
+  ]);
+});
+
+if (!report.wrote) {
+  throw new Error(`Workbook failed validation with ${report.validation.summary.errors} error(s)`);
+}
+
+console.log(report.diff.summary);
+```
+
+`mutateWorkbookFile` takes a callback so every mutation you make inside it is
+validated as a single unit before anything is written to disk.
+
+## The WorkbookSafeWriteReport
+
+`mutateWorkbookFile` (and every other safe-write helper) returns:
+
+```ts
+type WorkbookSafeWriteReport = {
+  diagnostics: Diagnostic[];
+  diff: PackageDiff;
+  validation: ValidationReport;
+  wrote: boolean;
+};
+```
+
+<Callout title="Validation-gated writes" type="warn">
+  Safe writes suppress output when validation errors are present, unless
+  `allowValidationErrors` is explicitly enabled. Treat that option as a
+  debugging or fixture-capture escape hatch, not something to flip on in
+  production code.
+</Callout>
+
+## Reading the report
+
+Treat the report as a write receipt rather than a value you discard:
+
+```ts
+if (report.wrote) {
+  console.log("validated output written", report.diff.summary);
+} else {
+  console.error("output suppressed", report.validation.summary);
+}
+```
+
+`report.validation.summary` tells you why a write was suppressed.
+`report.diagnostics` surfaces non-fatal review notes (for example, structures
+Ironsheet preserved but did not rewrite). `report.diff` is the package diff —
+proof of exactly what changed.
+
+## Changed vs. repacked
+
+`report.diff.summary.changed` means uncompressed workbook content changed.
+`report.diff.summary.repacked` means the uncompressed content appears
+unchanged, but the ZIP container bytes changed (for example, different
+compression settings on re-zip).
+
+This distinction matters in CI: compression noise should never look like a
+semantic workbook edit. Safe reports include `contentChanged` and
+`containerChanged` booleans per entry so callers can tell a real workbook
+edit apart from repacking noise. See [Diffs](/docs/guides/diffs) for the full
+package-diff and semantic-diff reference.

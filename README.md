@@ -15,6 +15,8 @@
 
 <p align="center">
   <a href="docs/api.md"><img alt="API guide" src="https://img.shields.io/badge/API-guide-0f766e?style=flat-square"></a>
+  <a href="https://www.npmjs.com/package/@ironsheet/node"><img alt="npm version" src="https://img.shields.io/npm/v/%40ironsheet%2Fnode?style=flat-square&label=npm"></a>
+  <a href="https://www.npmjs.com/package/@ironsheet/node"><img alt="npm downloads" src="https://img.shields.io/npm/dm/%40ironsheet%2Fnode?style=flat-square&label=downloads"></a>
   <img alt="TypeScript 5.9" src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Node 18 or newer" src="https://img.shields.io/badge/Node-%3E%3D18-43853d?style=flat-square&logo=node.js&logoColor=white">
   <img alt="XLSX and XLSM" src="https://img.shields.io/badge/XLSX%20%2B%20XLSM-preservation--first-b7791f?style=flat-square">
@@ -205,6 +207,7 @@ Known boundaries:
 - [Compatibility testing](docs/testing/compatibility.md)
 - [Template fixtures](templates/README.md)
 - [Changelog](CHANGELOG.md)
+- Docs website — a Fumadocs site in `website/`, run locally with `npm run docs:dev` (deployment pending, no public URL yet)
 
 ## Development
 
@@ -226,6 +229,9 @@ npm run templates:build
 npm run browser:smoke
 npm run compat:intake -- styled-table-report ~/fixtures/styled-table-report.xlsx --activate
 npm run commit:safe -- "feat: add workbook capability"
+npm run docs:dev
+npm run docs:build
+npm run docs:api
 ```
 
 `IRONSHEET_SPEC.md` is local planning material and is intentionally ignored.

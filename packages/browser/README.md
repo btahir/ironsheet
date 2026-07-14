@@ -8,6 +8,10 @@
 
 <p align="center"><strong>Move fast and break no spreadsheets.</strong></p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ironsheet/browser"><img alt="npm version" src="https://img.shields.io/npm/v/%40ironsheet%2Fbrowser?style=flat-square&label=npm"></a>
+</p>
+
 Browser compression and file adapters for [Ironsheet](https://github.com/btahir/ironsheet) — the lossless TypeScript engine for editing real XLSX and XLSM files without breaking formulas, styles, charts, pivots, macros, or layout.
 
 This package adapts the runtime-neutral [`@ironsheet/core`](https://www.npmjs.com/package/@ironsheet/core) engine to the browser using `Blob`, `File`, `ArrayBuffer`, `CompressionStream`, and `DecompressionStream`.

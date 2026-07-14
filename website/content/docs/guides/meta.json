@@ -1,0 +1,14 @@
+{
+  "title": "Guides",
+  "pages": [
+    "index",
+    "safe-writes",
+    "template-rendering",
+    "workbook-api",
+    "styling",
+    "rows-and-sheets",
+    "diffs",
+    "validation",
+    "browser"
+  ]
+}

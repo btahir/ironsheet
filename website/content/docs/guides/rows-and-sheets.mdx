@@ -1,0 +1,43 @@
+---
+title: Rows and sheets
+description: Structural row edits with Excel-equivalent reference rewriting, plus the worksheet lifecycle.
+---
+
+## Structural row edits
+
+`insertRows` and `deleteRows` shift rows the way Excel does:
+
+- Row elements, cell references, shared/array formula anchors, merged cells, hyperlinks, data validations, conditional formats, auto filters, comment anchors, and the sheet dimension all shift.
+- Formulas across the whole workbook are rewritten, including cross-sheet references and defined names. References into deleted rows become `#REF!`; ranges shrink or grow like Excel.
+- Tables entirely below an insertion shift. Edits that overlap a table range are refused; use the table APIs to resize tables instead.
+- Deleting rows that would orphan a surviving shared or array formula group is refused with a clear error.
+- Drawings and pivot sources are not rewritten; Ironsheet emits review diagnostics instead of guessing.
+
+```ts
+await workbook.insertRows("Sheet1", 5, 2);
+await workbook.deleteRows("Sheet1", 5, 2);
+```
+
+<Callout title="Fails loudly on ambiguous edits" type="warn">
+  Row edits that would overlap a table range, or that would orphan a shared
+  or array formula group, are refused outright rather than silently
+  producing a broken workbook. Resize the table first, or restructure the
+  formula group, then retry the row edit.
+</Callout>
+
+## Sheet lifecycle
+
+- `addSheet(name)` creates an empty worksheet with correct content types and relationships.
+- `copySheet(name, nextName)` duplicates cells, styles, merges, validations, and external hyperlinks. Tables, drawings, comments, and pivot tables are intentionally not duplicated; a diagnostic lists what was skipped.
+- `deleteSheet(name)` removes the sheet and cascade-deletes parts only it references, drops sheet-scoped defined names, reindexes surviving scoped names, breaks formulas that referenced the sheet with `#REF!`, and keeps at least one visible sheet.
+
+```ts
+await workbook.addSheet("Report");
+await workbook.copySheet("Sheet1", "Sheet1 Copy");
+await workbook.deleteSheet("Scratch");
+```
+
+Because `copySheet` skips tables, drawings, comments, and pivot tables,
+check `report.diagnostics` after the mutation to see exactly what was left
+behind — it is intentional, not a bug, but you should know about it before
+shipping a report built from a copied sheet.

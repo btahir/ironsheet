@@ -8,6 +8,10 @@
 
 <p align="center"><strong>Move fast and break no spreadsheets.</strong></p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ironsheet/cli"><img alt="npm version" src="https://img.shields.io/npm/v/%40ironsheet%2Fcli?style=flat-square&label=npm"></a>
+</p>
+
 Safe command-line workbook inspection, validation, and XLSX/XLSM edits for [Ironsheet](https://github.com/btahir/ironsheet) — the lossless TypeScript engine for editing real Excel files without breaking formulas, styles, charts, pivots, macros, or layout.
 
 Every mutating command uses safe writes by default: it prints a JSON report and exits nonzero **without** writing the output file when validation errors are found.

@@ -16,6 +16,12 @@ templates/generated/
 .turbo/
 .cache/
 
+# Docs website (standalone app, not part of the workspace).
+website/node_modules/
+website/.next/
+website/out/
+website/.source/
+
 # OS/editor noise.
 .DS_Store
 *.swp

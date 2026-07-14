@@ -8,6 +8,10 @@
 
 <p align="center"><strong>Move fast and break no spreadsheets.</strong></p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ironsheet/node"><img alt="npm version" src="https://img.shields.io/npm/v/%40ironsheet%2Fnode?style=flat-square&label=npm"></a>
+</p>
+
 Node.js file IO, compression, and safe-write adapter for [Ironsheet](https://github.com/btahir/ironsheet) — the lossless TypeScript engine for editing real XLSX and XLSM files without breaking formulas, styles, charts, pivots, macros, or layout.
 
 This is the package most Node users want. It bundles the runtime-neutral [`@ironsheet/core`](https://www.npmjs.com/package/@ironsheet/core) engine with filesystem IO, zlib compression, safe writes, and template render helpers.

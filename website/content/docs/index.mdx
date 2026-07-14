@@ -1,0 +1,69 @@
+---
+title: Introduction
+description: Ironsheet is the lossless TypeScript engine for editing real XLSX and XLSM files without breaking formulas, styles, charts, pivots, macros, or layout.
+---
+
+Ironsheet edits Excel-authored workbooks as workbooks, not disposable data
+exports. It patches only the cells, named ranges, tables, images, and metadata
+you target, validates the OOXML package, and returns a package diff that
+proves what changed before it writes.
+
+Most JavaScript spreadsheet libraries are optimized for creating
+workbook-shaped files from JavaScript objects. Ironsheet is optimized for
+**guarded mutation of real Excel packages** — the workbook you started with
+and the workbook you get back are the same file, with only your targeted
+changes applied.
+
+## The promise
+
+Use Ironsheet when the workbook is the product: finance models, board
+reports, operational dashboards, customer templates, macro-enabled flows, and
+spreadsheet experiences where a silent rewrite is unacceptable.
+
+- **Preserve first** — no broad workbook rewrite unless a target operation requires it.
+- **Fail loudly** — unsupported structures produce targeted errors or warnings, not corrupted output.
+- **Prove the write** — every safe mutation returns validation and diff evidence.
+- **Keep APIs narrow** — high-level template fills for normal users, low-level OOXML primitives for advanced users.
+- **Stay portable** — a runtime-neutral core with Node and browser adapters, TypeScript everywhere.
+
+## Why Ironsheet
+
+| Problem | Ironsheet behavior |
+| --- | --- |
+| A template has charts, styles, pivots, drawings, and macros you do not understand yet. | Untouched ZIP entries and unknown XML are preserved by default. |
+| A report fill should update a named range and table without shifting layout. | Template rendering resolves anchors, validates resize plans, then applies one transaction. |
+| A workbook edit could break formulas or leave stale calculation state. | Formula edits and dependent table/name edits mark workbooks for recalculation and remove stale calc-chain parts. |
+| A CI job needs to know whether the output is structurally valid. | Safe writes return diagnostics, validation results, and content-vs-container package diffs. |
+| An XLSM workbook contains macros that must survive generation. | Macro parts are preserved byte-for-byte unless a future explicit macro API touches them. |
+
+## When to use it
+
+Reach for Ironsheet when you are editing an Excel-authored file rather than
+generating one from scratch — filling a finance report template, patching a
+handful of cells in a customer-supplied workbook, or swapping table rows in a
+dashboard that also has charts and pivots you must not disturb. If you are
+building a brand-new workbook with no pre-existing layout to preserve, a
+generator-style library may be a better fit.
+
+## Packages
+
+| Package | Use it for |
+| --- | --- |
+| `@ironsheet/core` | Runtime-neutral workbook engine, ZIP/OPC/XML primitives, validators, and lossless mutation APIs. |
+| `@ironsheet/node` | Node file IO, zlib compression, safe writes, and template render helpers. |
+| `@ironsheet/browser` | Browser `Blob`, `File`, `ArrayBuffer`, and compression-stream adapters. |
+| `@ironsheet/cli` | JSON-first inspection, validation, preflight, diffing, and safe mutation commands. |
+| `@ironsheet/compat` | Compatibility corpus manifest and report types. |
+
+The core engine is dependency-free and browser-compatible. Runtime-specific
+IO and compression live in the adapter packages.
+
+## Explore the docs
+
+<Cards>
+  <Card title="Getting started" href="/docs/getting-started" description="Install an adapter and make your first safe edit." />
+  <Card title="Guides" href="/docs/guides" description="Task-focused walkthroughs for common workbook workflows." />
+  <Card title="CLI" href="/docs/cli" description="Inspect, validate, diff, and safely mutate workbooks from the terminal." />
+  <Card title="Recipes" href="/docs/recipes" description="Copy-paste patterns for real reporting and template pipelines." />
+  <Card title="API reference" href="/docs/api-reference" description="Generated reference for the packages and their exports." />
+</Cards>

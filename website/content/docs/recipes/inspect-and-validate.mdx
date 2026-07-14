@@ -1,0 +1,53 @@
+---
+title: Inspect and validate
+description: Read a workbook without mutating it, list its sheets, tables, and defined names, and run semantic validation.
+---
+
+Read-only inspection is often the first thing worth writing against a new
+template — before patching anything, confirm you can see the sheets,
+tables, and defined names your patch will target, and that the file already
+passes validation.
+
+```ts title="inspect-and-validate.ts"
+import { readWorkbook, validateWorkbookFile } from "@ironsheet/node";
+
+const inputPath = "input.xlsx";
+
+const workbook = await readWorkbook(inputPath);
+
+console.log("sheets", await workbook.sheets());
+console.log("tables", await workbook.tables());
+console.log("defined names", await workbook.definedNames());
+console.log("cell A1", await workbook.readCell("Sheet1", "A1"));
+
+// Full inspection report: package structure plus workbook features.
+const inspection = await workbook.inspect();
+console.log("inspection", JSON.stringify(inspection, null, 2));
+
+// validateWorkbookFile is the same validator the safe-write flow uses to
+// decide whether output bytes may be written.
+const validation = await validateWorkbookFile(inputPath);
+console.log("validation summary", validation.summary);
+if (validation.issues.length > 0) {
+  console.log("issues", validation.issues);
+}
+```
+
+## What each call gives you
+
+- `workbook.sheets()`, `workbook.tables()`, `workbook.definedNames()` — the anchors available to target with a patch. Cross-check these against a template patch's `names` and `tables` keys before you render it.
+- `workbook.readCell(sheetName, address)` — a direct read of one cell's value, useful for spot-checking a template without pulling the whole sheet.
+- `workbook.inspect()` — the full package and workbook inspection report: everything from `sheets()`, `tables()`, and `definedNames()` alongside styles, images, and package-level diagnostics in one call.
+- `validateWorkbookFile(path)` — runs the identical validator the safe-write flow (`mutateWorkbookFile`, `renderWorkbookTemplateSafely`) uses internally. If `validation.summary.errors` is nonzero here, a safe write against this same file will refuse to produce output — better to find out now, read-only, than after a failed mutation.
+
+<Callout title="Read-only, always" type="info">
+  None of the calls in this recipe mutate the workbook or write a file.
+  This is the same information a safe write checks before it commits
+  bytes — running it up front lets you validate a template as part of an
+  intake step, before any mutation code runs against it.
+</Callout>
+
+## Related
+
+- [Validation](/docs/guides/validation) — what `validate()` checks, and the failure rules that govern mutations.
+- [Safe cell patch](/docs/recipes/safe-cell-patch) — the smallest mutating recipe, once inspection confirms the workbook is sound.

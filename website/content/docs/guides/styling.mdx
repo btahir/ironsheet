@@ -1,0 +1,42 @@
+---
+title: Styling
+description: Author fonts, fills, borders, alignment, and number formats without style explosion.
+---
+
+`styleCell` and `styleRange` author cell styles — fonts, fills, borders,
+alignment, and number formats — for single cells or whole ranges.
+
+```ts
+await workbook.styleRange("Sheet1", "A1:D1", {
+  font: { bold: true, color: "FFFFFF", name: "Aptos", size: 12 },
+  fill: "1F4E79",
+  border: { bottom: { style: "medium", color: "0B2942" } },
+  alignment: { horizontal: "center", wrapText: true },
+  numberFormat: "$#,##0.00"
+});
+```
+
+## Records are deduplicated
+
+Styling a whole range with one style adds one `xf` record per distinct base
+style, not one per cell. This is what "no style explosion" means in
+practice: applying the same header style to a 500-column range produces the
+same number of style records as applying it to a single cell.
+
+## Colors
+
+Colors accept `RRGGBB`, `#RRGGBB`, or `AARRGGBB` hex.
+
+## Merge behavior
+
+Existing cell styles are preserved and merged: setting only `font` on a
+currency cell keeps its number format.
+
+<Callout title="Component replacement, not attribute merging" type="warn">
+  Providing `font`, `fill`, or `border` replaces that component wholesale
+  rather than merging attribute-by-attribute. If a cell already has a bold,
+  colored font and you pass `font: { size: 14 }`, the result is a plain
+  14pt font — not bold, not colored — because the entire `font` component
+  was replaced. Include every attribute you want to keep in each component
+  you pass.
+</Callout>

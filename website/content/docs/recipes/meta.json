@@ -1,0 +1,10 @@
+{
+  "title": "Recipes",
+  "pages": [
+    "index",
+    "safe-cell-patch",
+    "render-template",
+    "table-replace",
+    "inspect-and-validate"
+  ]
+}

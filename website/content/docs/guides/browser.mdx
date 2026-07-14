@@ -1,0 +1,61 @@
+---
+title: Browser usage
+description: Edit workbooks in the browser with the same lossless engine, using Blob, File, and ArrayBuffer adapters.
+---
+
+Use `@ironsheet/browser` when workbook bytes come from a `Blob`, `File`,
+`ArrayBuffer`, or a browser `fetch` response instead of the filesystem.
+
+```bash
+npm install @ironsheet/browser
+```
+
+```ts
+import { openWorkbookFromBlob, writeWorkbookToBlob } from "@ironsheet/browser";
+
+const workbook = await openWorkbookFromBlob(file);
+await workbook.patchCell("Sheet1", "B2", "Hello from the browser");
+
+const output = await writeWorkbookToBlob(workbook);
+```
+
+The same workbook engine and lossless guarantees apply as in Node — only IO
+and compression differ. Every method documented in
+[Workbook API](/docs/guides/workbook-api) is available on the workbook
+object returned by `openWorkbookFromBlob`.
+
+## How it adapts the core engine
+
+The browser adapter uses `CompressionStream` and `DecompressionStream` with
+`deflate-raw`. `@ironsheet/core` only requires a `CompressionAdapter`
+boundary — it does not import Node's `zlib`, so the same engine runs
+unmodified in both environments.
+
+<Callout title="Core stays runtime-neutral" type="info">
+  `@ironsheet/core` is dependency-free and browser-compatible by design.
+  Runtime-specific file IO and compression are pushed into `@ironsheet/node`
+  and `@ironsheet/browser` so the workbook engine itself never has to know
+  which environment it's running in.
+</Callout>
+
+## What's different from Node
+
+The browser package does not currently expose the higher-level safe-write
+helpers (`mutateWorkbookFile`, `renderWorkbookTemplateSafely`) that
+`@ironsheet/node` provides — those bundle Node file IO around the same
+workbook engine. In the browser, call the workbook's mutation and
+validation methods directly, then use `writeWorkbookToBlob` to get bytes
+back out:
+
+```ts
+const workbook = await openWorkbookFromBlob(file);
+
+await workbook.patchNamedRange("RevenueRange", [["North", 42000]]);
+const validation = await workbook.validate();
+
+if (validation.summary.errors > 0) {
+  throw new Error("workbook failed validation");
+}
+
+const output = await writeWorkbookToBlob(workbook);
+```

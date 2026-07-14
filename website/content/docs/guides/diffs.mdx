@@ -1,0 +1,72 @@
+---
+title: Diffs
+description: Prove exactly what changed — semantic workbook diffs and package-level ZIP diffs.
+---
+
+Ironsheet gives you two complementary diffs. The package-level diff answers
+"which parts changed"; the semantic workbook diff answers "which cells and
+what about them."
+
+## Semantic workbook diff
+
+`diffWorkbooks(before, after)` compares two open workbooks cell-by-cell:
+
+```ts
+import { diffWorkbooks } from "@ironsheet/core";
+
+const diff = await diffWorkbooks(before, after);
+// diff.cells: [{ sheetName, address, kind: "added" | "changed" | "removed", changed: ["value", "style"], before, after }]
+// diff.sheets, diff.definedNames, diff.tables: added/removed/changed name lists
+// diff.summary: { addedCells, changedCells, removedCells, truncated }
+```
+
+Use it in CI to prove a render changed exactly the cells it should have —
+no more, no less.
+
+## Package diffs
+
+`diffZipPackages(before, after)` classifies every ZIP entry as:
+
+- `added`: entry exists only after.
+- `removed`: entry exists only before.
+- `changed`: uncompressed content changed.
+- `repacked`: uncompressed content appears unchanged, but ZIP compression/container bytes changed.
+- `unchanged`: content and container bytes match.
+
+Safe reports include `contentChanged` and `containerChanged` booleans per
+entry. This lets callers distinguish a real workbook edit from compression
+noise.
+
+<Callout title="Changed vs. repacked" type="info">
+  `diff.summary.changed` means uncompressed workbook content changed.
+  `diff.summary.repacked` means the uncompressed content appears unchanged,
+  but the ZIP container bytes changed. This distinction matters in CI:
+  compression noise should never look like a semantic workbook edit.
+</Callout>
+
+## Using both together
+
+The safe-write flow (`mutateWorkbookFile`, `renderWorkbookTemplateSafely`)
+returns the package diff on every report as `report.diff`. Reach for
+`diffWorkbooks` from `@ironsheet/core` when you need cell-level detail — for
+example, asserting in a test that only the cells inside `RevenueTable`
+changed, and nothing else in the workbook moved.
+
+```ts
+import { mutateWorkbookFile, readWorkbook } from "@ironsheet/node";
+import { diffWorkbooks } from "@ironsheet/core";
+
+const report = await mutateWorkbookFile(inputPath, outputPath, async (workbook) => {
+  await workbook.replaceTableRows("RevenueTable", [["North", 42000]]);
+});
+
+console.log("package diff", report.diff.summary);
+
+const before = await readWorkbook(inputPath);
+const after = await readWorkbook(outputPath);
+const cellDiff = await diffWorkbooks(before, after);
+console.log("cell diff", cellDiff.summary);
+```
+
+See [Safe writes](/docs/guides/safe-writes) for the full
+`WorkbookSafeWriteReport` shape.
