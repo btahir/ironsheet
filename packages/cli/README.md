@@ -41,7 +41,7 @@ All commands emit JSON, making them easy to wire into CI.
 
 ## Documentation
 
-See the [Ironsheet monorepo](https://github.com/btahir/ironsheet) for CLI contracts and the full API guide.
+Full docs — guides, recipes, and the generated API reference — are at [ironsheetdocs.vercel.app](https://ironsheetdocs.vercel.app). Source and issues live in the [Ironsheet monorepo](https://github.com/btahir/ironsheet).
 
 ## License
 

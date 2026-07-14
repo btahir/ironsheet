@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/api.md"><img alt="API guide" src="https://img.shields.io/badge/API-guide-0f766e?style=flat-square"></a>
+  <a href="https://ironsheetdocs.vercel.app"><img alt="Documentation" src="https://img.shields.io/badge/docs-ironsheetdocs.vercel.app-0f766e?style=flat-square"></a>
   <a href="https://www.npmjs.com/package/@ironsheet/node"><img alt="npm version" src="https://img.shields.io/npm/v/%40ironsheet%2Fnode?style=flat-square&label=npm"></a>
   <a href="https://www.npmjs.com/package/@ironsheet/node"><img alt="npm downloads" src="https://img.shields.io/npm/dm/%40ironsheet%2Fnode?style=flat-square&label=downloads"></a>
   <img alt="TypeScript 5.9" src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white">
@@ -207,7 +207,7 @@ Known boundaries:
 - [Compatibility testing](docs/testing/compatibility.md)
 - [Template fixtures](templates/README.md)
 - [Changelog](CHANGELOG.md)
-- Docs website — a Fumadocs site in `website/`, run locally with `npm run docs:dev` (deployment pending, no public URL yet)
+- [Docs website](https://ironsheetdocs.vercel.app) — guides, recipes, CLI reference, and the generated API reference (source in `website/`, run locally with `npm run docs:dev`)
 
 ## Development
 

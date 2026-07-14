@@ -24,7 +24,7 @@ npm install @ironsheet/compat
 
 ## Documentation
 
-See the [Ironsheet monorepo](https://github.com/btahir/ironsheet) and its [compatibility testing guide](https://github.com/btahir/ironsheet/blob/main/docs/testing/compatibility.md).
+Full docs — guides, recipes, and the generated API reference — are at [ironsheetdocs.vercel.app](https://ironsheetdocs.vercel.app). See the [Ironsheet monorepo](https://github.com/btahir/ironsheet) and its [compatibility testing guide](https://github.com/btahir/ironsheet/blob/main/docs/testing/compatibility.md).
 
 ## License
 

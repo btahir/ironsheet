@@ -36,7 +36,7 @@ npm install @ironsheet/core
 
 ## Documentation
 
-See the [Ironsheet monorepo](https://github.com/btahir/ironsheet) for the full API guide, capabilities, and design principles.
+Full docs — guides, recipes, and the generated API reference — are at [ironsheetdocs.vercel.app](https://ironsheetdocs.vercel.app). Source and issues live in the [Ironsheet monorepo](https://github.com/btahir/ironsheet).
 
 ## License
 

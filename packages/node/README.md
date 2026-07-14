@@ -55,7 +55,7 @@ const report = await renderWorkbookTemplateSafely("template.xlsm", "output.xlsm"
 
 ## Documentation
 
-Full API guide, CLI, capabilities, and compatibility notes live in the [Ironsheet monorepo](https://github.com/btahir/ironsheet).
+Full docs — guides, recipes, and the generated API reference — are at [ironsheetdocs.vercel.app](https://ironsheetdocs.vercel.app). Source, capabilities, and compatibility notes live in the [Ironsheet monorepo](https://github.com/btahir/ironsheet).
 
 ## License
 

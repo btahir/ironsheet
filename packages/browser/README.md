@@ -37,7 +37,7 @@ The same workbook engine and lossless guarantees apply as in Node — only IO an
 
 ## Documentation
 
-See the [Ironsheet monorepo](https://github.com/btahir/ironsheet) for the full API guide.
+Full docs — guides, recipes, and the generated API reference — are at [ironsheetdocs.vercel.app](https://ironsheetdocs.vercel.app). Source and issues live in the [Ironsheet monorepo](https://github.com/btahir/ironsheet).
 
 ## License
 

@@ -5,7 +5,7 @@
   "description": "Lossless TypeScript OOXML workbook engine for editing real XLSX and XLSM files.",
   "license": "Apache-2.0",
   "author": "Ironsheet contributors",
-  "homepage": "https://github.com/btahir/ironsheet#readme",
+  "homepage": "https://ironsheetdocs.vercel.app",
   "bugs": "https://github.com/btahir/ironsheet/issues",
   "repository": {
     "type": "git",
