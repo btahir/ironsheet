@@ -19,7 +19,7 @@
  *   - docs/api-landing.md                           (hand-written landing prose)
  */
 import { spawnSync } from "node:child_process";
-import { readdirSync, rmSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import process from "node:process";
@@ -52,3 +52,36 @@ for (const entry of readdirSync(outDir)) {
 
 // 3. Generate.
 run(process.execPath, ["node_modules/typedoc/bin/typedoc", "--options", "docs/typedoc.json"]);
+
+// 4. Dot-prefix bare-relative Markdown link targets in the generated output.
+//
+// Why this pass exists: Fumadocs' resolveHref only rewrites Markdown links whose
+// href starts with "./" or "../". TypeDoc emits sibling/child links as bare
+// relative paths (e.g. "core/index.md", "classes/Workbook.md", "PackageError.md"),
+// which Fumadocs passes through verbatim so they 404 in the browser. Prefixing
+// "./" makes resolveHref resolve them to the correct page URL.
+//
+// Scope is deliberately conservative: only link targets ending in ".md" (optionally
+// with a #fragment) are touched, and never those already prefixed with "./"/"../",
+// absolute ("/"), external (http:/https:/mailto:), or pure anchors ("#"). A single
+// regex over the whole file (rather than an AST walk) is acceptable because a
+// literal `](…​.md)` sequence inside a fenced code block is vanishingly unlikely in
+// TypeDoc output; the tradeoff is that such content would also be rewritten.
+const BARE_MD_LINK = /\]\((?!\.\/|\.\.\/|\/|https?:|#|mailto:)([^)]+\.md(?:#[^)]*)?)\)/g;
+
+function rewriteLinks(dir: string): void {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      rewriteLinks(full);
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      const original = readFileSync(full, "utf8");
+      const rewritten = original.replace(BARE_MD_LINK, "](./$1)");
+      if (rewritten !== original) {
+        writeFileSync(full, rewritten);
+      }
+    }
+  }
+}
+
+rewriteLinks(outDir);

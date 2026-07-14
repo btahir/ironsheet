@@ -6,11 +6,11 @@ title: "@ironsheet/browser"
 
 ## Variables
 
-- [browserCompressionAdapter](variables/browserCompressionAdapter.md)
+- [browserCompressionAdapter](./variables/browserCompressionAdapter.md)
 
 ## Functions
 
-- [openWorkbookFromArrayBuffer](functions/openWorkbookFromArrayBuffer.md)
-- [openWorkbookFromBlob](functions/openWorkbookFromBlob.md)
-- [openWorkbookFromBytes](functions/openWorkbookFromBytes.md)
-- [writeWorkbookToBlob](functions/writeWorkbookToBlob.md)
+- [openWorkbookFromArrayBuffer](./functions/openWorkbookFromArrayBuffer.md)
+- [openWorkbookFromBlob](./functions/openWorkbookFromBlob.md)
+- [openWorkbookFromBytes](./functions/openWorkbookFromBytes.md)
+- [writeWorkbookToBlob](./functions/writeWorkbookToBlob.md)

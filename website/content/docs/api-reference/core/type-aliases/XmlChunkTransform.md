@@ -14,7 +14,7 @@ Defined in: packages/core/src/xml.ts:29
 
 ### token
 
-[`XmlToken`](XmlToken.md)
+[`XmlToken`](./XmlToken.md)
 
 ## Returns
 

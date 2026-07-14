@@ -12,10 +12,10 @@ Defined in: packages/core/src/errors.ts:1
 
 ## Extended by
 
-- [`PackageError`](PackageError.md)
-- [`WorkbookError`](WorkbookError.md)
-- [`WorksheetError`](WorksheetError.md)
-- [`ZipError`](ZipError.md)
+- [`PackageError`](./PackageError.md)
+- [`WorkbookError`](./WorkbookError.md)
+- [`WorksheetError`](./WorksheetError.md)
+- [`ZipError`](./ZipError.md)
 
 ## Constructors
 

@@ -1615,7 +1615,7 @@ Defined in: packages/core/src/workbook.ts:385
 
 ##### pkg
 
-[`OoxmlPackage`](OoxmlPackage.md)
+[`OoxmlPackage`](./OoxmlPackage.md)
 
 #### Returns
 

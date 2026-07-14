@@ -8,7 +8,7 @@ Defined in: packages/core/src/errors.ts:23
 
 ## Extends
 
-- [`IronsheetError`](IronsheetError.md)
+- [`IronsheetError`](./IronsheetError.md)
 
 ## Constructors
 
@@ -32,7 +32,7 @@ Defined in: packages/core/src/errors.ts:24
 
 #### Overrides
 
-[`IronsheetError`](IronsheetError.md).[`constructor`](IronsheetError.md#constructor)
+[`IronsheetError`](./IronsheetError.md).[`constructor`](./IronsheetError.md#constructor)
 
 ## Properties
 
@@ -46,7 +46,7 @@ Defined in: node\_modules/typescript/lib/lib.es2022.error.d.ts:26
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`cause`](IronsheetError.md#cause)
+[`IronsheetError`](./IronsheetError.md).[`cause`](./IronsheetError.md#cause)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: packages/core/src/errors.ts:4
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`code`](IronsheetError.md#code)
+[`IronsheetError`](./IronsheetError.md).[`code`](./IronsheetError.md#code)
 
 ***
 
@@ -74,7 +74,7 @@ Defined in: node\_modules/typescript/lib/lib.es5.d.ts:1077
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`message`](IronsheetError.md#message)
+[`IronsheetError`](./IronsheetError.md).[`message`](./IronsheetError.md#message)
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: node\_modules/typescript/lib/lib.es5.d.ts:1076
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`name`](IronsheetError.md#name)
+[`IronsheetError`](./IronsheetError.md).[`name`](./IronsheetError.md#name)
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: node\_modules/typescript/lib/lib.es5.d.ts:1078
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`stack`](IronsheetError.md#stack)
+[`IronsheetError`](./IronsheetError.md).[`stack`](./IronsheetError.md#stack)
 
 ***
 
@@ -126,7 +126,7 @@ not capture any frames.
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`stackTraceLimit`](IronsheetError.md#stacktracelimit)
+[`IronsheetError`](./IronsheetError.md).[`stackTraceLimit`](./IronsheetError.md#stacktracelimit)
 
 ## Methods
 
@@ -198,7 +198,7 @@ a();
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`captureStackTrace`](IronsheetError.md#capturestacktrace)
+[`IronsheetError`](./IronsheetError.md).[`captureStackTrace`](./IronsheetError.md#capturestacktrace)
 
 ***
 
@@ -230,4 +230,4 @@ https://v8.dev/docs/stack-trace-api#customizing-stack-traces
 
 #### Inherited from
 
-[`IronsheetError`](IronsheetError.md).[`prepareStackTrace`](IronsheetError.md#preparestacktrace)
+[`IronsheetError`](./IronsheetError.md).[`prepareStackTrace`](./IronsheetError.md#preparestacktrace)
