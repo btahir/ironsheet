@@ -233,5 +233,3 @@ npm run docs:dev
 npm run docs:build
 npm run docs:api
 ```
-
-`IRONSHEET_SPEC.md` is local planning material and is intentionally ignored.
