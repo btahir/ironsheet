@@ -4,6 +4,15 @@
 
 - No unreleased changes yet.
 
+## 0.2.0 - 2026-07-29
+
+- Browser archive preflight with compressed, uncompressed, entry-count, per-entry, worksheet-size, and compression-ratio limits before workbook inflation.
+- Validation-gated browser writes through `writeWorkbookToBlobSafely`, matching Ironsheet's refuse-invalid-output principle without requiring filesystem access.
+- Linear table-row removal instead of repeatedly rebuilding the full worksheet XML for every removed row.
+- Large table dimension recalculation without spread-argument overflows; covered by a 140,000-cell regression fixture.
+- Browser compression streams now drain readable output while writing, preventing large-entry backpressure deadlocks.
+- A stateless browser demo for updating an Excel table from CSV, with Web Worker processing, local-only downloads, explicit column mapping, samples, and public implementation docs.
+
 ## 0.1.0 - 2026-07-12
 
 - Style authoring: fonts, fills, borders, alignment, and number formats with record deduplication, `styleCell` merging into existing cell styles, and `styleRange` for range styling without style explosion.

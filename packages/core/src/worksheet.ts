@@ -490,20 +490,14 @@ export function replaceRowsInRange(
   const prefix = inferWorksheetPrefix(xml);
   const template = preserveStyles ? collectRowTemplate(xml, range) : undefined;
   const trailingRows = options.trailingRows ?? 0;
-  const trailingRowElements = findRowElements(xml).filter(
+  const worksheetRows = findRowElements(xml);
+  const trailingRowElements = worksheetRows.filter(
     (row) => row.rowNumber > range.endRow && row.rowNumber <= range.endRow + trailingRows
   );
-  const rowElements = findRowElements(xml)
-    .filter(
-      (row) => row.rowNumber >= range.startRow && row.rowNumber <= range.endRow + trailingRows
-    )
-    .slice()
-    .reverse();
-
-  let nextXml = xml;
-  for (const row of rowElements) {
-    nextXml = `${nextXml.slice(0, row.start)}${nextXml.slice(row.end)}`;
-  }
+  const rowElements = worksheetRows.filter(
+    (row) => row.rowNumber >= range.startRow && row.rowNumber <= range.endRow + trailingRows
+  );
+  const nextXml = removeXmlRanges(xml, rowElements);
 
   const insertionPoint = findRowInsertionPoint(nextXml, range.startRow);
   const rowXml = rows
@@ -539,6 +533,21 @@ export function replaceRowsInRange(
 
   const updated = `${nextXml.slice(0, insertionPoint)}${rowXml}${shiftedTrailingRows}${nextXml.slice(insertionPoint)}`;
   return recalculateDimension(updated);
+}
+
+function removeXmlRanges(xml: string, ranges: Array<{ start: number; end: number }>): string {
+  if (ranges.length === 0) {
+    return xml;
+  }
+
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    parts.push(xml.slice(cursor, range.start));
+    cursor = range.end;
+  }
+  parts.push(xml.slice(cursor));
+  return parts.join("");
 }
 
 export function createCellXml(
@@ -1311,14 +1320,27 @@ function recalculateDimension(xml: string): string {
     return xml;
   }
 
-  const cells = findStartTags(xml, "c")
-    .map((tag) => tag.attributes.r)
-    .filter((address): address is string => address !== undefined)
-    .map((address) => parseCellAddress(address));
+  let minColumn = Number.POSITIVE_INFINITY;
+  let minRow = Number.POSITIVE_INFINITY;
+  let maxColumn = 0;
+  let maxRow = 0;
+  for (const tag of findStartTags(xml, "c")) {
+    const address = tag.attributes.r;
+    if (address === undefined) {
+      continue;
+    }
+
+    const cell = parseCellAddress(address);
+    minColumn = Math.min(minColumn, cell.column);
+    minRow = Math.min(minRow, cell.row);
+    maxColumn = Math.max(maxColumn, cell.column);
+    maxRow = Math.max(maxRow, cell.row);
+  }
+
   const ref =
-    cells.length === 0
+    maxColumn === 0
       ? "A1"
-      : `${formatCellAddress(Math.min(...cells.map((cell) => cell.column)), Math.min(...cells.map((cell) => cell.row)))}:${formatCellAddress(Math.max(...cells.map((cell) => cell.column)), Math.max(...cells.map((cell) => cell.row)))}`;
+      : `${formatCellAddress(minColumn, minRow)}:${formatCellAddress(maxColumn, maxRow)}`;
   const replacement = upsertRefAttribute(dimension.raw, ref);
 
   return `${xml.slice(0, dimension.start)}${replacement}${xml.slice(dimension.end)}`;

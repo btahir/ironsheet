@@ -18,6 +18,13 @@ export function baseOptions(): BaseLayoutProps {
         </>
       ),
     },
+    links: [
+      {
+        text: 'Free tool',
+        url: '/tools/update-excel-from-csv',
+        active: 'nested-url',
+      },
+    ],
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
   };
 }

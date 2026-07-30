@@ -143,6 +143,7 @@ export {
   type WorkbookConditionalFormat,
   type WorkbookDataValidation,
   type WorkbookFormula,
+  type WorkbookFeatureSummary,
   type WorkbookHyperlink,
   type WorkbookInspectResult,
   type WorkbookMergedCell,

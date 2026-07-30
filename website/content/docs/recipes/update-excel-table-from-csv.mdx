@@ -1,0 +1,47 @@
+---
+title: Update an Excel table from CSV in the browser
+description: Parse fresh CSV data, replace an existing Excel table, validate the workbook, and create a local download.
+---
+
+This pattern is useful when an Excel-authored report or template must keep its
+formulas, styles, charts, macros, and unrelated worksheets while one data table
+is refreshed.
+
+Use the free [Excel Table Refresher](/tools/update-excel-from-csv) for the
+finished workflow, or build it into your own application with
+`@ironsheet/browser`.
+
+```ts
+import {
+  inspectWorkbookArchiveFromBlob,
+  openWorkbookFromBlob,
+  writeWorkbookToBlobSafely
+} from "@ironsheet/browser";
+
+const archive = await inspectWorkbookArchiveFromBlob(workbookFile);
+if (!archive.accepted) {
+  throw new Error(archive.issues[0]?.message);
+}
+
+const workbook = await openWorkbookFromBlob(workbookFile);
+const table = (await workbook.tables()).find(
+  (candidate) => candidate.name === "RevenueTable"
+);
+if (table === undefined) {
+  throw new Error("RevenueTable was not found");
+}
+
+await workbook.replaceTableRows("RevenueTable", csvRows);
+
+const result = await writeWorkbookToBlobSafely(workbook);
+if (!result.wrote || result.blob === undefined) {
+  throw new Error("Ironsheet refused to create an invalid workbook");
+}
+
+const downloadUrl = URL.createObjectURL(result.blob);
+```
+
+Run the workbook work in a Web Worker when tables may be large. Transfer the
+input `ArrayBuffer` into the worker, keep CSV values beginning with `=` as
+strings unless formulas are explicitly intended, and revoke the temporary Blob
+URL after the download is complete.

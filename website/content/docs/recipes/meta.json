@@ -5,6 +5,7 @@
     "safe-cell-patch",
     "render-template",
     "table-replace",
+    "update-excel-table-from-csv",
     "inspect-and-validate"
   ]
 }

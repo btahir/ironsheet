@@ -9,12 +9,21 @@ const entryPath = resolve(".cache/browser-smoke/entry.ts");
 await mkdir(resolve(".cache/browser-smoke"), { recursive: true });
 await writeFile(
   entryPath,
-  `import { browserCompressionAdapter, openWorkbookFromBytes, writeWorkbookToBlob } from "@ironsheet/browser";
+  `import { browserCompressionAdapter, inspectWorkbookArchiveFromBytes, openWorkbookFromBytes, writeWorkbookToBlobSafely } from "@ironsheet/browser";
 
 export async function smokeWorkbook(bytes: Uint8Array): Promise<Blob> {
+  const archive = inspectWorkbookArchiveFromBytes(bytes);
+  if (!archive.accepted) {
+    throw new Error(archive.issues[0]?.message ?? "Workbook archive was rejected");
+  }
+
   const workbook = await openWorkbookFromBytes(bytes);
   await workbook.inspect();
-  return writeWorkbookToBlob(workbook);
+  const result = await writeWorkbookToBlobSafely(workbook);
+  if (!result.wrote || result.blob === undefined) {
+    throw new Error("Workbook validation failed");
+  }
+  return result.blob;
 }
 
 export const smokeAdapter = browserCompressionAdapter;

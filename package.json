@@ -28,6 +28,7 @@
     "compat:corpus": "npm run compat:fixtures && tsx scripts/compat-corpus.ts",
     "compat:corpus:strict": "npm run compat:fixtures && tsx scripts/compat-corpus.ts --strict",
     "brand:assets": "tsx scripts/build-brand-assets.ts",
+    "demo:assets": "tsx scripts/build-demo-assets.ts",
     "templates:build": "tsx scripts/build-templates.ts",
     "hooks:install": "git config core.hooksPath .githooks",
     "docs:api": "tsx scripts/docs-api.ts",

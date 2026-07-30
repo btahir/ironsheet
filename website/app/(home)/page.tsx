@@ -76,8 +76,14 @@ export default function HomePage() {
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
-            href="/docs"
+            href="/tools/update-excel-from-csv"
             className="inline-flex h-11 items-center justify-center rounded-lg bg-fd-primary px-6 text-sm font-semibold text-fd-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Try the free browser tool
+          </Link>
+          <Link
+            href="/docs"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-fd-border bg-fd-card px-6 text-sm font-semibold transition-colors hover:bg-fd-accent"
           >
             Get started
           </Link>

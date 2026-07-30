@@ -5,6 +5,8 @@ export const appDescription =
 export const docsRoute = '/docs';
 export const docsImageRoute = '/og/docs';
 export const docsContentRoute = '/llms.mdx/docs';
+export const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? 'https://ironsheetdocs.vercel.app';
 
 export const gitConfig = {
   user: 'btahir',

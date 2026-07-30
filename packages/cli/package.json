@@ -1,6 +1,6 @@
 {
   "name": "@ironsheet/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Safe command-line workbook inspection, validation, and XLSX/XLSM edits for Ironsheet.",
   "license": "Apache-2.0",
@@ -25,8 +25,8 @@
     "ironsheet": "dist/cli.js"
   },
   "dependencies": {
-    "@ironsheet/core": "0.1.0",
-    "@ironsheet/node": "0.1.0"
+    "@ironsheet/core": "0.2.0",
+    "@ironsheet/node": "0.2.0"
   },
   "files": ["dist", "src"],
   "engines": {

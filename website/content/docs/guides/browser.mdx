@@ -11,12 +11,26 @@ npm install @ironsheet/browser
 ```
 
 ```ts
-import { openWorkbookFromBlob, writeWorkbookToBlob } from "@ironsheet/browser";
+import {
+  inspectWorkbookArchiveFromBlob,
+  openWorkbookFromBlob,
+  writeWorkbookToBlobSafely
+} from "@ironsheet/browser";
+
+const archive = await inspectWorkbookArchiveFromBlob(file);
+if (!archive.accepted) {
+  throw new Error(archive.issues[0]?.message);
+}
 
 const workbook = await openWorkbookFromBlob(file);
 await workbook.patchCell("Sheet1", "B2", "Hello from the browser");
 
-const output = await writeWorkbookToBlob(workbook);
+const result = await writeWorkbookToBlobSafely(workbook);
+if (!result.wrote) {
+  throw new Error("Ironsheet refused to write an invalid workbook");
+}
+
+const output = result.blob;
 ```
 
 The same workbook engine and lossless guarantees apply as in Node — only IO
@@ -38,24 +52,28 @@ unmodified in both environments.
   which environment it's running in.
 </Callout>
 
-## What's different from Node
+## Browser-safe writes
 
-The browser package does not currently expose the higher-level safe-write
-helpers (`mutateWorkbookFile`, `renderWorkbookTemplateSafely`) that
-`@ironsheet/node` provides — those bundle Node file IO around the same
-workbook engine. In the browser, call the workbook's mutation and
-validation methods directly, then use `writeWorkbookToBlob` to get bytes
-back out:
+The browser package cannot own a filesystem transaction like `@ironsheet/node`,
+but it can still refuse invalid output. `writeWorkbookToBlobSafely` validates
+the in-memory package before creating a downloadable `Blob`:
 
 ```ts
 const workbook = await openWorkbookFromBlob(file);
 
 await workbook.patchNamedRange("RevenueRange", [["North", 42000]]);
-const validation = await workbook.validate();
+const result = await writeWorkbookToBlobSafely(workbook);
+if (!result.wrote) throw new Error("workbook failed validation");
 
-if (validation.summary.errors > 0) {
-  throw new Error("workbook failed validation");
-}
-
-const output = await writeWorkbookToBlob(workbook);
+const output = result.blob;
 ```
+
+`inspectWorkbookArchiveFromBlob` reads ZIP metadata without inflating worksheet
+XML. Use it before opening untrusted files to enforce compressed, uncompressed,
+entry-count, compression-ratio, and worksheet-size limits.
+
+## See it in a real browser workflow
+
+The free [Excel Table Refresher](/tools/update-excel-from-csv) uses these public
+APIs inside a Web Worker to replace an Excel table from CSV without uploading
+either file.

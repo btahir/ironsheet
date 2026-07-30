@@ -25,15 +25,34 @@ npm install @ironsheet/browser
 ## Usage
 
 ```ts
-import { openWorkbookFromBlob, writeWorkbookToBlob } from "@ironsheet/browser";
+import {
+  inspectWorkbookArchiveFromBlob,
+  openWorkbookFromBlob,
+  writeWorkbookToBlobSafely
+} from "@ironsheet/browser";
+
+const archive = await inspectWorkbookArchiveFromBlob(file);
+if (!archive.accepted) {
+  throw new Error(archive.issues[0]?.message);
+}
 
 const workbook = await openWorkbookFromBlob(file);
 await workbook.patchCell("Sheet1", "B2", "Hello from the browser");
 
-const output = await writeWorkbookToBlob(workbook);
+const result = await writeWorkbookToBlobSafely(workbook);
+if (!result.wrote) {
+  throw new Error("Ironsheet refused to write an invalid workbook");
+}
+
+const output = result.blob;
 ```
 
 The same workbook engine and lossless guarantees apply as in Node — only IO and compression differ.
+
+`inspectWorkbookArchiveFromBlob` lets browser applications reject pathological
+archives before inflating worksheet XML. `writeWorkbookToBlobSafely` validates
+the changed package and only returns a downloadable Blob when the workbook has
+no structural errors.
 
 ## Documentation
 
