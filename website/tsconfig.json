@@ -3,6 +3,7 @@
     "target": "ESNext",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
@@ -16,6 +17,8 @@
     "incremental": true,
     "paths": {
       "@/*": ["./*"],
+      "@ironsheet/browser": ["../packages/browser/src/index.ts"],
+      "@ironsheet/core": ["../packages/core/src/index.ts"],
       "collections/*": ["./.source/*"]
     },
     "plugins": [

@@ -6,7 +6,9 @@ const withMDX = createMDX();
 const config = {
   reactStrictMode: true,
   turbopack: {
-    root: import.meta.dirname,
+    // The demo intentionally exercises the workspace sources so Vercel deploys
+    // the same browser package implementation that the repository tests.
+    root: new URL('..', import.meta.url).pathname,
   },
 };
 

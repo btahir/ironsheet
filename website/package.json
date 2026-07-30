@@ -13,8 +13,6 @@
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
-    "@ironsheet/browser": "file:../packages/browser",
-    "@ironsheet/core": "file:../packages/core",
     "cnfast": "^0.0.8",
     "fumadocs-core": "16.11.4",
     "fumadocs-mdx": "15.1.1",
