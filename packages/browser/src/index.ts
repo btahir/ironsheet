@@ -39,10 +39,11 @@ async function pipeBytesThroughCompressionStream(
   const stream =
     mode === "compress" ? new CompressionStream(format) : new DecompressionStream(format);
   const writer = stream.writable.getWriter();
+  const outputPromise = readStreamBytes(stream.readable);
   await writer.write(new Uint8Array(bytesToArrayBuffer(data)));
   await writer.close();
 
-  return readStreamBytes(stream.readable);
+  return outputPromise;
 }
 
 async function readStreamBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
