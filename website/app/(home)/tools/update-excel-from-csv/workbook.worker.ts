@@ -3,7 +3,12 @@ import {
   openWorkbookFromBytes,
   writeWorkbookToBlobSafely,
 } from '@ironsheet/browser';
-import type { Workbook, WorkbookTable } from '@ironsheet/core';
+import {
+  diffZipPackages,
+  type Workbook,
+  type WorkbookFeatureSummary,
+  type WorkbookTable,
+} from '@ironsheet/core';
 import { csvValueToCellInput, parseCsv, type ParsedCsv } from './csv';
 import type {
   CsvInspectionResult,
@@ -110,6 +115,11 @@ async function handleRequest(request: WorkerRequest): Promise<void> {
     );
   }
 
+  const outputBytes = new Uint8Array(await written.blob.arrayBuffer());
+  const packageDiff = diffZipPackages(workbookBytes, outputBytes);
+  const updatedWorkbook = await openWorkbookFromBytes(outputBytes);
+  const updatedInspection = await updatedWorkbook.inspect();
+
   const result: RefreshResult = {
     blob: written.blob,
     diagnostics: workbook.diagnostics().map((diagnostic) => ({
@@ -120,10 +130,47 @@ async function handleRequest(request: WorkerRequest): Promise<void> {
     fileName: updatedFileName(workbookFileName),
     newRowCount: replacementRows.length,
     oldRowCount: table.rowCount,
+    packageDiff: {
+      changedParts: packageDiff.entries
+        .filter((entry) => entry.contentChanged)
+        .map((entry) => entry.name),
+      contentChanges:
+        packageDiff.summary.added + packageDiff.summary.changed + packageDiff.summary.removed,
+      repacked: packageDiff.summary.repacked,
+      unchanged: packageDiff.summary.unchanged,
+    },
+    preservedFeatures: preservedFeatures(
+      workbookInspection.features,
+      updatedInspection.features,
+    ),
     tableName: table.displayName,
     validation: written.validation.summary,
   };
   workerScope.postMessage({ type: 'refreshed', result });
+}
+
+function preservedFeatures(
+  before: WorkbookFeatureSummary,
+  after: WorkbookFeatureSummary,
+): Array<{ count: number; label: string }> {
+  const labels: Array<[keyof WorkbookFeatureSummary, string, string]> = [
+    ['charts', 'chart', 'charts'],
+    ['media', 'embedded image', 'embedded images'],
+    ['formulaCells', 'formula', 'formulas'],
+    ['hiddenSheets', 'hidden sheet', 'hidden sheets'],
+    ['conditionalFormats', 'conditional format', 'conditional formats'],
+    ['dataValidations', 'validation rule', 'validation rules'],
+    ['definedNames', 'defined name', 'defined names'],
+    ['pivotTables', 'pivot table', 'pivot tables'],
+    ['macros', 'macro project', 'macro projects'],
+  ];
+
+  return labels.flatMap(([key, singular, plural]) => {
+    const count = before[key];
+    return count > 0 && after[key] === count
+      ? [{ count, label: count === 1 ? singular : plural }]
+      : [];
+  });
 }
 
 async function summarizeTable(workbook: Workbook, table: WorkbookTable): Promise<WorkbookTableSummary> {

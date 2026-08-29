@@ -33,6 +33,13 @@ export type RefreshResult = {
   fileName: string;
   newRowCount: number;
   oldRowCount: number;
+  packageDiff: {
+    changedParts: string[];
+    contentChanges: number;
+    repacked: number;
+    unchanged: number;
+  };
+  preservedFeatures: Array<{ count: number; label: string }>;
   tableName: string;
   validation: { errors: number; infos: number; warnings: number };
 };

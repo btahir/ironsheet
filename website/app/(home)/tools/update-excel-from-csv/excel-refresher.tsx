@@ -2,6 +2,7 @@
 
 import {
   ArrowRight,
+  BadgeCheck,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -9,6 +10,7 @@ import {
   Download,
   FileArchive,
   FileSpreadsheet,
+  GitFork,
   LoaderCircle,
   LockKeyhole,
   RefreshCw,
@@ -31,7 +33,7 @@ import type {
 
 type BusyStep = 'csv' | 'refresh' | 'sample' | 'workbook' | undefined;
 
-export function ExcelRefresher() {
+export function ExcelRefresher({ githubUrl }: { githubUrl: string }) {
   const workerRef = useRef<Worker | null>(null);
   const workbookRef = useRef<WorkbookInspectionResult | undefined>(undefined);
   const selectedTableRef = useRef('');
@@ -446,6 +448,58 @@ export function ExcelRefresher() {
                     <RotateCcw className="size-4" /> Start over
                   </button>
                 </div>
+                <div className="mt-5 rounded-xl border border-emerald-500/25 bg-fd-background/70 p-4">
+                  <div className="flex items-center gap-2">
+                    <BadgeCheck className="size-5 text-emerald-700 dark:text-emerald-300" />
+                    <h4 className="font-semibold">Preservation report</h4>
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <ProofMetric
+                      label="validation errors"
+                      value={result.validation.errors}
+                    />
+                    <ProofMetric
+                      label="package parts unchanged"
+                      value={result.packageDiff.unchanged}
+                    />
+                    <ProofMetric
+                      label="content-changing parts"
+                      value={result.packageDiff.contentChanges}
+                    />
+                  </div>
+                  {result.preservedFeatures.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-fd-muted-foreground">
+                        Verified after the update
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {result.preservedFeatures.map((feature) => (
+                          <span
+                            key={feature.label}
+                            className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs"
+                          >
+                            {feature.count} {feature.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <details className="mt-4 text-sm">
+                    <summary className="cursor-pointer font-medium">
+                      See exact package changes
+                    </summary>
+                    <ul className="mt-2 space-y-1 font-mono text-xs text-fd-muted-foreground">
+                      {result.packageDiff.changedParts.map((part) => (
+                        <li key={part}>{part}</li>
+                      ))}
+                    </ul>
+                    {result.packageDiff.repacked > 0 && (
+                      <p className="mt-2 text-xs text-fd-muted-foreground">
+                        {result.packageDiff.repacked} additional package parts were repacked without content changes.
+                      </p>
+                    )}
+                  </details>
+                </div>
                 {result.diagnostics.length > 0 && (
                   <details className="mt-4 text-sm">
                     <summary className="cursor-pointer font-medium">Technical notes ({result.diagnostics.length})</summary>
@@ -456,6 +510,33 @@ export function ExcelRefresher() {
                     </ul>
                   </details>
                 )}
+                <div className="mt-5 border-t border-emerald-500/20 pt-5">
+                  <p className="font-semibold">Build this workflow into your application</p>
+                  <code className="mt-2 block w-fit rounded-lg border border-fd-border bg-fd-background px-3 py-2 text-xs">
+                    npm install @ironsheet/browser
+                  </code>
+                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3 text-sm font-semibold">
+                    <a className="text-teal-700 hover:underline dark:text-teal-300" href="/docs/guides/browser">
+                      Browser integration guide
+                    </a>
+                    <a
+                      className="inline-flex items-center gap-1.5 text-teal-700 hover:underline dark:text-teal-300"
+                      href={githubUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <GitFork className="size-4" /> View source
+                    </a>
+                    <a
+                      className="text-teal-700 hover:underline dark:text-teal-300"
+                      href={workbookProblemUrl(githubUrl)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Tell us what you need to automate
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -522,8 +603,10 @@ function FeatureChips({ features }: { features: WorkbookInspectionResult['featur
     ['charts', 'chart', 'charts'],
     ['pivotTables', 'pivot', 'pivots'],
     ['macros', 'macro', 'macros'],
+    ['media', 'image', 'images'],
     ['drawings', 'drawing', 'drawings'],
     ['dataValidations', 'validation', 'validations'],
+    ['conditionalFormats', 'conditional format', 'conditional formats'],
     ['hiddenSheets', 'hidden sheet', 'hidden sheets'],
   ];
   const visible = labels.filter(([key]) => features[key] > 0);
@@ -533,9 +616,29 @@ function FeatureChips({ features }: { features: WorkbookInspectionResult['featur
 
 function PreviewTable({ headers, rows, title }: { headers: string[]; rows: string[][]; title: string }) {
   const visibleHeaders = headers.slice(0, 3);
+  const chartRows = rows
+    .slice(0, 4)
+    .map((row) => ({ label: row[0] ?? '', value: Number(row[1]) }))
+    .filter((row) => row.label.length > 0 && Number.isFinite(row.value));
+  const maxValue = Math.max(0, ...chartRows.map((row) => row.value));
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-fd-border bg-fd-background/50">
       <p className="border-b border-fd-border px-3 py-2 text-xs font-semibold text-fd-muted-foreground">{title}</p>
+      {chartRows.length >= 2 && maxValue > 0 && (
+        <div className="space-y-2 border-b border-fd-border px-3 py-3" aria-label={`${title} value preview`}>
+          {chartRows.map((row) => (
+            <div key={row.label} className="grid grid-cols-[4.5rem_1fr] items-center gap-2 text-[10px]">
+              <span className="truncate text-fd-muted-foreground">{row.label}</span>
+              <div className="h-2 overflow-hidden rounded-full bg-fd-muted">
+                <div
+                  className="h-full rounded-full bg-teal-600 dark:bg-teal-400"
+                  style={{ width: `${Math.max(5, (row.value / maxValue) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-64 text-left text-[11px]">
           <thead className="bg-fd-muted/30"><tr>{visibleHeaders.map((header, index) => <th key={`${header}-${index}`} className="max-w-32 truncate px-3 py-2 font-semibold">{header}</th>)}</tr></thead>
@@ -544,6 +647,31 @@ function PreviewTable({ headers, rows, title }: { headers: string[]; rows: strin
       </div>
     </div>
   );
+}
+
+function ProofMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-fd-border bg-fd-card px-3 py-3">
+      <p className="text-xl font-bold tabular-nums">{value.toLocaleString()}</p>
+      <p className="mt-0.5 text-[11px] text-fd-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function workbookProblemUrl(githubUrl: string): string {
+  const params = new URLSearchParams({
+    title: 'Workbook automation use case',
+    body: [
+      'What are you trying to automate?',
+      '',
+      'Which workbook features must be preserved?',
+      '',
+      'What currently breaks or requires manual work?',
+      '',
+      'Please do not attach confidential workbook data.',
+    ].join('\n'),
+  });
+  return `${githubUrl}/issues/new?${params.toString()}`;
 }
 
 function selectedTable(workbook: WorkbookInspectionResult | undefined, name: string): WorkbookTableSummary | undefined {

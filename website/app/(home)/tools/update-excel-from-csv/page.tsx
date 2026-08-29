@@ -126,7 +126,7 @@ export default function UpdateExcelFromCsvPage() {
           </a>
         </div>
 
-        <ExcelRefresher />
+        <ExcelRefresher githubUrl={githubUrl} />
       </section>
 
       <section id="how-it-works" className="border-y border-fd-border bg-fd-muted/20">
